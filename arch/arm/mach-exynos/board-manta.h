@@ -16,6 +16,12 @@
 #ifndef __MACH_EXYNOS_BOARD_MANTA_H
 #define __MACH_EXYNOS_BOARD_MANTA_H
 
+#include <mach/irqs.h>
+
+/* board IRQ allocations */
+#define MANTA_IRQ_BOARD_PMIC_START	IRQ_BOARD_START
+
 void exynos5_manta_display_init(void);
+void exynos5_manta_power_init(void);
 
 #endif

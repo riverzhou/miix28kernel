@@ -20,6 +20,7 @@
 #include <linux/regulator/machine.h>
 #include <linux/regulator/fixed.h>
 #include <linux/serial_core.h>
+#include <linux/i2c.h>
 
 #include <asm/mach/arch.h>
 #include <asm/hardware/gic.h>
@@ -30,6 +31,7 @@
 #include <plat/regs-serial.h>
 #include <plat/gpio-cfg.h>
 #include <plat/devs.h>
+#include <plat/iic.h>
 
 #include <mach/map.h>
 #include <mach/sysmmu.h>
@@ -230,6 +232,7 @@ static struct platform_device *manta_devices[] __initdata = {
 	&ramconsole_device,
 	&persistent_trace_device,
 	&s3c_device_rtc,
+	&s3c_device_i2c5,
 	&manta_keypad_device,
 	&exynos5_device_dwmci,
 	&exynos_device_ion,
@@ -293,12 +296,15 @@ static void __init manta_machine_init(void)
 	exynos_ion_set_platdata();
 	exynos_dwmci_set_platdata(&exynos_dwmci_pdata);
 
+	s3c_i2c5_set_platdata(NULL);
+
 	manta_gpio_power_init();
 
 	manta_ss_udc_init();
 
 	platform_add_devices(manta_devices, ARRAY_SIZE(manta_devices));
 
+	exynos5_manta_power_init();
 	exynos5_manta_display_init();
 }
 
