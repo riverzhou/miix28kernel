@@ -149,6 +149,15 @@ config REGULATOR_MAX1586
 	  regulator via I2C bus. The provided regulator is suitable
 	  for PXA27x chips to control VCC_CORE and VCC_USIM voltages.
 
+config REGULATOR_MAX77686
+	tristate "Maxim 77686 regulator"
+	depends on MFD_MAX77686
+	help
+	  This driver controls a Maxim 77686 regulator via I2C bus or 3 GPIO ports
+	  to control BUCK2, BUCK3, BUCK4.
+	  The provided regulator is suitable for Exynos-4 and Exynos-5
+	  chips to control VARM, VINT voltages and the other LDOs.
+
 config REGULATOR_MAX8649
 	tristate "Maxim 8649 voltage regulator"
 	depends on I2C
