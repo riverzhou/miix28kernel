@@ -89,6 +89,18 @@ enum alpha_opr {
 #define DEFAULT_ALPHA_OPR	ALPHA_PERPIXEL
 
 /**
+ * sampling policy at boundary for bilinear scaling
+ * @FOLLOW_REPEAT_MODE: sampling 1 or 2 pixels within bounds
+ * @IGNORE_REPEAT_MODE: sampling 4 pixels according to repeat mode
+ */
+enum boundary_sampling_policy {
+	FOLLOW_REPEAT_MODE,
+	IGNORE_REPEAT_MODE,
+};
+
+#define DEFAULT_BOUNDARY_SAMPLING	FOLLOW_REPEAT_MODE
+
+/**
  * @COEFF_ONE: 1
  * @COEFF_ZERO: 0
  * @COEFF_SA: src alpha
@@ -183,13 +195,21 @@ void fimg2d4x_src_premultiply(struct fimg2d_control *info);
 void fimg2d4x_dst_premultiply(struct fimg2d_control *info);
 void fimg2d4x_dst_depremultiply(struct fimg2d_control *info);
 void fimg2d4x_enable_transparent(struct fimg2d_control *info);
-void fimg2d4x_set_bluescreen(struct fimg2d_control *info, struct fimg2d_bluscr *bluscr);
-void fimg2d4x_enable_clipping(struct fimg2d_control *info, struct fimg2d_rect *c);
+void fimg2d4x_set_bluescreen(struct fimg2d_control *info,
+				struct fimg2d_bluscr *bluscr);
+void fimg2d4x_enable_clipping(struct fimg2d_control *info,
+				struct fimg2d_clip *clp);
 void fimg2d4x_enable_dithering(struct fimg2d_control *info);
-void fimg2d4x_set_src_scaling(struct fimg2d_control *info, struct fimg2d_scale *s);
-void fimg2d4x_set_msk_scaling(struct fimg2d_control *info, struct fimg2d_scale *s);
-void fimg2d4x_set_src_repeat(struct fimg2d_control *info, struct fimg2d_repeat *r);
-void fimg2d4x_set_msk_repeat(struct fimg2d_control *info, struct fimg2d_repeat *r);
+void fimg2d4x_set_src_scaling(struct fimg2d_control *info,
+				struct fimg2d_scale *scl,
+				struct fimg2d_repeat *rep);
+void fimg2d4x_set_msk_scaling(struct fimg2d_control *info,
+				struct fimg2d_scale *scl,
+				struct fimg2d_repeat *rep);
+void fimg2d4x_set_src_repeat(struct fimg2d_control *info,
+				struct fimg2d_repeat *rep);
+void fimg2d4x_set_msk_repeat(struct fimg2d_control *info,
+				struct fimg2d_repeat *rep);
 void fimg2d4x_set_rotation(struct fimg2d_control *info, enum rotation rot);
 void fimg2d4x_set_fgcolor(struct fimg2d_control *info, unsigned long fg);
 void fimg2d4x_set_bgcolor(struct fimg2d_control *info, unsigned long bg);

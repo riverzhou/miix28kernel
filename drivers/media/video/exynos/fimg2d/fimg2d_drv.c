@@ -172,10 +172,8 @@ static long fimg2d_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 	int ret = 0;
 	struct fimg2d_context *ctx;
 	struct fimg2d_platdata *pdata;
-	union {
-		struct fimg2d_blit *blit;
-		struct fimg2d_version ver;
-	} u;
+	struct fimg2d_blit blit;
+	struct fimg2d_version ver;
 
 	ctx = file->private_data;
 	if (!ctx) {
@@ -185,14 +183,20 @@ static long fimg2d_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 
 	switch (cmd) {
 	case FIMG2D_BITBLT_BLIT:
-		fimg2d_debug("FIMG2D_BITBLT_BLIT ctx: %p\n", ctx);
-		u.blit = (struct fimg2d_blit *)arg;
+		if (info->err) {
+			printk(KERN_ERR "[%s] device error, do sw fallback\n",
+					__func__);
+			return -EFAULT;
+		}
 
-		ret = fimg2d_add_command(info, ctx, u.blit);
+		if (copy_from_user(&blit, (void *)arg, sizeof(blit)))
+			return -EFAULT;
+
+		ret = fimg2d_add_command(info, ctx, &blit);
 		if (!ret)
 			fimg2d_request_bitblt(ctx);
 #ifdef PERF_PROFILE
-		perf_print(ctx, u.blit->seq_no);
+		perf_print(ctx, blit.seq_no);
 		perf_clear(ctx);
 #endif
 		break;
@@ -203,12 +207,12 @@ static long fimg2d_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		break;
 
 	case FIMG2D_BITBLT_VERSION:
-		fimg2d_debug("FIMG2D_BITBLT_VERSION ctx: %p\n", ctx);
 		pdata = to_fimg2d_plat(info->dev);
-		u.ver.hw = pdata->hw_ver;
-		u.ver.sw = 0;
-		fimg2d_debug("fimg2d version, hw: 0x%x sw: 0x%x\n", u.ver.hw, u.ver.sw);
-		if (copy_to_user((void *)arg, &u.ver, sizeof(u.ver)))
+		ver.hw = pdata->hw_ver;
+		ver.sw = 0;
+		fimg2d_debug("fimg2d version, hw: 0x%x sw: 0x%x\n",
+				ver.hw, ver.sw);
+		if (copy_to_user((void *)arg, &ver, sizeof(ver)))
 			return -EFAULT;
 		break;
 

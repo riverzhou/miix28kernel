@@ -55,7 +55,8 @@ void perf_print(struct fimg2d_context *ctx, int seq_no)
 		if (perf->valid != 0x11)
 			continue;
 		time = elapsed_usec(ctx, i);
-		printk(KERN_INFO "[FIMG2D PERF (%8s)] ctx(0x%08x) seq(%d) %8ld   usec\n",
+		printk(KERN_INFO "[FIMG2D PERF (%8s)] ctx(0x%08x) seq(%d) " \
+				"%8ld   usec\n",
 				perfname(i), (unsigned int)ctx, seq_no, time);
 	}
 	printk(KERN_INFO "[FIMG2D PERF **]\n");
@@ -65,7 +66,7 @@ void fimg2d_print_params(struct fimg2d_blit __user *u)
 {
 	int i;
 	struct fimg2d_param *p = &u->param;
-	struct fimg2d_image *m, *ui[MAX_IMAGES] = image_table(u);
+	struct fimg2d_image *img, *buf[MAX_IMAGES] = image_table(u);
 	struct fimg2d_rect *r;
 
 	printk(KERN_INFO "op: %d\n", u->op);
@@ -76,28 +77,38 @@ void fimg2d_print_params(struct fimg2d_blit __user *u)
 	printk(KERN_INFO "rotate: %d\n", p->rotate);
 	printk(KERN_INFO "repeat mode: %d, pad color: 0x%lx\n",
 			p->repeat.mode, p->repeat.pad_color);
-	printk(KERN_INFO "bluescreen mode: %d, bs_color: 0x%lx bg_color: 0x%lx\n",
+	printk(KERN_INFO "bluescreen mode: %d, bs_color: 0x%lx " \
+			"bg_color: 0x%lx\n",
 			p->bluscr.mode,
 			p->bluscr.bs_color, p->bluscr.bg_color);
 	printk(KERN_INFO "scaling mode: %d, src:%d,%d dst:%d,%d\n",
 			p->scaling.mode,
 			p->scaling.src_w, p->scaling.src_h,
 			p->scaling.dst_w, p->scaling.dst_h);
+	printk(KERN_INFO "clipping mode: %d, LT(%d,%d) RB(%d,%d)\n",
+			p->clipping.enable,
+			p->clipping.x1, p->clipping.y1,
+			p->clipping.x2, p->clipping.y2);
 
 	for (i = 0; i < MAX_IMAGES; i++) {
-		if (!ui[i])
+		if (!buf[i])
 			continue;
 
-		m = ui[i];
-		r = &m->rect;
+		img = buf[i];
+		r = &img->rect;
 
 		printk(KERN_INFO "%s type: %d addr: 0x%lx\n",
-				imagename(i), m->addr.type, m->addr.start);
-		printk(KERN_INFO "%s width: %d height: %d stride: %d order: %d format: %d\n",
-				imagename(i), m->width, m->height, m->stride, m->order, m->fmt);
-		printk(KERN_INFO "%s rect LT(%d,%d) RB(%d,%d)\n",
-				imagename(i), r->x1, r->y1, r->x2, r->y2);
-		printk(KERN_INFO "%s cacheopr: %d\n", imagename(i), m->need_cacheopr);
+				imagename(i), img->addr.type,
+				img->addr.start);
+		printk(KERN_INFO "%s width: %d height: %d " \
+				"stride: %d order: %d format: %d\n",
+				imagename(i), img->width, img->height,
+				img->stride, img->order, img->fmt);
+		printk(KERN_INFO "%s rect LT(%d,%d) RB(%d,%d) WH(%d,%d)\n",
+				imagename(i), r->x1, r->y1, r->x2, r->y2,
+				rect_w(r), rect_h(r));
+		printk(KERN_INFO "%s cacheopr: %d\n",
+				imagename(i), img->need_cacheopr);
 	}
 }
 
@@ -105,7 +116,7 @@ void fimg2d_dump_command(struct fimg2d_bltcmd *cmd)
 {
 	int i;
 	struct fimg2d_param *p = &cmd->param;
-	struct fimg2d_image *m;
+	struct fimg2d_image *img;
 	struct fimg2d_rect *r;
 	struct fimg2d_dma *c;
 
@@ -113,36 +124,59 @@ void fimg2d_dump_command(struct fimg2d_bltcmd *cmd)
 	printk(KERN_INFO " solid color: 0x%lx\n", p->solid_color);
 	printk(KERN_INFO " g_alpha: 0x%x\n", p->g_alpha);
 	printk(KERN_INFO " premultiplied: %d\n", p->premult);
-	printk(KERN_INFO " dither: %d\n", p->dither);
-	printk(KERN_INFO " rotate: %d\n", p->rotate);
-	printk(KERN_INFO " repeat mode: %d, pad color: 0x%lx\n",
-			p->repeat.mode, p->repeat.pad_color);
-	printk(KERN_INFO " bluescreen mode: %d, bs_color: 0x%lx bg_color: 0x%lx\n",
-			p->bluscr.mode, p->bluscr.bs_color, p->bluscr.bg_color);
-	printk(KERN_INFO " scaling mode: %d, s:%d,%d d:%d,%d\n",
-			p->scaling.mode,
-			p->scaling.src_w, p->scaling.src_h,
-			p->scaling.dst_w, p->scaling.dst_h);
+	if (p->dither)
+		printk(KERN_INFO " dither: %d\n", p->dither);
+	if (p->rotate)
+		printk(KERN_INFO " rotate: %d\n", p->rotate);
+	if (p->repeat.mode) {
+		printk(KERN_INFO " repeat mode: %d, pad color: 0x%lx\n",
+				p->repeat.mode, p->repeat.pad_color);
+	}
+	if (p->bluscr.mode) {
+		printk(KERN_INFO " bluescreen mode: %d, bs_color: 0x%lx " \
+				"bg_color: 0x%lx\n",
+				p->bluscr.mode, p->bluscr.bs_color,
+				p->bluscr.bg_color);
+	}
+	if (p->scaling.mode) {
+		printk(KERN_INFO " scaling mode: %d, s:%d,%d d:%d,%d\n",
+				p->scaling.mode,
+				p->scaling.src_w, p->scaling.src_h,
+				p->scaling.dst_w, p->scaling.dst_h);
+	}
+	if (p->clipping.enable) {
+		printk(KERN_INFO " clipping mode: %d, LT(%d,%d) RB(%d,%d)\n",
+				p->clipping.enable,
+				p->clipping.x1, p->clipping.y1,
+				p->clipping.x2, p->clipping.y2);
+	}
 
 	for (i = 0; i < MAX_IMAGES; i++) {
-		m = &cmd->image[i];
-		if (m->addr.type == ADDR_NONE)
+		img = &cmd->image[i];
+		if (!img->addr.type)
 			continue;
 
 		c = &cmd->dma[i];
-		r = &m->rect;
+		r = &img->rect;
 
 		printk(KERN_INFO " %s type: %d addr: 0x%lx\n",
-				imagename(i), m->addr.type, m->addr.start);
-		printk(KERN_INFO " %s width: %d height: %d stride: %d order: %d format: %d\n",
-				imagename(i), m->width, m->height, m->stride, m->order, m->fmt);
-		printk(KERN_INFO " %s rect LT(%d,%d) RB(%d,%d)\n",
-				imagename(i), r->x1, r->y1, r->x2, r->y2);
-		printk(KERN_INFO " %s dma addr: 0x%lx size: 0x%x cached: 0x%x\n",
+				imagename(i), img->addr.type,
+				img->addr.start);
+		printk(KERN_INFO " %s width: %d height: %d " \
+				"stride: %d order: %d format: %d\n",
+				imagename(i), img->width, img->height,
+				img->stride, img->order, img->fmt);
+		printk(KERN_INFO " %s rect LT(%d,%d) RB(%d,%d) WH(%d,%d)\n",
+				imagename(i), r->x1, r->y1, r->x2, r->y2,
+				rect_w(r), rect_h(r));
+		printk(KERN_INFO " %s dma addr: 0x%lx " \
+				"size: 0x%x cached: 0x%x\n",
 				imagename(i), c->addr, c->size, c->cached);
 	}
 
-	printk(KERN_INFO " dma size all: 0x%x bytes\n", cmd->dma_all);
-	printk(KERN_INFO " ctx: %p seq_no(%u) sync(%d)\n",
-			cmd->ctx, cmd->seq_no, cmd->sync);
+	if (cmd->dma_all) {
+		printk(KERN_INFO " dma size all: 0x%x bytes\n", cmd->dma_all);
+		printk(KERN_INFO " ctx: %p seq_no(%u) sync(%d)\n",
+				cmd->ctx, cmd->seq_no, cmd->sync);
+	}
 }

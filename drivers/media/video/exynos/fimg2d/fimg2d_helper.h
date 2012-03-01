@@ -68,6 +68,16 @@ static inline int is_opaque(enum color_format fmt)
 	return 1;
 }
 
+static inline unsigned int rect_w(struct fimg2d_rect *r)
+{
+	return r->x2 - r->x1;
+}
+
+static inline unsigned int rect_h(struct fimg2d_rect *r)
+{
+	return r->y2 - r->y1;
+}
+
 static inline long elapsed_usec(struct fimg2d_context *ctx, enum perf_desc desc)
 {
 	struct fimg2d_perf *perf = &ctx->perf[desc];
