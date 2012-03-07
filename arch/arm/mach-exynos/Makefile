@@ -57,6 +57,9 @@ obj-$(CONFIG_MACH_EXYNOS5_DT)		+= mach-exynos5-dt.o
 
 obj-$(CONFIG_MACH_SMDK5250)		+= mach-smdk5250.o
 
+# Manta board files
+obj-$(CONFIG_MACH_MANTA)		+= board-manta.o
+
 # device support
 
 obj-y					+= dev-uart.o
