@@ -59,6 +59,7 @@ obj-$(CONFIG_MACH_SMDK5250)		+= mach-smdk5250.o
 
 # Manta board files
 obj-$(CONFIG_MACH_MANTA)		+= board-manta.o
+obj-$(CONFIG_MACH_MANTA)		+= board-manta-display.o
 
 # device support
 

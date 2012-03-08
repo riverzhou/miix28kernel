@@ -36,6 +36,7 @@
 #include <mach/exynos-ion.h>
 #include <mach/dwmci.h>
 
+#include "board-manta.h"
 #include "common.h"
 
 static struct platform_device ramconsole_device = {
@@ -297,6 +298,8 @@ static void __init manta_machine_init(void)
 	manta_ss_udc_init();
 
 	platform_add_devices(manta_devices, ARRAY_SIZE(manta_devices));
+
+	exynos5_manta_display_init();
 }
 
 MACHINE_START(MANTA, "Manta")
