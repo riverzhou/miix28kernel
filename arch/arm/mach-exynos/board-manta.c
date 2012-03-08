@@ -246,6 +246,9 @@ static void __init manta_ss_udc_init(void)
 	struct exynos_usb3_drd_pdata *pdata = &manta_ss_udc_pdata;
 
 	exynos_ss_udc_set_platdata(pdata);
+
+	gpio_request_one(EXYNOS5_GPH0(1), GPIOF_INIT_HIGH, "usb_sel");
+	gpio_request_one(EXYNOS5_GPC2(2), GPIOF_INIT_HIGH, "usb3.0_en");
 }
 
 static void __init manta_map_io(void)
