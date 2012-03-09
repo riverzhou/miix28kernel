@@ -204,6 +204,12 @@ config CHARGER_BQ24191
 	help
 	 Say Y to include support for TI BQ24191 battery charger driver.
 
+config BATTERY_MANTA
+	tristate "Battery driver for Manta"
+	depends on I2C && MACH_MANTA
+	help
+	  Say Y to enable support for battery charging on Manta.
+
 config BATTERY_Z2
 	tristate "Z2 battery driver"
 	depends on I2C && MACH_ZIPIT2
