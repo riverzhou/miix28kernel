@@ -179,7 +179,7 @@
 #define MXT_BOOT_VALUE		0xa5
 #define MXT_BACKUP_VALUE	0x55
 #define MXT_BACKUP_TIME		25	/* msec */
-#define MXT_RESET_TIME		65	/* msec */
+#define MXT_RESET_TIME		300	/* msec */
 
 #define MXT_FWRESET_TIME	175	/* msec */
 
