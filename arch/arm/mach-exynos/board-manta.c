@@ -232,6 +232,7 @@ static struct platform_device *manta_devices[] __initdata = {
 	&ramconsole_device,
 	&persistent_trace_device,
 	&s3c_device_rtc,
+	&s3c_device_i2c3,
 	&s3c_device_i2c5,
 	&manta_keypad_device,
 	&exynos5_device_dwmci,
@@ -299,6 +300,7 @@ static void __init manta_machine_init(void)
 	exynos_ion_set_platdata();
 	exynos_dwmci_set_platdata(&exynos_dwmci_pdata);
 
+	s3c_i2c3_set_platdata(NULL);
 	s3c_i2c5_set_platdata(NULL);
 
 	manta_gpio_power_init();
