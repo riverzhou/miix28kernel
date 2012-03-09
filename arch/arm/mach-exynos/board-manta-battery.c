@@ -8,22 +8,38 @@
  * published by the Free Software Foundation.
  */
 
+#include <linux/err.h>
 #include <linux/kernel.h>
 #include <linux/gpio.h>
 #include <linux/i2c.h>
+#include <linux/delay.h>
 #include <linux/i2c-gpio.h>
 #include <linux/platform_device.h>
 
 #include <plat/gpio-cfg.h>
 
 #include <linux/platform_data/max17047_fuelgauge.h>
+#include <linux/platform_data/bq24191_charger.h>
+#include <linux/platform_data/manta_battery.h>
 
 #include "board-manta.h"
 
 #define	GPIO_FUEL_SCL_18V	EXYNOS5_GPD0(1)
 #define	GPIO_FUEL_SDA_18V	EXYNOS5_GPD0(0)
 
+#define	GPIO_USB_SEL1		EXYNOS5_GPH0(1)
+
+#define	GPIO_TA_EN		EXYNOS5_GPG1(5)
+#define	GPIO_TA_INT	EXYNOS5_GPX0(0)
+#define	GPIO_TA_nCHG		EXYNOS5_GPG1(4)
+#define	GPIO_CHG_SCL_18V	EXYNOS5_GPE0(2)
+#define	GPIO_CHG_SDA_18V	EXYNOS5_GPE0(1)
+
+static int cable_type;
+
 static struct max17047_fg_callbacks *fg_callbacks;
+static struct bq24191_chg_callbacks *chg_callbacks;
+static struct manta_bat_callbacks *bat_callbacks;
 
 static void max17047_fg_register_callbacks(struct max17047_fg_callbacks *ptr)
 {
@@ -58,16 +74,123 @@ static struct i2c_board_info max17047_brdinfo_fuelgauge[] __initdata = {
 	},
 };
 
+static void bq24191_chg_register_callbacks(struct bq24191_chg_callbacks *ptr)
+{
+	chg_callbacks = ptr;
+}
+
+static void bq24191_chg_unregister_callbacks(void)
+{
+	chg_callbacks = NULL;
+}
+
+static void charger_gpio_init(void)
+{
+	s3c_gpio_cfgpin(GPIO_TA_INT, S3C_GPIO_INPUT);
+	s3c_gpio_setpull(GPIO_TA_INT, S3C_GPIO_PULL_NONE);
+
+	s3c_gpio_cfgpin(GPIO_TA_nCHG, S3C_GPIO_INPUT);
+	s3c_gpio_setpull(GPIO_TA_nCHG, S3C_GPIO_PULL_UP);
+
+	s3c_gpio_cfgpin(GPIO_TA_EN, S3C_GPIO_OUTPUT);
+	s3c_gpio_setpull(GPIO_TA_EN, S3C_GPIO_PULL_NONE);
+	gpio_set_value(GPIO_TA_EN, 0);
+}
+
+static int check_samsung_charger(void)
+{
+	int result = false;
+
+	/* usb switch to check adc */
+	s3c_gpio_cfgpin(GPIO_USB_SEL1, S3C_GPIO_OUTPUT);
+	s3c_gpio_setpull(GPIO_USB_SEL1, S3C_GPIO_PULL_NONE);
+	gpio_set_value(GPIO_USB_SEL1, 0);
+
+	msleep(100);
+
+	/* If stmpe811 adc driver was merged,
+	it should be add to read adc then check samsung charger or not */
+	/* Always regards as usb temporarily */
+	result = false;
+
+	msleep(50);
+
+	/* usb switch to normal */
+	gpio_set_value(GPIO_USB_SEL1, 1);
+
+	pr_debug("%s: returning %d\n", __func__, result);
+	return result;
+}
+
+static void bq24191_change_cable_status(int gpio_ta_int)
+{
+	int is_ta;
+
+	if (gpio_ta_int == 1) {
+		is_ta = check_samsung_charger();
+		if (is_ta == true)
+			cable_type = CABLE_TYPE_AC;
+		else
+			cable_type = CABLE_TYPE_USB;
+	} else {
+		cable_type = CABLE_TYPE_NONE;
+	}
+
+	pr_debug("%s: ta_int(%d), cable_type(%d)", __func__,
+		gpio_ta_int, cable_type);
+
+	if (bat_callbacks && bat_callbacks->change_cable_status)
+		bat_callbacks->change_cable_status(bat_callbacks, cable_type);
+}
+
+static struct i2c_gpio_platform_data bq24191_i2c_data_charger = {
+	.sda_pin = GPIO_CHG_SDA_18V,
+	.scl_pin = GPIO_CHG_SCL_18V,
+};
+
+static struct platform_device bq24191_device_charger = {
+	.name = "i2c-gpio",
+	.id = 10,
+	.dev.platform_data = &bq24191_i2c_data_charger,
+};
+
+static struct bq24191_platform_data bq24191_chg_pdata = {
+	.register_callbacks = bq24191_chg_register_callbacks,
+	.unregister_callbacks = bq24191_chg_unregister_callbacks,
+	.change_cable_status = bq24191_change_cable_status,
+	.high_current_charging = 0x36,	/* input current limit 2A */
+	.low_current_charging = 0x32,	/* input current linit 500mA */
+	.chg_enable = 0x1d,
+	.chg_disable = 0x0d,
+	.gpio_ta_int = GPIO_TA_INT,
+	.gpio_ta_nchg = GPIO_TA_nCHG,
+	.gpio_ta_en = GPIO_TA_EN,
+};
+
+static struct i2c_board_info bq24191_brdinfo_charger[] __initdata = {
+	{
+		I2C_BOARD_INFO("bq24191-charger", 0x6a),
+		.platform_data	= &bq24191_chg_pdata,
+	},
+};
+
 static struct platform_device *manta_battery_devices[] __initdata = {
 	&max17047_device_fuelgauge,
+	&bq24191_device_charger,
 };
 
 void __init exynos5_manta_battery_init(void)
 {
+	charger_gpio_init();
+	bq24191_brdinfo_charger[0].irq = gpio_to_irq(GPIO_TA_INT);
+
 	platform_add_devices(manta_battery_devices,
 		ARRAY_SIZE(manta_battery_devices));
 
 	i2c_register_board_info(9, max17047_brdinfo_fuelgauge,
 		ARRAY_SIZE(max17047_brdinfo_fuelgauge));
+
+	i2c_register_board_info(10, bq24191_brdinfo_charger,
+		ARRAY_SIZE(bq24191_brdinfo_charger));
 }
 
