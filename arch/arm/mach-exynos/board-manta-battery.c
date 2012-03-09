@@ -174,9 +174,84 @@ static struct i2c_board_info bq24191_brdinfo_charger[] __initdata = {
 	},
 };
 
+static void manta_bat_register_callbacks(struct manta_bat_callbacks *ptr)
+{
+	bat_callbacks = ptr;
+}
+
+static void manta_bat_unregister_callbacks(void)
+{
+	bat_callbacks = NULL;
+}
+
+static int manta_bat_get_init_cable_state(void)
+{
+	return cable_type;
+}
+
+static void manta_bat_set_charging_current(int cable_type)
+{
+	if (chg_callbacks && chg_callbacks->set_charging_current)
+		chg_callbacks->set_charging_current(chg_callbacks, cable_type);
+}
+
+static void manta_bat_set_charging_enable(int en)
+{
+	if (chg_callbacks && chg_callbacks->set_charging_enable)
+		chg_callbacks->set_charging_enable(chg_callbacks, en);
+}
+
+static int manta_bat_get_capacity(void)
+{
+	if (fg_callbacks && fg_callbacks->get_capacity)
+		return fg_callbacks->get_capacity(fg_callbacks);
+	return -ENXIO;
+}
+
+static int manta_bat_get_temperature(void)
+{
+	if (fg_callbacks && fg_callbacks->get_temperature)
+		return fg_callbacks->get_temperature(fg_callbacks);
+	return -ENXIO;
+}
+
+static int manta_bat_get_voltage_now(void)
+{
+	if (fg_callbacks && fg_callbacks->get_voltage_now)
+		return fg_callbacks->get_voltage_now(fg_callbacks);
+	return -ENXIO;
+}
+
+
+static struct manta_bat_platform_data manta_battery_pdata = {
+	.register_callbacks = manta_bat_register_callbacks,
+	.unregister_callbacks = manta_bat_unregister_callbacks,
+
+	.get_init_cable_state = manta_bat_get_init_cable_state,
+
+	.set_charging_current = manta_bat_set_charging_current,
+	.set_charging_enable = manta_bat_set_charging_enable,
+
+	.get_capacity = manta_bat_get_capacity,
+	.get_temperature = manta_bat_get_temperature,
+	.get_voltage_now = manta_bat_get_voltage_now,
+
+	.temp_high_threshold = 50000,	/* 50c */
+	.temp_high_recovery = 42000,	/* 42c */
+	.temp_low_recovery = 2000,		/* 2c */
+	.temp_low_threshold = 0,		/* 0c */
+};
+
+static struct platform_device manta_device_battery = {
+	.name = "manta-battery",
+	.id = -1,
+	.dev.platform_data = &manta_battery_pdata,
+};
+
 static struct platform_device *manta_battery_devices[] __initdata = {
 	&max17047_device_fuelgauge,
 	&bq24191_device_charger,
+	&manta_device_battery,
 };
 
 void __init exynos5_manta_battery_init(void)
