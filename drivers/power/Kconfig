@@ -199,6 +199,11 @@ config FUELGAUGE_MAX17047
 	  in handheld and portable equipment. The MAX17047 is configured
 	  to operate with a single lithium cell.
 
+config CHARGER_BQ24191
+	tristate "BQ24191 charger driver"
+	help
+	 Say Y to include support for TI BQ24191 battery charger driver.
+
 config BATTERY_Z2
 	tristate "Z2 battery driver"
 	depends on I2C && MACH_ZIPIT2
