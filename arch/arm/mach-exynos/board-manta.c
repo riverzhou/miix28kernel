@@ -345,6 +345,7 @@ static void __init manta_machine_init(void)
 	exynos5_manta_power_init();
 	exynos5_manta_display_init();
 	exynos5_manta_input_init();
+	exynos5_manta_battery_init();
 }
 
 MACHINE_START(MANTA, "Manta")
