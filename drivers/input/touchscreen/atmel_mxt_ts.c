@@ -660,31 +660,55 @@ static int mxt_check_reg_init(struct mxt_data *data)
 	struct mxt_object *object;
 	struct device *dev = &data->client->dev;
 	int index = 0;
-	int i, j, config_offset;
+	int i, config_offset;
 
 	if (!pdata->config) {
 		dev_dbg(dev, "No cfg data defined, skipping reg init\n");
 		return 0;
 	}
 
-	for (i = 0; i < data->info.object_num; i++) {
-		object = data->object_table + i;
+	for (index = 0; index < pdata->config_length;) {
+		u8 obj_type = pdata->config[index];
+		int num_instances = pdata->config[index + 1];
 
-		if (!mxt_object_writable(object->type))
-			continue;
+		index += 2;
+		object = mxt_get_object(data, obj_type);
 
-		for (j = 0;
-		     j < (object->size + 1) * (object->instances + 1);
-		     j++) {
-			config_offset = index + j;
+		if (!object) {
+			dev_err(dev, "Invalid object type (%u @ idx %d)\n",
+				obj_type, index);
+			return -EINVAL;
+		} else if (!mxt_object_writable(object->type)) {
+			dev_err(dev, "Object not writable (%u @ idx %d)\n",
+				obj_type, index);
+			return -EINVAL;
+		}
+
+		dev_dbg(dev, "Writing config for obj %d len %d (%d %d %d)\n",
+			object->type,
+			(object->size + 1) * (object->instances + 1),
+			object->size + 1, object->instances + 1,
+			num_instances);
+
+		if (num_instances > (object->instances + 1)) {
+			dev_err(dev, "Too much config data for type %d\n",
+				object->type);
+			return -EINVAL;
+		}
+
+		for (i = 0; i < (object->size + 1) * num_instances; i++) {
+			config_offset = index + i;
 			if (config_offset > pdata->config_length) {
-				dev_err(dev, "Not enough config data!\n");
+				dev_err(dev, "Not enough config data! Object %d expects %d bytes (%d instances)\n",
+					object->type, object->size + 1,
+					num_instances);
+
 				return -EINVAL;
 			}
-			mxt_write_object(data, object->type, j,
+			mxt_write_object(data, object->type, i,
 					 pdata->config[config_offset]);
 		}
-		index += (object->size + 1) * (object->instances + 1);
+		index += (object->size + 1) * num_instances;
 	}
 
 	return 0;
@@ -816,6 +840,11 @@ static int mxt_get_object_table(struct mxt_data *data)
 		object->size = buf[3];
 		object->instances = buf[4];
 		object->num_report_ids = buf[5];
+
+		dev_dbg(&data->client->dev,
+			"obj %d addr 0x%x size %d insts %d num_reps %d\n",
+			object->type, object->start_address, object->size,
+			object->instances + 1, object->num_report_ids);
 
 		if (object->num_report_ids) {
 			reportid += object->num_report_ids *
