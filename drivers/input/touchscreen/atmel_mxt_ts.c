@@ -640,7 +640,8 @@ static irqreturn_t mxt_interrupt(int irq, void *dev_id)
 			goto end;
 
 		max_reportid = object->max_reportid;
-		min_reportid = max_reportid - object->num_report_ids + 1;
+		min_reportid = max_reportid -
+			(object->instances + 1) * object->num_report_ids + 1;
 		id = reportid - min_reportid;
 
 		if (reportid >= min_reportid && reportid <= max_reportid)
