@@ -75,6 +75,9 @@
 #define MXT_SPT_DIGITIZER_T43		43
 #define MXT_SPT_MESSAGECOUNT_T44	44
 #define MXT_SPT_CTECONFIG_T46		46
+#define MXT_ADAPTIVE_T55		55
+#define MXT_PROCI_SHIELDLESS_T56	56
+#define MXT_SPT_GENERICDATA_T57		57
 
 /* MXT_GEN_COMMAND_T6 field */
 #define MXT_COMMAND_RESET	0
@@ -288,6 +291,9 @@ static bool mxt_object_readable(unsigned int type)
 	case MXT_SPT_USERDATA_T38:
 	case MXT_SPT_DIGITIZER_T43:
 	case MXT_SPT_CTECONFIG_T46:
+	case MXT_ADAPTIVE_T55:
+	case MXT_PROCI_SHIELDLESS_T56:
+	case MXT_SPT_GENERICDATA_T57:
 		return true;
 	default:
 		return false;
@@ -319,6 +325,9 @@ static bool mxt_object_writable(unsigned int type)
 	case MXT_SPT_CTECONFIG_T28:
 	case MXT_SPT_DIGITIZER_T43:
 	case MXT_SPT_CTECONFIG_T46:
+	case MXT_ADAPTIVE_T55:
+	case MXT_PROCI_SHIELDLESS_T56:
+	case MXT_SPT_GENERICDATA_T57:
 		return true;
 	default:
 		return false;
