@@ -22,6 +22,7 @@
 #define MANTA_IRQ_BOARD_PMIC_START	IRQ_BOARD_START
 
 void exynos5_manta_display_init(void);
+void exynos5_manta_input_init(void);
 void exynos5_manta_power_init(void);
 
 #endif
