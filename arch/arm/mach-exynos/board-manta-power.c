@@ -10,10 +10,22 @@
 
 #include <linux/gpio.h>
 #include <linux/i2c.h>
+#include <linux/io.h>
 #include <linux/mfd/max77686.h>
 #include <linux/regulator/machine.h>
 
+#include <mach/regs-pmu.h>
+
 #include "board-manta.h"
+#include "common.h"
+
+#define REBOOT_MODE_PREFIX	0x12345670
+#define REBOOT_MODE_NONE	0
+#define REBOOT_MODE_RECOVERY	4
+#define REBOOT_MODE_FAST_BOOT	7
+
+#define REBOOT_MODE_NO_LPM	0x12345678
+#define REBOOT_MODE_LPM		0
 
 static struct regulator_consumer_supply ldo3_supply[] = {
 	REGULATOR_SUPPLY("vcc_1.8v", NULL),
@@ -358,7 +370,43 @@ static struct i2c_board_info i2c_devs5[] __initdata = {
 	},
 };
 
+static void manta_power_off(void)
+{
+	local_irq_disable();
+
+	writel(readl(EXYNOS5_PS_HOLD_CONTROL) & ~BIT(8),
+		EXYNOS5_PS_HOLD_CONTROL);
+
+	exynos5_restart(0, 0);
+}
+
+static void manta_reboot(char str, const char *cmd)
+{
+	local_irq_disable();
+
+	writel(REBOOT_MODE_NO_LPM, S5P_INFORM3); /* Don't enter lpm mode */
+
+	if (!cmd) {
+		writel(REBOOT_MODE_PREFIX | REBOOT_MODE_NONE, S5P_INFORM2);
+	} else {
+		if (!strcmp(cmd, "recovery"))
+			writel(REBOOT_MODE_PREFIX | REBOOT_MODE_RECOVERY,
+			       S5P_INFORM2);
+		else if (!strcmp(cmd, "bootloader"))
+			writel(REBOOT_MODE_PREFIX | REBOOT_MODE_FAST_BOOT,
+			       S5P_INFORM2);
+		else
+			writel(REBOOT_MODE_PREFIX | REBOOT_MODE_NONE,
+			       S5P_INFORM2);
+	}
+
+	exynos5_restart(str, cmd); /* S/W reset: INFORM0~3:  Keep its value */
+}
+
 void __init exynos5_manta_power_init(void)
 {
+	pm_power_off = manta_power_off;
+	arm_pm_restart = manta_reboot;
+
 	i2c_register_board_info(5, i2c_devs5, ARRAY_SIZE(i2c_devs5));
 }
