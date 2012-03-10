@@ -61,7 +61,9 @@ struct max77686_data {
 	u8 buck3_vol[8];
 	u8 buck4_vol[8];
 	int buck234_gpios_dvs[3];
+	char *buck234_gpios_dvs_label[3];
 	int buck234_gpios_selb[3];
+	char *buck234_gpios_selb_label[3];
 	int buck234_gpioindex;
 	bool ignore_gpiodvs_side_effect;
 
@@ -688,30 +690,30 @@ static __devinit int max77686_pmic_probe(struct platform_device *pdev)
 	max77686->buck3_gpiodvs = false;
 	max77686->buck4_gpiodvs = false;
 	for (i = 0; i < 3; i++) {
-		char buf[80];
-
-		sprintf(buf, "MAX77686 DVS%d", i);
-
 		if (gpio_is_valid(pdata->buck234_gpio_dvs[i])) {
+			max77686->buck234_gpios_dvs_label[i] =
+				kasprintf(GFP_KERNEL, "MAX77686 DVS%d", i);
 			max77686->buck234_gpios_dvs[i] =
 				pdata->buck234_gpio_dvs[i];
-			gpio_request(pdata->buck234_gpio_dvs[i], buf);
+			gpio_request(pdata->buck234_gpio_dvs[i],
+				max77686->buck234_gpios_dvs_label[i]);
 			gpio_direction_output(pdata->buck234_gpio_dvs[i], 0);
 		} else {
-			dev_info(&pdev->dev, "GPIO %s ignored (%d)\n",
-				 buf, pdata->buck234_gpio_dvs[i]);
+			dev_info(&pdev->dev, "GPIO MAX77686 DVS%d ignored (%d)\n",
+				 i, pdata->buck234_gpio_dvs[i]);
 		}
 
-		sprintf(buf, "MAX77686 SELB%d", i);
-
 		if (gpio_is_valid(pdata->buck234_gpio_selb[i])) {
+			max77686->buck234_gpios_selb_label[i] =
+				kasprintf(GFP_KERNEL, "MAX77686 SELB%d", i);
 			max77686->buck234_gpios_selb[i] =
 				pdata->buck234_gpio_selb[i];
-			gpio_request(pdata->buck234_gpio_selb[i], buf);
+			gpio_request(pdata->buck234_gpio_selb[i],
+				max77686->buck234_gpios_selb_label[i]);
 			gpio_direction_output(pdata->buck234_gpio_selb[i], 0);
 		} else {
-			dev_info(&pdev->dev, "GPIO %s ignored (%d)\n",
-				 buf, pdata->buck234_gpio_dvs[i]);
+			dev_info(&pdev->dev, "GPIO MAX77686 SELB%d ignored (%d)\n",
+				 i, pdata->buck234_gpio_selb[i]);
 		}
 	}
 	max77686->buck234_gpioindex = 0;
@@ -793,6 +795,8 @@ err:
 			gpio_free(max77686->buck234_gpios_dvs[i]);
 		if (max77686->buck234_gpios_dvs[i])
 			gpio_free(max77686->buck234_gpios_selb[i]);
+		kfree(max77686->buck234_gpios_dvs_label[i]);
+		kfree(max77686->buck234_gpios_selb_label[i]);
 	}
 
 	for (i = 0; i < max77686->num_regulators; i++)
@@ -816,6 +820,8 @@ static int __devexit max77686_pmic_remove(struct platform_device *pdev)
 			gpio_free(max77686->buck234_gpios_dvs[i]);
 		if (max77686->buck234_gpios_dvs[i])
 			gpio_free(max77686->buck234_gpios_selb[i]);
+		kfree(max77686->buck234_gpios_dvs_label[i]);
+		kfree(max77686->buck234_gpios_selb_label[i]);
 	}
 
 	for (i = 0; i < max77686->num_regulators; i++)
