@@ -53,6 +53,7 @@ static int bq24191_i2c_write(struct i2c_client *client, int reg, u8 value)
 	return ret;
 }
 
+#ifdef DEBUG
 static int bq24191_i2c_read(struct i2c_client *client, int reg, u8 *buf)
 {
 	int ret;
@@ -81,6 +82,7 @@ static void bq24191_dump_regs(struct i2c_client *client)
 		}
 	}
 }
+#endif
 
 static int bq24191_set_charging_enable(struct bq24191_chg_callbacks *ptr,
 				       bool en)
@@ -205,9 +207,9 @@ static int __devinit bq24191_charger_i2c_probe(struct i2c_client *client,
 
 	ret = request_threaded_irq(client->irq, NULL,
 		bq24191_pg_int_intr_handler,
-		IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING, "bq24191 /pg", chg);
+		IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING, "bq24191 pg", chg);
 	if (ret) {
-		dev_err(&client->dev, "%s: /pg irq register failed(%d)!\n",
+		dev_err(&client->dev, "%s: pg irq register failed(%d)!\n",
 			__func__, gpio_to_irq(chg->pdata->gpio_ta_int));
 		goto err_charger_irq;
 	}
