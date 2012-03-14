@@ -38,6 +38,7 @@
 
 #include <mach/map.h>
 #include <mach/sysmmu.h>
+#include <mach/exynos_fiq_debugger.h>
 #include <mach/exynos-ion.h>
 #include <mach/dwmci.h>
 
@@ -83,14 +84,8 @@ static struct s3c2410_uartcfg manta_uartcfgs[] __initdata = {
 		.ulcon		= MANTA_ULCON_DEFAULT,
 		.ufcon		= MANTA_UFCON_DEFAULT,
 	},
+	/* Do not initialize hwport 2, it will be handled by fiq_debugger */
 	[2] = {
-		.hwport		= 2,
-		.flags		= 0,
-		.ucon		= MANTA_UCON_DEFAULT,
-		.ulcon		= MANTA_ULCON_DEFAULT,
-		.ufcon		= MANTA_UFCON_DEFAULT,
-	},
-	[3] = {
 		.hwport		= 3,
 		.flags		= 0,
 		.ucon		= MANTA_UCON_DEFAULT,
@@ -337,6 +332,8 @@ static void __init manta_init_early(void)
 
 static void __init manta_machine_init(void)
 {
+	exynos_serial_debug_init(2, 0);
+
 	manta_sysmmu_init();
 	exynos_ion_set_platdata();
 	exynos_dwmci_set_platdata(&exynos_dwmci_pdata);
