@@ -109,6 +109,8 @@ static struct s3c_fb_pd_win manta_fb_win2 = {
 	.virtual_y		= 1600 * 2,
 	.max_bpp		= 32,
 	.default_bpp		= 24,
+	.width			= 218,
+	.height			= 136,
 };
 
 static struct s3c_fb_platdata manta_lcd1_pdata __initdata = {
