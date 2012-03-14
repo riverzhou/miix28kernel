@@ -49,7 +49,7 @@ static void manta_lcd_set_power(struct plat_lcd_data *pd,
 {
 	if (power) {
 		gpio_set_value(GPIO_LCD_EN, 1);
-		usleep_range(1000, 1000);
+		usleep_range(250000, 250000);
 	} else {
 		gpio_set_value(GPIO_LCD_EN, 0);
 	}
@@ -190,8 +190,8 @@ static struct platform_device *manta_display_devices[] __initdata = {
 	&exynos_device_md2,
 
 	&s5p_device_fimd1,
-	&s5p_device_dp,
 	&manta_lcd,
+	&s5p_device_dp,
 };
 
 void __init exynos5_manta_display_init(void)
