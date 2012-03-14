@@ -229,33 +229,6 @@ static struct dw_mci_board exynos_dwmci_pdata __initdata = {
 	.cfg_gpio		= exynos_dwmci_cfg_gpio,
 };
 
-#ifdef CONFIG_S3C_DEV_HSMMC3
-void exynos5_setup_sdhci3_cfg_gpio(struct platform_device *dev, int width)
-{
-	unsigned int gpio;
-
-	/* Set all the necessary GPC3[0:1] pins to special-function 2 */
-	for (gpio = EXYNOS5_GPC3(0); gpio < EXYNOS5_GPC3(2); gpio++) {
-		s3c_gpio_cfgpin(gpio, S3C_GPIO_SFN(2));
-		s3c_gpio_setpull(gpio, S3C_GPIO_PULL_NONE);
-		s5p_gpio_set_drvstr(gpio, S5P_GPIO_DRVSTR_LV4);
-	}
-
-	for (gpio = EXYNOS5_GPC3(3); gpio <= EXYNOS5_GPC3(6); gpio++) {
-		/* Data pin GPC3[3:6] to special-function 2 */
-		s3c_gpio_cfgpin(gpio, S3C_GPIO_SFN(2));
-		s3c_gpio_setpull(gpio, S3C_GPIO_PULL_UP);
-		s5p_gpio_set_drvstr(gpio, S5P_GPIO_DRVSTR_LV4);
-	}
-}
-
-static struct s3c_sdhci_platdata manta_hsmmc3_pdata __initdata = {
-	.cd_type		= S3C_SDHCI_CD_EXTERNAL,
-	.clk_type		= S3C_SDHCI_CLK_DIV_EXTERNAL,
-	.cfg_gpio		= exynos5_setup_sdhci3_cfg_gpio,
-};
-#endif
-
 static struct platform_device *manta_devices[] __initdata = {
 	&ramconsole_device,
 	&persistent_trace_device,
@@ -264,9 +237,6 @@ static struct platform_device *manta_devices[] __initdata = {
 	&s3c_device_i2c5,
 	&manta_keypad_device,
 	&exynos5_device_dwmci,
-#ifdef CONFIG_S3C_DEV_HSMMC3
-	&s3c_device_hsmmc3,
-#endif
 	&exynos_device_ion,
 	&exynos_device_ss_udc,
 };
@@ -330,9 +300,7 @@ static void __init manta_machine_init(void)
 	manta_sysmmu_init();
 	exynos_ion_set_platdata();
 	exynos_dwmci_set_platdata(&exynos_dwmci_pdata);
-#ifdef CONFIG_S3C_DEV_HSMMC3
-	s3c_sdhci3_set_platdata(&manta_hsmmc3_pdata);
-#endif
+
 	s3c_i2c3_set_platdata(NULL);
 	s3c_i2c5_set_platdata(NULL);
 
@@ -346,6 +314,7 @@ static void __init manta_machine_init(void)
 	exynos5_manta_display_init();
 	exynos5_manta_input_init();
 	exynos5_manta_battery_init();
+	exynos5_manta_wlan_init();
 }
 
 MACHINE_START(MANTA, "Manta")

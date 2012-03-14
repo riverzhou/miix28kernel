@@ -46,16 +46,18 @@ static struct resource manta_wifi_resources[] = {
 static void (*wifi_status_cb)(struct platform_device *, int state);
 static struct platform_device *manta_wifi_dev;
 
-int manta_wlan_ext_cd_init(void (*notify_func)(struct platform_device *,
-			   int state))
+static int exynos5_manta_wlan_ext_cd_init(
+				void (*notify_func)(struct platform_device *,
+				int state))
 {
 	manta_wifi_dev = &s3c_device_hsmmc3;
 	wifi_status_cb = notify_func;
 	return 0;
 }
 
-int manta_wlan_ext_cd_cleanup(void (*notify_func)(struct platform_device *,
-			      int state))
+static int exynos5_manta_wlan_ext_cd_cleanup(
+				void (*notify_func)(struct platform_device *,
+				int state))
 {
 	wifi_status_cb = NULL;
 	return 0;
@@ -237,6 +239,33 @@ static struct platform_device manta_wifi_device = {
 	},
 };
 
+void exynos5_setup_sdhci3_cfg_gpio(struct platform_device *dev, int width)
+{
+	unsigned int gpio;
+
+	/* Set all the necessary GPC3[0:1] pins to special-function 2 */
+	for (gpio = EXYNOS5_GPC3(0); gpio < EXYNOS5_GPC3(2); gpio++) {
+		s3c_gpio_cfgpin(gpio, S3C_GPIO_SFN(2));
+		s3c_gpio_setpull(gpio, S3C_GPIO_PULL_NONE);
+		s5p_gpio_set_drvstr(gpio, S5P_GPIO_DRVSTR_LV4);
+	}
+
+	for (gpio = EXYNOS5_GPC3(3); gpio <= EXYNOS5_GPC3(6); gpio++) {
+		/* Data pin GPC3[3:6] to special-function 2 */
+		s3c_gpio_cfgpin(gpio, S3C_GPIO_SFN(2));
+		s3c_gpio_setpull(gpio, S3C_GPIO_PULL_UP);
+		s5p_gpio_set_drvstr(gpio, S5P_GPIO_DRVSTR_LV4);
+	}
+}
+
+static struct s3c_sdhci_platdata manta_hsmmc3_pdata __initdata = {
+	.cd_type		= S3C_SDHCI_CD_EXTERNAL,
+	.clk_type		= S3C_SDHCI_CLK_DIV_EXTERNAL,
+	.cfg_gpio		= exynos5_setup_sdhci3_cfg_gpio,
+	.ext_cd_init		= exynos5_manta_wlan_ext_cd_init,
+	.ext_cd_cleanup		= exynos5_manta_wlan_ext_cd_cleanup,
+};
+
 static void __init manta_wlan_gpio(void)
 {
 	int gpio;
@@ -259,10 +288,12 @@ static void __init manta_wlan_gpio(void)
 	manta_wifi_resources[0].end = gpio_to_irq(gpio);
 }
 
-void __init manta_wlan_init(void)
+void __init exynos5_manta_wlan_init(void)
 {
 	pr_debug("%s: start\n", __func__);
 
+	s3c_sdhci3_set_platdata(&manta_hsmmc3_pdata);
+	platform_device_register(&s3c_device_hsmmc3);
 	manta_wlan_gpio();
 	platform_device_register(&manta_wifi_device);
 }

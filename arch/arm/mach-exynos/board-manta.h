@@ -25,5 +25,6 @@ void exynos5_manta_display_init(void);
 void exynos5_manta_input_init(void);
 void exynos5_manta_power_init(void);
 void exynos5_manta_battery_init(void);
+void exynos5_manta_wlan_init(void);
 
 #endif
