@@ -239,12 +239,17 @@ static int __devinit bq24191_charger_i2c_probe(struct i2c_client *client,
 
 	ret = request_threaded_irq(client->irq, NULL,
 		bq24191_pg_int_intr_handler,
-		IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING, "bq24191 pg", chg);
+		IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING | IRQF_ONESHOT,
+		"bq24191 pg", chg);
 	if (ret) {
 		dev_err(&client->dev, "%s: pg irq register failed(%d)!\n",
-			__func__, gpio_to_irq(chg->pdata->gpio_ta_int));
+			__func__, client->irq);
 		goto err_charger_irq;
 	}
+	ret = enable_irq_wake(client->irq);
+	if (ret)
+		dev_warn(&client->dev, "%s: failed to enable irq_wake on %d\n",
+			 __func__, client->irq);
 
 	if (chg->pdata->change_cable_status)
 		chg->pdata->change_cable_status
@@ -270,7 +275,8 @@ static int __devexit bq24191_charger_remove(struct i2c_client *client)
 {
 	struct bq24191_chg_data *chg = i2c_get_clientdata(client);
 
-	free_irq(gpio_to_irq(chg->pdata->gpio_ta_int), NULL);
+	disable_irq_wake(client->irq);
+	free_irq(client->irq, chg);
 
 	if (chg->pdata && chg->pdata->unregister_callbacks)
 		chg->pdata->unregister_callbacks();
