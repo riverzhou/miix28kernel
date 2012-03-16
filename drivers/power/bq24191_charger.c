@@ -21,11 +21,13 @@
 #include <linux/i2c.h>
 #include <linux/slab.h>
 #include <linux/platform_data/bq24191_charger.h>
+#include <linux/debugfs.h>
 
 struct bq24191_chg_data {
 	struct i2c_client *client;
 	struct bq24191_platform_data *pdata;
 	struct bq24191_chg_callbacks callbacks;
+	struct dentry *debugfs_dentry;
 };
 
 /* BQ24191 Registers. */
@@ -53,7 +55,6 @@ static int bq24191_i2c_write(struct i2c_client *client, int reg, u8 value)
 	return ret;
 }
 
-#ifdef DEBUG
 static int bq24191_i2c_read(struct i2c_client *client, int reg, u8 *buf)
 {
 	int ret;
@@ -63,6 +64,7 @@ static int bq24191_i2c_read(struct i2c_client *client, int reg, u8 *buf)
 	return ret;
 }
 
+#ifdef DEBUG
 static void bq24191_dump_regs(struct i2c_client *client)
 {
 	u8 data = 0;
@@ -172,6 +174,36 @@ static irqreturn_t bq24191_pg_int_intr_handler(int irq, void *arg)
 	return IRQ_HANDLED;
 }
 
+static int bq24191_debug_dump(struct seq_file *s, void *unused)
+{
+	struct bq24191_chg_data *chg = s->private;
+	struct i2c_client *client = chg->client;
+	u8 v;
+
+	if (bq24191_i2c_read(client, BQ24191_SYSTEM_STATUS, &v) >= 0)
+		seq_printf(s, "stat: vbus=%d chrg=%d dpm=%d pg=%d therm=%d"
+			   " vsys=%d\n",
+			   v >> 6, (v & 3) >> 4, !!(v & 0x8), !!(v & 0x4),
+			   !!(v & 0x2), v & 0x1);
+	if (bq24191_i2c_read(client, BQ24191_FAULT, &v) >= 0)
+		seq_printf(s, "fault: wdog=%d otg=%d chrg=%d bat=%d ntc=%d\n",
+			   !!(v & 0x80), !!(v & 0x4), (v & 0x3) >> 4,
+			   !!(v & 0x8), v & 0x7);
+	return 0;
+}
+
+static int bq24191_debug_open(struct inode *inode, struct file *file)
+{
+        return single_open(file, bq24191_debug_dump, inode->i_private);
+}
+
+static struct file_operations bq24191_debug_fops = {
+        .open = bq24191_debug_open,
+        .read = seq_read,
+        .llseek = seq_lseek,
+        .release = single_release,
+};
+
 static int __devinit bq24191_charger_i2c_probe(struct i2c_client *client,
 					const struct i2c_device_id *id)
 {
@@ -218,6 +250,11 @@ static int __devinit bq24191_charger_i2c_probe(struct i2c_client *client,
 		chg->pdata->change_cable_status
 		    (gpio_get_value(chg->pdata->gpio_ta_int));
 
+	if (IS_ERR_OR_NULL(debugfs_create_file("bq24191", S_IRUGO, NULL,
+					       chg, &bq24191_debug_fops)))
+		dev_err(&client->dev,
+			"failed to create bq24191 debugfs entry\n");
+
 	return 0;
 
 err_charger_irq:
@@ -238,6 +275,7 @@ static int __devexit bq24191_charger_remove(struct i2c_client *client)
 	if (chg->pdata && chg->pdata->unregister_callbacks)
 		chg->pdata->unregister_callbacks();
 
+	debugfs_remove(chg->debugfs_dentry);
 	kfree(chg);
 	return 0;
 }
