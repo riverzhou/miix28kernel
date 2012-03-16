@@ -194,14 +194,14 @@ static int bq24191_debug_dump(struct seq_file *s, void *unused)
 
 static int bq24191_debug_open(struct inode *inode, struct file *file)
 {
-        return single_open(file, bq24191_debug_dump, inode->i_private);
+	return single_open(file, bq24191_debug_dump, inode->i_private);
 }
 
-static struct file_operations bq24191_debug_fops = {
-        .open = bq24191_debug_open,
-        .read = seq_read,
-        .llseek = seq_lseek,
-        .release = single_release,
+static const struct file_operations bq24191_debug_fops = {
+	.open = bq24191_debug_open,
+	.read = seq_read,
+	.llseek = seq_lseek,
+	.release = single_release,
 };
 
 static int __devinit bq24191_charger_i2c_probe(struct i2c_client *client,
