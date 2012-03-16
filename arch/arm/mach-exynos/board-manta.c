@@ -13,6 +13,8 @@
 #include <linux/gpio.h>
 #include <linux/gpio_event.h>
 #include <linux/input.h>
+#include <linux/i2c.h>
+#include <linux/i2c-gpio.h>
 #include <linux/mmc/host.h>
 #include <linux/persistent_ram.h>
 #include <linux/platform_device.h>
@@ -20,7 +22,7 @@
 #include <linux/regulator/machine.h>
 #include <linux/regulator/fixed.h>
 #include <linux/serial_core.h>
-#include <linux/i2c.h>
+#include <linux/platform_data/stmpe811-adc.h>
 
 #include <asm/mach/arch.h>
 #include <asm/hardware/gic.h>
@@ -157,6 +159,43 @@ static void __init manta_gpio_power_init(void)
 	gpio_free(EXYNOS5_GPX2(7));
 }
 
+static struct stmpe811_callbacks *stmpe811_cbs;
+static void stmpe811_register_callback(struct stmpe811_callbacks *cb)
+{
+	stmpe811_cbs = cb;
+}
+
+static int manta_stmpe811_read_adc_data(u8 channel)
+{
+	if (stmpe811_cbs && stmpe811_cbs->get_adc_data)
+		return stmpe811_cbs->get_adc_data(channel);
+
+	return -EINVAL;
+}
+
+struct stmpe811_platform_data stmpe811_pdata = {
+	.register_cb = stmpe811_register_callback,
+};
+
+static struct i2c_gpio_platform_data gpio_i2c_data19 = {
+	.sda_pin = EXYNOS5_GPV3(1),
+	.scl_pin = EXYNOS5_GPV3(0),
+};
+
+struct platform_device s3c_device_i2c19 = {
+	.name = "i2c-gpio",
+	.id = 19,
+	.dev.platform_data = &gpio_i2c_data19,
+};
+
+/* I2C19 */
+static struct i2c_board_info i2c_devs19_emul[] __initdata = {
+	{
+		I2C_BOARD_INFO("stmpe811-adc", (0x82 >> 1)),
+		.platform_data  = &stmpe811_pdata,
+	},
+};
+
 /* defined in arch/arm/mach-exynos/reserve-mem.c */
 extern void exynos_cma_region_reserve(struct cma_region *,
 				struct cma_region *, size_t, const char *);
@@ -235,6 +274,7 @@ static struct platform_device *manta_devices[] __initdata = {
 	&s3c_device_rtc,
 	&s3c_device_i2c3,
 	&s3c_device_i2c5,
+	&s3c_device_i2c19,
 	&manta_keypad_device,
 	&exynos5_device_dwmci,
 	&exynos_device_ion,
@@ -303,6 +343,9 @@ static void __init manta_machine_init(void)
 
 	s3c_i2c3_set_platdata(NULL);
 	s3c_i2c5_set_platdata(NULL);
+
+	i2c_register_board_info(19, i2c_devs19_emul,
+		ARRAY_SIZE(i2c_devs19_emul));
 
 	manta_gpio_power_init();
 
