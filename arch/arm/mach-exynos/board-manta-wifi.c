@@ -22,6 +22,7 @@
 #include <linux/if.h>
 #include <linux/skbuff.h>
 #include <linux/wlan_plat.h>
+#include <linux/mmc/host.h>
 #include <plat/gpio-cfg.h>
 #include <plat/devs.h>
 #include <plat/sdhci.h>
@@ -261,6 +262,8 @@ void exynos5_setup_sdhci3_cfg_gpio(struct platform_device *dev, int width)
 static struct s3c_sdhci_platdata manta_hsmmc3_pdata __initdata = {
 	.cd_type		= S3C_SDHCI_CD_EXTERNAL,
 	.clk_type		= S3C_SDHCI_CLK_DIV_EXTERNAL,
+	.host_caps		= MMC_CAP_4_BIT_DATA | MMC_CAP_SD_HIGHSPEED,
+	.pm_caps		= MMC_PM_KEEP_POWER | MMC_PM_IGNORE_PM_NOTIFY,
 	.cfg_gpio		= exynos5_setup_sdhci3_cfg_gpio,
 	.ext_cd_init		= exynos5_manta_wlan_ext_cd_init,
 	.ext_cd_cleanup		= exynos5_manta_wlan_ext_cd_cleanup,
