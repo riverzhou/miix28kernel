@@ -100,6 +100,7 @@ static void charger_gpio_init(void)
 static int check_samsung_charger(void)
 {
 	int result = false;
+	int vol1, vol2, vol_avg;
 
 	/* usb switch to check adc */
 	s3c_gpio_cfgpin(GPIO_USB_SEL1, S3C_GPIO_OUTPUT);
@@ -108,17 +109,23 @@ static int check_samsung_charger(void)
 
 	msleep(100);
 
-	/* If stmpe811 adc driver was merged,
-	it should be add to read adc then check samsung charger or not */
-	/* Always regards as usb temporarily */
-	result = false;
+	vol1 = manta_stmpe811_read_adc_data(6);
+	vol2 = manta_stmpe811_read_adc_data(6);
+
+	if (vol1 >= 0 && vol2 >= 0) {
+		vol_avg = (vol1 + vol2) / 2;
+
+		/* ADC range was recommended by HW */
+		result = vol_avg > 1000 && vol_avg < 1500;
+	}
 
 	msleep(50);
 
 	/* usb switch to normal */
 	gpio_set_value(GPIO_USB_SEL1, 1);
 
-	pr_debug("%s: returning %d\n", __func__, result);
+	pr_debug("%s : adc1(%d), adc2(%d), return(%d)\n", __func__,
+							vol1, vol2, result);
 	return result;
 }
 
