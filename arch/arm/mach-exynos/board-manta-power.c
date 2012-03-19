@@ -374,8 +374,8 @@ static void manta_power_off(void)
 {
 	local_irq_disable();
 
-	writel(readl(EXYNOS5_PS_HOLD_CONTROL) & ~BIT(8),
-		EXYNOS5_PS_HOLD_CONTROL);
+	writel(readl(EXYNOS_PS_HOLD_CONTROL) & ~BIT(8),
+		EXYNOS_PS_HOLD_CONTROL);
 
 	exynos5_restart(0, 0);
 }
@@ -384,20 +384,20 @@ static void manta_reboot(char str, const char *cmd)
 {
 	local_irq_disable();
 
-	writel(REBOOT_MODE_NO_LPM, S5P_INFORM3); /* Don't enter lpm mode */
+	writel(REBOOT_MODE_NO_LPM, EXYNOS_INFORM3); /* Don't enter lpm mode */
 
 	if (!cmd) {
-		writel(REBOOT_MODE_PREFIX | REBOOT_MODE_NONE, S5P_INFORM2);
+		writel(REBOOT_MODE_PREFIX | REBOOT_MODE_NONE, EXYNOS_INFORM2);
 	} else {
 		if (!strcmp(cmd, "recovery"))
 			writel(REBOOT_MODE_PREFIX | REBOOT_MODE_RECOVERY,
-			       S5P_INFORM2);
+			       EXYNOS_INFORM2);
 		else if (!strcmp(cmd, "bootloader"))
 			writel(REBOOT_MODE_PREFIX | REBOOT_MODE_FAST_BOOT,
-			       S5P_INFORM2);
+			       EXYNOS_INFORM2);
 		else
 			writel(REBOOT_MODE_PREFIX | REBOOT_MODE_NONE,
-			       S5P_INFORM2);
+			       EXYNOS_INFORM2);
 	}
 
 	exynos5_restart(str, cmd); /* S/W reset: INFORM0~3:  Keep its value */
