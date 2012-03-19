@@ -165,7 +165,7 @@ static void stmpe811_register_callback(struct stmpe811_callbacks *cb)
 	stmpe811_cbs = cb;
 }
 
-static int manta_stmpe811_read_adc_data(u8 channel)
+int manta_stmpe811_read_adc_data(u8 channel)
 {
 	if (stmpe811_cbs && stmpe811_cbs->get_adc_data)
 		return stmpe811_cbs->get_adc_data(channel);

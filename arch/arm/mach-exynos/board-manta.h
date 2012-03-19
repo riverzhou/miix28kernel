@@ -27,4 +27,6 @@ void exynos5_manta_power_init(void);
 void exynos5_manta_battery_init(void);
 void exynos5_manta_wlan_init(void);
 
+int manta_stmpe811_read_adc_data(u8 channel);
+
 #endif
