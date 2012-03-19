@@ -1,4 +1,4 @@
-/* linux/arch/arm/mach-exynos/manta-pm.c
+/* linux/arch/arm/mach-exynos/board-manta-power.c
  *
  * Copyright (c) 2012 Samsung Electronics Co., Ltd.
  *		http://www.samsung.com
@@ -314,6 +314,13 @@ struct max77686_opmode_data max77686_opmode_data[MAX77686_REG_MAX] = {
 	[MAX77686_BUCK4] = {MAX77686_BUCK4, MAX77686_OPMODE_STANDBY},
 };
 
+static struct max77686_wtsr_smpl wtsr_smpl_data = {
+	.wtsr_en = true,
+	.smpl_en = true,
+	.wtsr_timer_val = 3,	/* 1000ms */
+	.smpl_timer_val = 0,	/* 0.5s */
+};
+
 static struct max77686_platform_data manta_max77686_info = {
 	.num_regulators = ARRAY_SIZE(max77686_regulators),
 	.regulators = max77686_regulators,
@@ -336,7 +343,7 @@ static struct max77686_platform_data manta_max77686_info = {
 			      EXYNOS5_GPV0(0),	/* GPIO_BUCK4_SEL, */
 			      },
 
-	/*for future work after DVS Table */
+	/* for future work after DVS Table */
 	.buck2_voltage[0] = 1100000,	/* 1.1V */
 	.buck2_voltage[1] = 1100000,	/* 1.1V */
 	.buck2_voltage[2] = 1100000,	/* 1.1V */
@@ -363,6 +370,9 @@ static struct max77686_platform_data manta_max77686_info = {
 	.buck4_voltage[5] = 1100000,	/* 1.1V */
 	.buck4_voltage[6] = 1100000,	/* 1.1V */
 	.buck4_voltage[7] = 1100000,	/* 1.1V */
+
+	/* for RTC */
+	.wtsr_smpl = &wtsr_smpl_data,
 };
 
 static struct i2c_board_info i2c_devs5[] __initdata = {
