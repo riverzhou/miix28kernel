@@ -29,6 +29,7 @@
 #define __LINUX_MFD_MAX77686_H
 
 #include <linux/regulator/consumer.h>
+#include <linux/rtc.h>
 
 /* MAX77686 regulator IDs */
 enum max77686_regulators {
@@ -97,6 +98,22 @@ struct max77686_opmode_data {
 	int mode;
 };
 
+/**
+ * struct max77686_wtsr_smpl - settings for WTSR/SMPL
+ * @wtsr_en:		WTSR Function Enable Control
+ * @smpl_en:		SMPL Function Enable Control
+ * @wtsr_timer_val:	Set the WTSR timer Threshold
+ *			0(250ms), 1(500ms), 2(750ms), 3(1000ms)
+ * @smpl_timer_val:	Set the SMPL timer Threshold
+ *			0(0.5s), 1(1.0s), 2(1.5s), 3(2.0s)
+ */
+struct max77686_wtsr_smpl {
+	bool wtsr_en;
+	bool smpl_en;
+	int wtsr_timer_val;
+	int smpl_timer_val;
+};
+
 struct max77686_platform_data {
 	/* IRQ */
 	int irq_gpio;
@@ -122,6 +139,10 @@ struct max77686_platform_data {
 	unsigned int buck2_voltage[8]; /* buckx_voltage in uV */
 	unsigned int buck3_voltage[8];
 	unsigned int buck4_voltage[8];
+
+	/* ---- RTC ---- */
+	struct max77686_wtsr_smpl *wtsr_smpl;
+	struct rtc_time *init_time;
 };
 
 #endif /* __LINUX_MFD_MAX77686_H */
