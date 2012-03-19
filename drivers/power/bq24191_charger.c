@@ -183,11 +183,11 @@ static int bq24191_debug_dump(struct seq_file *s, void *unused)
 	if (bq24191_i2c_read(client, BQ24191_SYSTEM_STATUS, &v) >= 0)
 		seq_printf(s, "stat: vbus=%d chrg=%d dpm=%d pg=%d therm=%d"
 			   " vsys=%d\n",
-			   v >> 6, (v & 3) >> 4, !!(v & 0x8), !!(v & 0x4),
+			   v >> 6, (v & 0x30) >> 4, !!(v & 0x8), !!(v & 0x4),
 			   !!(v & 0x2), v & 0x1);
 	if (bq24191_i2c_read(client, BQ24191_FAULT, &v) >= 0)
 		seq_printf(s, "fault: wdog=%d otg=%d chrg=%d bat=%d ntc=%d\n",
-			   !!(v & 0x80), !!(v & 0x4), (v & 0x3) >> 4,
+			   !!(v & 0x80), !!(v & 0x40), (v & 0x30) >> 4,
 			   !!(v & 0x8), v & 0x7);
 	return 0;
 }
