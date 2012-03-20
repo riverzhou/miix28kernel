@@ -229,6 +229,14 @@ static int manta_bat_get_voltage_now(void)
 	return -ENXIO;
 }
 
+static int manta_bat_get_current_now(int *i_current)
+{
+	int ret = -ENXIO;
+
+	if (fg_callbacks && fg_callbacks->get_current_now)
+		ret = fg_callbacks->get_current_now(fg_callbacks, i_current);
+	return ret;
+}
 
 static struct manta_bat_platform_data manta_battery_pdata = {
 	.register_callbacks = manta_bat_register_callbacks,
@@ -242,6 +250,7 @@ static struct manta_bat_platform_data manta_battery_pdata = {
 	.get_capacity = manta_bat_get_capacity,
 	.get_temperature = manta_bat_get_temperature,
 	.get_voltage_now = manta_bat_get_voltage_now,
+	.get_current_now = manta_bat_get_current_now,
 
 	.temp_high_threshold = 50000,	/* 50c */
 	.temp_high_recovery = 42000,	/* 42c */
