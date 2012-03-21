@@ -215,10 +215,11 @@ static int manta_bat_get_capacity(void)
 	return -ENXIO;
 }
 
-static int manta_bat_get_temperature(void)
+static int manta_bat_get_temperature(int *temp_now)
 {
 	if (fg_callbacks && fg_callbacks->get_temperature)
-		return fg_callbacks->get_temperature(fg_callbacks);
+		return fg_callbacks->get_temperature(fg_callbacks,
+						     temp_now);
 	return -ENXIO;
 }
 
