@@ -162,7 +162,7 @@ static void manta_bat_get_temp(struct manta_bat_data *battery)
 	int health = battery->batt_health;
 
 	if (battery->pdata->get_temperature)
-		batt_temp = battery->pdata->get_temperature();
+		battery->pdata->get_temperature(&batt_temp);
 
 	if (batt_temp >= battery->pdata->temp_high_threshold) {
 		if (health != POWER_SUPPLY_HEALTH_OVERHEAT &&

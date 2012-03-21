@@ -33,7 +33,7 @@ struct manta_bat_platform_data {
 
 	/* communication with fuelgauge */
 	int (*get_capacity) (void);
-	int (*get_temperature) (void);
+	int (*get_temperature) (int *);
 	int (*get_voltage_now)(void);
 	int (*get_current_now)(int *);
 
