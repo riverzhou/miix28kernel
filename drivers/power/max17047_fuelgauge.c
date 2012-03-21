@@ -43,6 +43,7 @@ struct max17047_fg_data {
 #define MAX17047_REG_SOC_REP		0x06
 #define MAX17047_REG_VCELL		0x09
 #define MAX17047_REG_TEMPERATURE	0x08
+#define MAX17047_REG_CURRENT		0x0A
 #define MAX17047_REG_AVGVCELL		0x19
 #define MAX17047_REG_CONFIG		0x1D
 #define MAX17047_REG_VERSION		0x21
@@ -191,6 +192,35 @@ static int max17047_get_vcell(struct max17047_fg_callbacks *ptr)
 	return vcell;
 }
 
+static int max17047_get_current(struct max17047_fg_callbacks *ptr,
+				int *i_current)
+{
+	struct max17047_fg_data *fg_data;
+	struct i2c_client *client;
+	u8 data[2];
+	int ret;
+	s16 cur;
+
+	if (!ptr) {
+		dev_err(&client->dev, "%s: null callbacks\n", __func__);
+		return -EINVAL;
+	}
+
+	fg_data = container_of(ptr, struct max17047_fg_data, callbacks);
+	client = fg_data->client;
+
+	ret = max17047_i2c_read(client, MAX17047_REG_CURRENT, data);
+	if (ret < 0)
+		return -EIO;
+
+	cur = ((data[1] << 8) | data[0]);
+	*i_current = cur * 15625 / 100000;
+
+	dev_dbg(&client->dev, "%s: CURRENT(0x%02x%02x, %d)\n", __func__,
+						data[1], data[0], *i_current);
+	return 0;
+}
+
 static int max17047_get_soc(struct max17047_fg_callbacks *ptr)
 {
 	struct max17047_fg_data *fg_data;
@@ -245,6 +275,7 @@ static int __devinit max17047_fuelgauge_i2c_probe(struct i2c_client *client,
 
 	fg_data->callbacks.get_capacity = max17047_get_soc;
 	fg_data->callbacks.get_voltage_now = max17047_get_vcell;
+	fg_data->callbacks.get_current_now = max17047_get_current;
 	fg_data->callbacks.get_temperature = max17047_get_temperature;
 	if (fg_data->pdata->register_callbacks)
 		fg_data->pdata->register_callbacks(&fg_data->callbacks);
