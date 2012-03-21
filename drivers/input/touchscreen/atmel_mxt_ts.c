@@ -1116,10 +1116,12 @@ static void mxt_start(struct mxt_data *data)
 	/* Touch enable */
 	mxt_write_object(data,
 			MXT_TOUCH_MULTI_T9, MXT_TOUCH_CTRL, 0x83);
+	enable_irq(data->irq);
 }
 
 static void mxt_stop(struct mxt_data *data)
 {
+	disable_irq(data->irq);
 	/* Touch disable */
 	mxt_write_object(data,
 			MXT_TOUCH_MULTI_T9, MXT_TOUCH_CTRL, 0);
@@ -1209,6 +1211,7 @@ static int __devinit mxt_probe(struct i2c_client *client,
 		dev_err(&client->dev, "Failed to register interrupt\n");
 		goto err_free_object;
 	}
+	disable_irq(client->irq);
 
 	error = mxt_make_highchg(data);
 	if (error)
@@ -1228,6 +1231,7 @@ err_unregister_device:
 	input_unregister_device(input_dev);
 	input_dev = NULL;
 err_free_irq:
+	enable_irq(client->irq);
 	free_irq(client->irq, data);
 err_free_object:
 	kfree(data->object_table);
@@ -1242,6 +1246,7 @@ static int __devexit mxt_remove(struct i2c_client *client)
 	struct mxt_data *data = i2c_get_clientdata(client);
 
 	sysfs_remove_group(&client->dev.kobj, &mxt_attr_group);
+	enable_irq(data->irq);
 	free_irq(data->irq, data);
 	input_unregister_device(data->input_dev);
 	kfree(data->object_table);
