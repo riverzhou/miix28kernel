@@ -167,7 +167,7 @@ static void manta_bat_get_temp(struct manta_bat_data *battery)
 	if (batt_temp >= battery->pdata->temp_high_threshold) {
 		if (health != POWER_SUPPLY_HEALTH_OVERHEAT &&
 				health != POWER_SUPPLY_HEALTH_UNSPEC_FAILURE) {
-			pr_info("battery overheat(%d>=%d),charging unavailable",
+			pr_info("battery overheat(%d>=%d),charging unavailable\n",
 				batt_temp, battery->pdata->temp_high_threshold);
 			battery->batt_health = POWER_SUPPLY_HEALTH_OVERHEAT;
 		}
@@ -175,7 +175,7 @@ static void manta_bat_get_temp(struct manta_bat_data *battery)
 			batt_temp >= battery->pdata->temp_low_recovery) {
 		if (health == POWER_SUPPLY_HEALTH_OVERHEAT ||
 				health == POWER_SUPPLY_HEALTH_COLD) {
-			pr_info("battery recovery(%d,%d~%d),charging available",
+			pr_info("battery recovery(%d,%d~%d),charging available\n",
 				batt_temp, battery->pdata->temp_low_recovery,
 				battery->pdata->temp_high_recovery);
 			battery->batt_health = POWER_SUPPLY_HEALTH_GOOD;
@@ -183,7 +183,7 @@ static void manta_bat_get_temp(struct manta_bat_data *battery)
 	} else if (batt_temp <= battery->pdata->temp_low_threshold) {
 		if (health != POWER_SUPPLY_HEALTH_COLD &&
 				health != POWER_SUPPLY_HEALTH_UNSPEC_FAILURE) {
-			pr_info("battery cold(%d <= %d), charging unavailable.",
+			pr_info("battery cold(%d <= %d), charging unavailable\n",
 				batt_temp, battery->pdata->temp_low_threshold);
 			battery->batt_health = POWER_SUPPLY_HEALTH_COLD;
 		}
@@ -233,7 +233,7 @@ static int manta_bat_enable_charging(struct manta_bat_data *battery,
 	if (battery->pdata && battery->pdata->set_charging_enable)
 		battery->pdata->set_charging_enable(enable);
 
-	pr_info("%s: enable(%d), cable(%d)", __func__,
+	pr_info("%s: enable(%d), cable(%d)\n", __func__,
 		enable, battery->cable_type);
 
 	return 0;
