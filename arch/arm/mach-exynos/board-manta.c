@@ -258,6 +258,7 @@ static struct platform_device *manta_devices[] __initdata = {
 	&s3c_device_rtc,
 	&s3c_device_i2c2,
 	&s3c_device_i2c3,
+	&s3c_device_i2c4,
 	&s3c_device_i2c5,
 	&manta_keypad_device,
 	&exynos5_device_dwmci0,
@@ -337,6 +338,7 @@ static void __init manta_machine_init(void)
 
 	s3c_i2c2_set_platdata(NULL);
 	s3c_i2c3_set_platdata(NULL);
+	s3c_i2c4_set_platdata(NULL);
 	s3c_i2c5_set_platdata(NULL);
 
 	i2c_register_board_info(2, i2c_devs2, ARRAY_SIZE(i2c_devs2));
@@ -352,6 +354,7 @@ static void __init manta_machine_init(void)
 	exynos5_manta_input_init();
 	exynos5_manta_battery_init();
 	exynos5_manta_wlan_init();
+	exynos5_manta_audio_init();
 }
 
 MACHINE_START(MANTA, "Manta")
