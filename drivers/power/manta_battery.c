@@ -42,10 +42,11 @@ struct manta_bat_data {
 	struct wake_lock	monitor_wake_lock;
 	struct wake_lock	cable_wake_lock;
 
-	int			       cable_type;
+	int			cable_type;
 
 	/* Battery Temperature (C) */
-	int				batt_temp;
+	int			batt_temp;
+	int			batt_current;
 	unsigned int		batt_health;
 	unsigned int		batt_vcell;
 	unsigned int		batt_soc;
@@ -193,11 +194,21 @@ static void manta_bat_get_temp(struct manta_bat_data *battery)
 
 static void manta_bat_update_data(struct manta_bat_data *battery)
 {
+	int ret;
+	int v;
+
 	if (battery->pdata->get_voltage_now)
 		battery->batt_vcell = battery->pdata->get_voltage_now();
 
 	if (battery->pdata->get_capacity)
 		battery->batt_soc = battery->pdata->get_capacity();
+
+	if (battery->pdata->get_current_now) {
+		ret = battery->pdata->get_current_now(&v);
+
+		if (!ret)
+			battery->batt_current = v;
+	}
 
 	manta_bat_get_temp(battery);
 }
@@ -292,7 +303,6 @@ static void manta_bat_monitor_work(struct work_struct *work)
 	wake_lock(&battery->monitor_wake_lock);
 
 	manta_bat_update_data(battery);
-	manta_bat_get_temp(battery);
 
 	switch (battery->charging_status) {
 	case POWER_SUPPLY_STATUS_FULL:
@@ -306,10 +316,10 @@ static void manta_bat_monitor_work(struct work_struct *work)
 		return;
 	}
 
-	pr_info("BAT : capacity(%d), health(%d), status(%d), voltage(%d), temp(%d), cable(%d)\n",
-		battery->batt_soc, battery->batt_health,
-		battery->charging_status, battery->batt_vcell,
-		battery->batt_temp, battery->cable_type);
+	pr_info("BAT : l(%d) v(%d) c(%d) t(%d) h(%d) status(%d) cable(%d)\n",
+		battery->batt_soc, battery->batt_vcell/1000,
+		battery->batt_current, battery->batt_temp, battery->batt_health,
+		battery->charging_status, battery->cable_type);
 
 	power_supply_changed(&battery->psy_bat);
 

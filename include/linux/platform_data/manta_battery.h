@@ -35,6 +35,7 @@ struct manta_bat_platform_data {
 	int (*get_capacity) (void);
 	int (*get_temperature) (void);
 	int (*get_voltage_now)(void);
+	int (*get_current_now)(int *);
 
 	int temp_high_threshold;
 	int temp_high_recovery;
