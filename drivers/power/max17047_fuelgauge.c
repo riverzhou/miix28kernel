@@ -135,12 +135,13 @@ static void max17047_dump_register(struct max17047_fg_data *fuelgauge_data)
 	}
 }
 
-static int max17047_get_temperature(struct max17047_fg_callbacks *ptr)
+static int max17047_get_temperature(struct max17047_fg_callbacks *ptr,
+				    int *temp_now)
 {
 	struct max17047_fg_data *fg_data;
 	struct i2c_client *client;
 	u8 data[2];
-	s32 temperature = 0;
+	s32 temperature;
 	int ret;
 
 	if (!ptr) {
@@ -162,7 +163,8 @@ static int max17047_get_temperature(struct max17047_fg_callbacks *ptr)
 	dev_dbg(&client->dev, "%s: temperature (0x%02x%02x, %d)\n", __func__,
 		data[1], data[0], temperature);
 
-	return temperature;
+	*temp_now = temperature;
+	return 0;
 }
 
 static int max17047_get_vcell(struct max17047_fg_callbacks *ptr)

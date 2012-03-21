@@ -22,7 +22,7 @@ struct max17047_fg_callbacks {
 	int (*get_capacity) (struct max17047_fg_callbacks *callbacks);
 	int (*get_voltage_now) (struct max17047_fg_callbacks *callbacks);
 	int (*get_current_now) (struct max17047_fg_callbacks *, int *);
-	int (*get_temperature) (struct max17047_fg_callbacks *callbacks);
+	int (*get_temperature) (struct max17047_fg_callbacks *, int *);
 };
 
 struct max17047_platform_data {
