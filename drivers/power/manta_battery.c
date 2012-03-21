@@ -197,11 +197,19 @@ static void manta_bat_update_data(struct manta_bat_data *battery)
 	int ret;
 	int v;
 
-	if (battery->pdata->get_voltage_now)
-		battery->batt_vcell = battery->pdata->get_voltage_now();
+	if (battery->pdata->get_voltage_now) {
+		ret = battery->pdata->get_voltage_now();
 
-	if (battery->pdata->get_capacity)
-		battery->batt_soc = battery->pdata->get_capacity();
+		if (ret >= 0)
+			battery->batt_vcell = ret;
+	}
+
+	if (battery->pdata->get_capacity) {
+		ret = battery->pdata->get_capacity();
+
+		if (ret >= 0)
+			battery->batt_soc = ret;
+	}
 
 	if (battery->pdata->get_current_now) {
 		ret = battery->pdata->get_current_now(&v);
