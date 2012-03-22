@@ -310,9 +310,37 @@ static void manta_bat_monitor_work(struct work_struct *work)
 
 	switch (battery->charging_status) {
 	case POWER_SUPPLY_STATUS_FULL:
-	case POWER_SUPPLY_STATUS_CHARGING:
 	case POWER_SUPPLY_STATUS_DISCHARGING:
+		break;
+	case POWER_SUPPLY_STATUS_CHARGING:
+		switch (battery->batt_health) {
+		case POWER_SUPPLY_HEALTH_OVERHEAT:
+		case POWER_SUPPLY_HEALTH_COLD:
+		case POWER_SUPPLY_HEALTH_OVERVOLTAGE:
+		case POWER_SUPPLY_HEALTH_DEAD:
+		case POWER_SUPPLY_HEALTH_UNSPEC_FAILURE:
+			battery->charging_status =
+				POWER_SUPPLY_STATUS_NOT_CHARGING;
+			manta_bat_enable_charging(battery, false);
+
+			pr_info("%s: Not charging because of health(%d)\n",
+				__func__, battery->batt_health);
+			break;
+		default:
+			break;
+		}
+		break;
 	case POWER_SUPPLY_STATUS_NOT_CHARGING:
+		if (battery->batt_health == POWER_SUPPLY_HEALTH_GOOD) {
+			pr_info("%s: recover health state\n", __func__);
+			if (battery->cable_type != CABLE_TYPE_NONE) {
+				manta_bat_enable_charging(battery, true);
+				battery->charging_status
+					= POWER_SUPPLY_STATUS_CHARGING;
+			} else
+				battery->charging_status
+					= POWER_SUPPLY_STATUS_DISCHARGING;
+		}
 		break;
 	default:
 		wake_unlock(&battery->monitor_wake_lock);
