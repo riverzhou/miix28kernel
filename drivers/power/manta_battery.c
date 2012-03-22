@@ -199,16 +199,12 @@ static void manta_bat_update_data(struct manta_bat_data *battery)
 
 	if (battery->pdata->get_voltage_now) {
 		ret = battery->pdata->get_voltage_now();
-
-		if (ret >= 0)
-			battery->batt_vcell = ret;
+		battery->batt_vcell = ret >= 0 ? ret : -1;
 	}
 
 	if (battery->pdata->get_capacity) {
 		ret = battery->pdata->get_capacity();
-
-		if (ret >= 0)
-			battery->batt_soc = ret;
+		battery->batt_soc = ret >= 0 ? ret : -1;
 	}
 
 	if (battery->pdata->get_current_now) {
@@ -384,6 +380,9 @@ static __devinit int manta_bat_probe(struct platform_device *pdev)
 	battery->psy_ac.properties = manta_power_props,
 	battery->psy_ac.num_properties = ARRAY_SIZE(manta_power_props),
 	battery->psy_ac.get_property = manta_ac_get_property;
+
+	battery->batt_vcell = -1;
+	battery->batt_soc = -1;
 
 	wake_lock_init(&battery->vbus_wake_lock, WAKE_LOCK_SUSPEND,
 			"vbus_present");
