@@ -525,6 +525,14 @@ config STMPE811_ADC
 	 If you say yes here you get support for the STMicroelectronics
 	 STMPE811 8 channel ADC driver.
 
+config AUDIENCE_ES305
+	tristate "Audience ES305 Voice Processor"
+	depends on I2C
+	default n
+	help
+	  The ES305 is a Voice Processor with integrated DSP that processes
+	  i2s audio data to provide noise suppression and echo cancellation.
+
 source "drivers/misc/c2port/Kconfig"
 source "drivers/misc/eeprom/Kconfig"
 source "drivers/misc/cb710/Kconfig"
