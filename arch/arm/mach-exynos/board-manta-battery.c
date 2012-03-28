@@ -15,6 +15,7 @@
 #include <linux/delay.h>
 #include <linux/i2c-gpio.h>
 #include <linux/platform_device.h>
+#include <linux/debugfs.h>
 
 #include <plat/gpio-cfg.h>
 
@@ -97,10 +98,10 @@ static void charger_gpio_init(void)
 	gpio_set_value(GPIO_TA_EN, 0);
 }
 
-static int check_samsung_charger(void)
+static int read_ta_adc(void)
 {
-	int result = false;
-	int vol1, vol2, vol_avg;
+	int vol1, vol2;
+	int result;
 
 	/* usb switch to check adc */
 	s3c_gpio_cfgpin(GPIO_USB_SEL1, S3C_GPIO_OUTPUT);
@@ -112,20 +113,28 @@ static int check_samsung_charger(void)
 	vol1 = manta_stmpe811_read_adc_data(6);
 	vol2 = manta_stmpe811_read_adc_data(6);
 
-	if (vol1 >= 0 && vol2 >= 0) {
-		vol_avg = (vol1 + vol2) / 2;
-
-		/* ADC range was recommended by HW */
-		result = vol_avg > 1000 && vol_avg < 1500;
-	}
+	if (vol1 >= 0 && vol2 >= 0)
+		result = (vol1 + vol2) / 2;
+	else
+		result = -1;
 
 	msleep(50);
 
 	/* usb switch to normal */
 	gpio_set_value(GPIO_USB_SEL1, 1);
+	return result;
+}
 
-	pr_debug("%s : adc1(%d), adc2(%d), return(%d)\n", __func__,
-							vol1, vol2, result);
+static int check_samsung_charger(void)
+{
+	int result = false;
+	int ta_adc;
+
+	ta_adc = read_ta_adc();
+
+	/* ADC range was recommended by HW */
+	result = ta_adc > 1000 && ta_adc < 1500;
+	pr_debug("%s : adc(%d), return(%d)\n", __func__, ta_adc, result);
 	return result;
 }
 
@@ -271,6 +280,24 @@ static struct platform_device *manta_battery_devices[] __initdata = {
 	&manta_device_battery,
 };
 
+static int manta_power_debug_dump(struct seq_file *s, void *unused)
+{
+	seq_printf(s, "ta_adc=%d cable=%d\n", read_ta_adc(), cable_type);
+	return 0;
+}
+
+static int manta_power_debug_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, manta_power_debug_dump, inode->i_private);
+}
+
+static const struct file_operations manta_power_debug_fops = {
+	.open = manta_power_debug_open,
+	.read = seq_read,
+	.llseek = seq_lseek,
+	.release = single_release,
+};
+
 void __init exynos5_manta_battery_init(void)
 {
 	charger_gpio_init();
@@ -284,5 +311,9 @@ void __init exynos5_manta_battery_init(void)
 
 	i2c_register_board_info(10, bq24191_brdinfo_charger,
 		ARRAY_SIZE(bq24191_brdinfo_charger));
+
+	if (IS_ERR_OR_NULL(debugfs_create_file("manta-power", S_IRUGO, NULL,
+					       NULL, &manta_power_debug_fops)))
+		pr_err("failed to create manta-power debugfs entry\n");
 }
 
