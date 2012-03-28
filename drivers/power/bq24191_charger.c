@@ -269,8 +269,9 @@ static int __devinit bq24191_charger_i2c_probe(struct i2c_client *client,
 		chg->pdata->change_cable_status
 		    (gpio_get_value(chg->pdata->gpio_ta_int));
 
-	if (IS_ERR_OR_NULL(debugfs_create_file("bq24191", S_IRUGO, NULL,
-					       chg, &bq24191_debug_fops)))
+	chg->debugfs_dentry = debugfs_create_file("bq24191", S_IRUGO, NULL,
+						  chg, &bq24191_debug_fops);
+	if (IS_ERR_OR_NULL(chg->debugfs_dentry))
 		dev_err(&client->dev,
 			"failed to create bq24191 debugfs entry\n");
 
@@ -294,8 +295,8 @@ static int __devexit bq24191_charger_remove(struct i2c_client *client)
 
 	if (chg->pdata && chg->pdata->unregister_callbacks)
 		chg->pdata->unregister_callbacks();
-
-	debugfs_remove(chg->debugfs_dentry);
+	if (!IS_ERR_OR_NULL(chg->debugfs_dentry))
+		debugfs_remove(chg->debugfs_dentry);
 	kfree(chg);
 	return 0;
 }
