@@ -179,6 +179,8 @@ static int bq24191_debug_dump(struct seq_file *s, void *unused)
 	struct bq24191_chg_data *chg = s->private;
 	struct i2c_client *client = chg->client;
 	u8 v;
+	u8 v2;
+	u8 v3;
 
 	if (bq24191_i2c_read(client, BQ24191_SYSTEM_STATUS, &v) >= 0)
 		seq_printf(s, "stat: vbus=%d chrg=%d dpm=%d pg=%d therm=%d"
@@ -189,6 +191,18 @@ static int bq24191_debug_dump(struct seq_file *s, void *unused)
 		seq_printf(s, "fault: wdog=%d otg=%d chrg=%d bat=%d ntc=%d\n",
 			   !!(v & 0x80), !!(v & 0x40), (v & 0x30) >> 4,
 			   !!(v & 0x8), v & 0x7);
+	if (bq24191_i2c_read(client, BQ24191_POWERON_CONFIG, &v) >= 0)
+		seq_printf(s, "cfg=%x ce=%d stat=%d npg=%d sysmin=%x\n",
+			   (v & 0x30) >> 4,
+			   gpio_get_value(chg->pdata->gpio_ta_en),
+			   gpio_get_value(chg->pdata->gpio_ta_nchg),
+			   gpio_get_value(chg->pdata->gpio_ta_int),
+			   (v & 0xe) >> 1);
+	if (bq24191_i2c_read(client, BQ24191_INPUT_SOURCE_CTRL, &v) >= 0 &&
+	    bq24191_i2c_read(client, BQ24191_CHARGE_CURRENT_CTRL, &v2) >= 0 &&
+	    bq24191_i2c_read(client, BQ24191_CHARGE_VOLTAGE_CTRL, &v3) >= 0)
+		seq_printf(s, "vindpm=%x iinlim=%x ichg=%x vreg=%x\n",
+			   (v & 0x78) >> 3, v & 0x7, v2 >> 2, v3 & 0xfc >> 2);
 	return 0;
 }
 
