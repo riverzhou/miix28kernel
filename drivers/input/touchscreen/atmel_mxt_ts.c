@@ -253,6 +253,7 @@ struct mxt_finger {
 /* Each client has this additional data */
 struct mxt_data {
 	struct i2c_client *client;
+	struct i2c_client *client_boot;
 	struct input_dev *input_dev;
 	const struct mxt_platform_data *pdata;
 	struct mxt_object *object_table;
@@ -985,7 +986,7 @@ static ssize_t mxt_object_show(struct device *dev,
 static int mxt_load_fw(struct device *dev, const char *fn)
 {
 	struct mxt_data *data = dev_get_drvdata(dev);
-	struct i2c_client *client = data->client;
+	struct i2c_client *client = data->client_boot;
 	const struct firmware *fw = NULL;
 	unsigned int frame_size;
 	unsigned int pos = 0;
@@ -1001,12 +1002,6 @@ static int mxt_load_fw(struct device *dev, const char *fn)
 	mxt_write_object(data, MXT_GEN_COMMAND_T6,
 			MXT_COMMAND_RESET, MXT_BOOT_VALUE);
 	msleep(MXT_RESET_TIME);
-
-	/* Change to slave address of bootloader */
-	if (client->addr == MXT_APP_LOW)
-		client->addr = MXT_BOOT_LOW;
-	else
-		client->addr = MXT_BOOT_HIGH;
 
 	ret = mxt_check_bootloader(client, MXT_WAITING_BOOTLOAD_CMD);
 	if (ret)
@@ -1043,12 +1038,6 @@ static int mxt_load_fw(struct device *dev, const char *fn)
 
 out:
 	release_firmware(fw);
-
-	/* Change to slave address of application */
-	if (client->addr == MXT_BOOT_LOW)
-		client->addr = MXT_APP_LOW;
-	else
-		client->addr = MXT_APP_HIGH;
 
 	return ret;
 }
@@ -1151,6 +1140,7 @@ static int __devinit mxt_probe(struct i2c_client *client,
 	const struct mxt_platform_data *pdata = client->dev.platform_data;
 	struct mxt_data *data;
 	struct input_dev *input_dev;
+	u16 boot_address;
 	int error;
 
 	if (!pdata)
@@ -1193,6 +1183,23 @@ static int __devinit mxt_probe(struct i2c_client *client,
 	input_set_drvdata(input_dev, data);
 	i2c_set_clientdata(client, data);
 
+	if (data->pdata->boot_address) {
+		boot_address = data->pdata->boot_address;
+	} else {
+		if (client->addr == MXT_APP_LOW)
+			boot_address = MXT_BOOT_LOW;
+		else
+			boot_address = MXT_BOOT_HIGH;
+	}
+
+	data->client_boot = i2c_new_dummy(client->adapter, boot_address);
+	if (!data->client_boot) {
+		dev_err(&client->dev, "Fail to register sub client[0x%x]\n",
+			 boot_address);
+		error = -ENODEV;
+		goto err_free_mem;
+	}
+
 	error = mxt_initialize(data);
 	if (error)
 		goto err_free_object;
@@ -1227,6 +1234,7 @@ err_free_irq:
 	free_irq(client->irq, data);
 err_free_object:
 	kfree(data->object_table);
+	i2c_unregister_device(data->client_boot);
 err_free_mem:
 	input_free_device(input_dev);
 	kfree(data);
@@ -1241,6 +1249,7 @@ static int __devexit mxt_remove(struct i2c_client *client)
 	enable_irq(data->irq);
 	free_irq(data->irq, data);
 	input_unregister_device(data->input_dev);
+	i2c_unregister_device(data->client_boot);
 	kfree(data->object_table);
 	kfree(data);
 
