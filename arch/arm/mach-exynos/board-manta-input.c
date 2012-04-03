@@ -132,6 +132,7 @@ static struct mxt_platform_data atmel_mxt_ts_pdata = {
 	.threshold      = 0x46,
 	.orient         = MXT_DIAGONAL,
 	.irqflags       = IRQF_TRIGGER_LOW | IRQF_ONESHOT,
+	.boot_address   = 0x26,
 };
 
 static struct i2c_board_info i2c_devs3[] __initdata = {
