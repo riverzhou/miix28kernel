@@ -13,7 +13,6 @@
 #include <linux/gpio.h>
 #include <linux/i2c.h>
 #include <linux/delay.h>
-#include <linux/i2c-gpio.h>
 #include <linux/platform_device.h>
 #include <linux/debugfs.h>
 
@@ -25,16 +24,11 @@
 
 #include "board-manta.h"
 
-#define	GPIO_FUEL_SCL_18V	EXYNOS5_GPD0(1)
-#define	GPIO_FUEL_SDA_18V	EXYNOS5_GPD0(0)
-
 #define	GPIO_USB_SEL1		EXYNOS5_GPH0(1)
 
 #define	GPIO_TA_EN		EXYNOS5_GPG1(5)
-#define	GPIO_TA_INT	EXYNOS5_GPX0(0)
+#define	GPIO_TA_INT		EXYNOS5_GPX0(0)
 #define	GPIO_TA_nCHG		EXYNOS5_GPG1(4)
-#define	GPIO_CHG_SCL_18V	EXYNOS5_GPE0(2)
-#define	GPIO_CHG_SDA_18V	EXYNOS5_GPE0(1)
 
 static int cable_type;
 
@@ -52,27 +46,9 @@ static void max17047_fg_unregister_callbacks(void)
 	fg_callbacks = NULL;
 }
 
-static struct i2c_gpio_platform_data max17047_i2c_data_fuelgauge = {
-	.sda_pin = GPIO_FUEL_SDA_18V,
-	.scl_pin = GPIO_FUEL_SCL_18V,
-};
-
-static struct platform_device max17047_device_fuelgauge = {
-	.name = "i2c-gpio",
-	.id = 9,
-	.dev.platform_data = &max17047_i2c_data_fuelgauge,
-};
-
 static struct max17047_platform_data max17047_fg_pdata = {
 	.register_callbacks = max17047_fg_register_callbacks,
 	.unregister_callbacks = max17047_fg_unregister_callbacks,
-};
-
-static struct i2c_board_info max17047_brdinfo_fuelgauge[] __initdata = {
-	{
-		I2C_BOARD_INFO("max17047-fuelgauge", 0x36),
-		.platform_data	= &max17047_fg_pdata,
-	},
 };
 
 static void bq24191_chg_register_callbacks(struct bq24191_chg_callbacks *ptr)
@@ -159,17 +135,6 @@ static void bq24191_change_cable_status(int gpio_ta_int)
 		bat_callbacks->change_cable_status(bat_callbacks, cable_type);
 }
 
-static struct i2c_gpio_platform_data bq24191_i2c_data_charger = {
-	.sda_pin = GPIO_CHG_SDA_18V,
-	.scl_pin = GPIO_CHG_SCL_18V,
-};
-
-static struct platform_device bq24191_device_charger = {
-	.name = "i2c-gpio",
-	.id = 10,
-	.dev.platform_data = &bq24191_i2c_data_charger,
-};
-
 static struct bq24191_platform_data bq24191_chg_pdata = {
 	.register_callbacks = bq24191_chg_register_callbacks,
 	.unregister_callbacks = bq24191_chg_unregister_callbacks,
@@ -181,13 +146,6 @@ static struct bq24191_platform_data bq24191_chg_pdata = {
 	.gpio_ta_int = GPIO_TA_INT,
 	.gpio_ta_nchg = GPIO_TA_nCHG,
 	.gpio_ta_en = GPIO_TA_EN,
-};
-
-static struct i2c_board_info bq24191_brdinfo_charger[] __initdata = {
-	{
-		I2C_BOARD_INFO("bq24191-charger", 0x6a),
-		.platform_data	= &bq24191_chg_pdata,
-	},
 };
 
 static void manta_bat_register_callbacks(struct manta_bat_callbacks *ptr)
@@ -275,8 +233,6 @@ static struct platform_device manta_device_battery = {
 };
 
 static struct platform_device *manta_battery_devices[] __initdata = {
-	&max17047_device_fuelgauge,
-	&bq24191_device_charger,
 	&manta_device_battery,
 };
 
@@ -298,19 +254,26 @@ static const struct file_operations manta_power_debug_fops = {
 	.release = single_release,
 };
 
+static struct i2c_board_info i2c_devs2[] __initdata = {
+	{
+		I2C_BOARD_INFO("max17047-fuelgauge", 0x36),
+		.platform_data	= &max17047_fg_pdata,
+	},
+	{
+		I2C_BOARD_INFO("bq24191-charger", 0x6a),
+		.platform_data	= &bq24191_chg_pdata,
+	},
+};
+
 void __init exynos5_manta_battery_init(void)
 {
 	charger_gpio_init();
-	bq24191_brdinfo_charger[0].irq = gpio_to_irq(GPIO_TA_INT);
+	i2c_devs2[1].irq = gpio_to_irq(GPIO_TA_INT);
 
 	platform_add_devices(manta_battery_devices,
 		ARRAY_SIZE(manta_battery_devices));
 
-	i2c_register_board_info(9, max17047_brdinfo_fuelgauge,
-		ARRAY_SIZE(max17047_brdinfo_fuelgauge));
-
-	i2c_register_board_info(10, bq24191_brdinfo_charger,
-		ARRAY_SIZE(bq24191_brdinfo_charger));
+	i2c_register_board_info(2, i2c_devs2, ARRAY_SIZE(i2c_devs2));
 
 	if (IS_ERR_OR_NULL(debugfs_create_file("manta-power", S_IRUGO, NULL,
 					       NULL, &manta_power_debug_fops)))

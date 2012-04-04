@@ -14,7 +14,6 @@
 #include <linux/gpio_event.h>
 #include <linux/input.h>
 #include <linux/i2c.h>
-#include <linux/i2c-gpio.h>
 #include <linux/mmc/host.h>
 #include <linux/persistent_ram.h>
 #include <linux/platform_device.h>
@@ -172,19 +171,8 @@ struct stmpe811_platform_data stmpe811_pdata = {
 	.register_cb = stmpe811_register_callback,
 };
 
-static struct i2c_gpio_platform_data gpio_i2c_data19 = {
-	.sda_pin = EXYNOS5_GPV3(1),
-	.scl_pin = EXYNOS5_GPV3(0),
-};
-
-struct platform_device s3c_device_i2c19 = {
-	.name = "i2c-gpio",
-	.id = 19,
-	.dev.platform_data = &gpio_i2c_data19,
-};
-
-/* I2C19 */
-static struct i2c_board_info i2c_devs19_emul[] __initdata = {
+/* I2C2 */
+static struct i2c_board_info i2c_devs2[] __initdata = {
 	{
 		I2C_BOARD_INFO("stmpe811-adc", (0x82 >> 1)),
 		.platform_data  = &stmpe811_pdata,
@@ -215,63 +203,63 @@ static void __init exynos_reserve_mem(void)
 	exynos_cma_region_reserve(regions, NULL, 0, map);
 }
 
-static void exynos_dwmci_cfg_gpio(int width)
+static void exynos_dwmci0_cfg_gpio(int width)
 {
 	unsigned int gpio;
 
 	for (gpio = EXYNOS5_GPC0(0); gpio < EXYNOS5_GPC0(2); gpio++) {
-		s3c_gpio_cfgpin(gpio, S3C_GPIO_SFN(3));
+		s3c_gpio_cfgpin(gpio, S3C_GPIO_SFN(2));
 		s3c_gpio_setpull(gpio, S3C_GPIO_PULL_NONE);
-		s5p_gpio_set_drvstr(gpio, S5P_GPIO_DRVSTR_LV2);
+		s5p_gpio_set_drvstr(gpio, S5P_GPIO_DRVSTR_LV4);
 	}
 
 	switch (width) {
 	case 8:
-		for (gpio = EXYNOS5_GPC1(3); gpio <= EXYNOS5_GPC1(6); gpio++) {
-			s3c_gpio_cfgpin(gpio, S3C_GPIO_SFN(4));
+		for (gpio = EXYNOS5_GPC1(0); gpio <= EXYNOS5_GPC1(3); gpio++) {
+			s3c_gpio_cfgpin(gpio, S3C_GPIO_SFN(2));
 			s3c_gpio_setpull(gpio, S3C_GPIO_PULL_UP);
-			s5p_gpio_set_drvstr(gpio, S5P_GPIO_DRVSTR_LV2);
+			s5p_gpio_set_drvstr(gpio, S5P_GPIO_DRVSTR_LV4);
 		}
 	case 4:
 		for (gpio = EXYNOS5_GPC0(3); gpio <= EXYNOS5_GPC0(6); gpio++) {
-			s3c_gpio_cfgpin(gpio, S3C_GPIO_SFN(3));
+			s3c_gpio_cfgpin(gpio, S3C_GPIO_SFN(2));
 			s3c_gpio_setpull(gpio, S3C_GPIO_PULL_UP);
-			s5p_gpio_set_drvstr(gpio, S5P_GPIO_DRVSTR_LV2);
+			s5p_gpio_set_drvstr(gpio, S5P_GPIO_DRVSTR_LV4);
 		}
 		break;
 	case 1:
 		gpio = EXYNOS5_GPC0(3);
-		s3c_gpio_cfgpin(gpio, S3C_GPIO_SFN(3));
+		s3c_gpio_cfgpin(gpio, S3C_GPIO_SFN(2));
 		s3c_gpio_setpull(gpio, S3C_GPIO_PULL_UP);
-		s5p_gpio_set_drvstr(gpio, S5P_GPIO_DRVSTR_LV2);
+		s5p_gpio_set_drvstr(gpio, S5P_GPIO_DRVSTR_LV4);
 	default:
 		break;
 	}
 }
 
-static struct dw_mci_board exynos_dwmci_pdata __initdata = {
+static struct dw_mci_board exynos_dwmci0_pdata __initdata = {
 	.num_slots		= 1,
 	.quirks			= DW_MCI_QUIRK_BROKEN_CARD_DETECTION |
 				  DW_MCI_QUIRK_HIGHSPEED,
-	.bus_hz			= 66 * 1000 * 1000,
+	.bus_hz			= 100 * 1000 * 1000,
 	.caps			= MMC_CAP_UHS_DDR50 | MMC_CAP_1_8V_DDR |
 				  MMC_CAP_8_BIT_DATA | MMC_CAP_CMD23,
 	.fifo_depth             = 0x80,
 	.detect_delay_ms	= 200,
 	.hclk_name		= "dwmci",
 	.cclk_name		= "sclk_dwmci",
-	.cfg_gpio		= exynos_dwmci_cfg_gpio,
+	.cfg_gpio		= exynos_dwmci0_cfg_gpio,
 };
 
 static struct platform_device *manta_devices[] __initdata = {
 	&ramconsole_device,
 	&persistent_trace_device,
 	&s3c_device_rtc,
+	&s3c_device_i2c2,
 	&s3c_device_i2c3,
 	&s3c_device_i2c5,
-	&s3c_device_i2c19,
 	&manta_keypad_device,
-	&exynos5_device_dwmci,
+	&exynos5_device_dwmci0,
 	&exynos_device_ion,
 	&exynos_device_ss_udc,
 };
@@ -286,6 +274,15 @@ static void __init manta_ss_udc_init(void)
 
 	gpio_request_one(EXYNOS5_GPH0(1), GPIOF_INIT_HIGH, "usb_sel");
 	gpio_request_one(EXYNOS5_GPC2(2), GPIOF_INIT_HIGH, "usb3.0_en");
+}
+
+static void __init manta_dwmci_init(void)
+{
+	exynos_dwmci_set_platdata(&exynos_dwmci0_pdata, 0);
+	dev_set_name(&exynos5_device_dwmci0.dev, "s3c-sdhci.0");
+	clk_add_alias("dwmci", "dw_mmc.0", "hsmmc", &exynos5_device_dwmci0.dev);
+	clk_add_alias("sclk_dwmci", "dw_mmc.0", "sclk_mmc",
+		      &exynos5_device_dwmci0.dev);
 }
 
 static void __init manta_map_io(void)
@@ -336,13 +333,13 @@ static void __init manta_machine_init(void)
 
 	manta_sysmmu_init();
 	exynos_ion_set_platdata();
-	exynos_dwmci_set_platdata(&exynos_dwmci_pdata);
+	manta_dwmci_init();
 
+	s3c_i2c2_set_platdata(NULL);
 	s3c_i2c3_set_platdata(NULL);
 	s3c_i2c5_set_platdata(NULL);
 
-	i2c_register_board_info(19, i2c_devs19_emul,
-		ARRAY_SIZE(i2c_devs19_emul));
+	i2c_register_board_info(2, i2c_devs2, ARRAY_SIZE(i2c_devs2));
 
 	manta_gpio_power_init();
 
