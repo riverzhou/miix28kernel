@@ -34,6 +34,7 @@
 #include <plat/devs.h>
 #include <plat/iic.h>
 #include <plat/sdhci.h>
+#include <plat/udc-hs.h>
 
 #include <mach/map.h>
 #include <mach/sysmmu.h>
@@ -261,19 +262,18 @@ static struct platform_device *manta_devices[] __initdata = {
 	&manta_keypad_device,
 	&exynos5_device_dwmci0,
 	&exynos_device_ion,
-	&exynos_device_ss_udc,
+	&s3c_device_usb_hsotg,
 };
 
-static struct exynos_usb3_drd_pdata manta_ss_udc_pdata;
+static struct s3c_hsotg_plat manta_hsotg_pdata;
 
-static void __init manta_ss_udc_init(void)
+static void __init manta_udc_init(void)
 {
-	struct exynos_usb3_drd_pdata *pdata = &manta_ss_udc_pdata;
+	struct s3c_hsotg_plat *pdata = &manta_hsotg_pdata;
 
-	exynos_ss_udc_set_platdata(pdata);
+	s3c_hsotg_set_platdata(pdata);
 
 	gpio_request_one(EXYNOS5_GPH0(1), GPIOF_INIT_HIGH, "usb_sel");
-	gpio_request_one(EXYNOS5_GPC2(2), GPIOF_INIT_HIGH, "usb3.0_en");
 }
 
 static void __init manta_dwmci_init(void)
@@ -343,7 +343,7 @@ static void __init manta_machine_init(void)
 
 	manta_gpio_power_init();
 
-	manta_ss_udc_init();
+	manta_udc_init();
 
 	platform_add_devices(manta_devices, ARRAY_SIZE(manta_devices));
 
