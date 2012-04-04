@@ -15,6 +15,7 @@
 #include <linux/platform_device.h>
 #include <linux/delay.h>
 #include <linux/err.h>
+#include <linux/clk.h>
 #include <asm/mach-types.h>
 #include <asm/gpio.h>
 #include <asm/io.h>
@@ -25,7 +26,7 @@
 #include <linux/mmc/host.h>
 #include <plat/gpio-cfg.h>
 #include <plat/devs.h>
-#include <plat/sdhci.h>
+#include <mach/dwmci.h>
 #include <mach/map.h>
 
 #include <linux/random.h>
@@ -44,33 +45,9 @@ static struct resource manta_wifi_resources[] = {
 	},
 };
 
-static void (*wifi_status_cb)(struct platform_device *, int state);
-static struct platform_device *manta_wifi_dev;
-
-static int exynos5_manta_wlan_ext_cd_init(
-				void (*notify_func)(struct platform_device *,
-				int state))
-{
-	manta_wifi_dev = &s3c_device_hsmmc3;
-	wifi_status_cb = notify_func;
-	return 0;
-}
-
-static int exynos5_manta_wlan_ext_cd_cleanup(
-				void (*notify_func)(struct platform_device *,
-				int state))
-{
-	wifi_status_cb = NULL;
-	return 0;
-}
-
 static int manta_wifi_set_carddetect(int val)
 {
 	pr_debug("%s: %d\n", __func__, val);
-	if (wifi_status_cb)
-		wifi_status_cb(manta_wifi_dev, val);
-	else
-		pr_warning("%s: Nobody to notify\n", __func__);
 	return 0;
 }
 
@@ -240,33 +217,41 @@ static struct platform_device manta_wifi_device = {
 	},
 };
 
-void exynos5_setup_sdhci3_cfg_gpio(struct platform_device *dev, int width)
+static void exynos5_setup_wlan_cfg_gpio(int width)
 {
 	unsigned int gpio;
 
-	/* Set all the necessary GPC3[0:1] pins to special-function 2 */
-	for (gpio = EXYNOS5_GPC3(0); gpio < EXYNOS5_GPC3(2); gpio++) {
+	/* Set all the necessary GPC2[0:1] pins to special-function 2 */
+	for (gpio = EXYNOS5_GPC2(0); gpio < EXYNOS5_GPC2(2); gpio++) {
 		s3c_gpio_cfgpin(gpio, S3C_GPIO_SFN(2));
 		s3c_gpio_setpull(gpio, S3C_GPIO_PULL_NONE);
 		s5p_gpio_set_drvstr(gpio, S5P_GPIO_DRVSTR_LV4);
 	}
 
-	for (gpio = EXYNOS5_GPC3(3); gpio <= EXYNOS5_GPC3(6); gpio++) {
-		/* Data pin GPC3[3:6] to special-function 2 */
+	for (gpio = EXYNOS5_GPC2(3); gpio <= EXYNOS5_GPC2(6); gpio++) {
+		/* Data pin GPC2[3:6] to special-function 2 */
 		s3c_gpio_cfgpin(gpio, S3C_GPIO_SFN(2));
 		s3c_gpio_setpull(gpio, S3C_GPIO_PULL_UP);
 		s5p_gpio_set_drvstr(gpio, S5P_GPIO_DRVSTR_LV4);
 	}
 }
 
-static struct s3c_sdhci_platdata manta_hsmmc3_pdata __initdata = {
-	.cd_type		= S3C_SDHCI_CD_EXTERNAL,
-	.clk_type		= S3C_SDHCI_CLK_DIV_EXTERNAL,
-	.host_caps		= MMC_CAP_4_BIT_DATA | MMC_CAP_SD_HIGHSPEED,
-	.pm_caps		= MMC_PM_KEEP_POWER | MMC_PM_IGNORE_PM_NOTIFY,
-	.cfg_gpio		= exynos5_setup_sdhci3_cfg_gpio,
-	.ext_cd_init		= exynos5_manta_wlan_ext_cd_init,
-	.ext_cd_cleanup		= exynos5_manta_wlan_ext_cd_cleanup,
+static struct dw_mci_board exynos_wlan_pdata __initdata = {
+	.num_slots		= 1,
+	.quirks			= DW_MCI_QUIRK_BROKEN_CARD_DETECTION |
+				  DW_MCI_QUIRK_HIGHSPEED,
+	.bus_hz			= 66 * 1000 * 1000,
+	.caps			= MMC_CAP_4_BIT_DATA | MMC_CAP_SD_HIGHSPEED,
+	.fifo_depth		= 0x80,
+	.detect_delay_ms	= 200,
+	.hclk_name		= "dwmci",
+	.cclk_name		= "sclk_dwmci",
+	.cfg_gpio		= exynos5_setup_wlan_cfg_gpio,
+};
+
+static struct platform_device *manta_wlan_devs[] __initdata = {
+	&exynos5_device_dwmci1,
+	&manta_wifi_device,
 };
 
 static void __init manta_wlan_gpio(void)
@@ -280,6 +265,8 @@ static void __init manta_wlan_gpio(void)
 	s3c_gpio_cfgpin(gpio, S3C_GPIO_OUTPUT);
 	s3c_gpio_setpull(gpio, S3C_GPIO_PULL_NONE);
 	s5p_gpio_set_drvstr(gpio, S5P_GPIO_DRVSTR_LV4);
+	/* Turn ON power so wlan chip will be found */
+	gpio_set_value(gpio, 1);
 
 	/* Setup wlan IRQ */
 	gpio = GPIO_WLAN_IRQ;
@@ -295,8 +282,11 @@ void __init exynos5_manta_wlan_init(void)
 {
 	pr_debug("%s: start\n", __func__);
 
-	s3c_sdhci3_set_platdata(&manta_hsmmc3_pdata);
-	platform_device_register(&s3c_device_hsmmc3);
+	exynos_dwmci_set_platdata(&exynos_wlan_pdata, 1);
+	dev_set_name(&exynos5_device_dwmci1.dev, "s3c-sdhci.1");
+	clk_add_alias("dwmci", "dw_mmc.1", "hsmmc", &exynos5_device_dwmci1.dev);
+	clk_add_alias("sclk_dwmci", "dw_mmc.1", "sclk_mmc",
+		      &exynos5_device_dwmci1.dev);
 	manta_wlan_gpio();
-	platform_device_register(&manta_wifi_device);
+	platform_add_devices(manta_wlan_devs, ARRAY_SIZE(manta_wlan_devs));
 }
