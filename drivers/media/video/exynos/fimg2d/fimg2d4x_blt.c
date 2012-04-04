@@ -99,15 +99,11 @@ void fimg2d4x_bitblt(struct fimg2d_control *info)
 			fimg2d_debug("sysmmu disable\n");
 		}
 blitend:
-		spin_lock(&info->bltlock);
-		fimg2d_dequeue(&cmd->node);
-		kfree(cmd);
-		atomic_dec(&ctx->ncmd);
+		fimg2d_del_command(info, cmd);
 
 		/* wake up context */
 		if (!atomic_read(&ctx->ncmd))
 			wake_up(&ctx->wait_q);
-		spin_unlock(&info->bltlock);
 	}
 
 	atomic_set(&info->active, 0);
@@ -119,6 +115,19 @@ blitend:
 #endif
 
 	fimg2d_debug("exit blitter\n");
+}
+
+static inline int is_opaque(enum color_format fmt)
+{
+	switch (fmt) {
+	case CF_ARGB_8888:
+	case CF_ARGB_1555:
+	case CF_ARGB_4444:
+		return 0;
+
+	default:
+		return 1;
+	}
 }
 
 static int fast_op(struct fimg2d_bltcmd *cmd)

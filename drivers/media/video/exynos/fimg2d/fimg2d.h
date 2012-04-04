@@ -276,6 +276,11 @@ struct fimg2d_dma {
 	size_t cached;
 };
 
+struct fimg2d_dma_group {
+	struct fimg2d_dma base;
+	struct fimg2d_dma plane2;
+};
+
 #endif /* __KERNEL__ */
 
 /**
@@ -454,7 +459,7 @@ struct fimg2d_bltcmd {
 	size_t dma_all;
 	struct fimg2d_param param;
 	struct fimg2d_image image[MAX_IMAGES];
-	struct fimg2d_dma dma[MAX_IMAGES];
+	struct fimg2d_dma_group dma[MAX_IMAGES];
 	struct fimg2d_context *ctx;
 	struct list_head node;
 };

@@ -19,6 +19,12 @@
 #include "fimg2d_cache.h"
 #include "fimg2d_helper.h"
 
+static int bpptable[MSK_FORMAT_END+1] = {
+	32, 32,	16, 16, 16, 16, 16, 24,	/* rgb */
+	0, 0, 0, 8, 8, 0,		/* yuv */
+	1, 4, 8, 16, 16, 16, 32, 0,	/* msk */
+};
+
 static int fimg2d_check_params(struct fimg2d_bltcmd *cmd)
 {
 	int w, h, i;
@@ -119,93 +125,305 @@ static void fimg2d_fixup_params(struct fimg2d_bltcmd *cmd)
 		scl->mode = NO_SCALING;
 }
 
-static int fimg2d_check_dma_sync(struct fimg2d_bltcmd *cmd)
+static int pixel2offset(int pixel, enum color_format cf)
 {
-	struct mm_struct *mm = cmd->ctx->mm;
-	struct fimg2d_param *p = &cmd->param;
+	return (pixel * bpptable[cf]) >> 3;
+}
+
+static int width2bytes(int width, enum color_format cf)
+{
+	int bpp = bpptable[cf];
+
+	switch (bpp) {
+	case 1:
+		return (width + 7) >> 3;
+	case 4:
+		return (width + 1) >> 1;
+	case 8:
+	case 16:
+	case 24:
+	case 32:
+		return width * bpp >> 3;
+	default:
+		return 0;
+	}
+}
+
+static inline int is_yuvfmt(enum color_format fmt)
+{
+	switch (fmt) {
+	case CF_YCBCR_420:
+	case CF_YCBCR_422:
+	case CF_YCBCR_444:
+		return 1;
+	default:
+		return 0;
+	}
+}
+
+/**
+ * @plane: 0 for 1st plane, 1 for 2nd plane
+ */
+static int yuv_stride(int width, enum color_format cf, enum pixel_order order,
+		int plane)
+{
+	int bpp;
+
+	switch (cf) {
+	case CF_YCBCR_420:
+		bpp = (!plane) ? 8 : 4;
+		break;
+	case CF_YCBCR_422:
+		if (order == P2_CRCB || order == P2_CBCR)
+			bpp = 8;
+		else
+			bpp = (!plane) ? 16 : 0;
+		break;
+	case CF_YCBCR_444:
+		bpp = (!plane) ? 8 : 16;
+		break;
+	default:
+		bpp = 0;
+		break;
+	}
+
+	return width * bpp >> 3;
+}
+
+static inline void fimg2d_calc_dma_size(struct fimg2d_bltcmd *cmd)
+{
 	struct fimg2d_image *img;
 	struct fimg2d_clip *clp;
 	struct fimg2d_rect *r;
 	struct fimg2d_dma *c;
-	enum pt_status pt;
-	int clip_x, clip_w, clip_h, y, dir, i;
-	unsigned long clip_start;
+	int i, y1, y2, stride;
 
-	clp = &p->clipping;
+	clp = &cmd->param.clipping;
 
 	for (i = 0; i < MAX_IMAGES; i++) {
 		img = &cmd->image[i];
-		c = &cmd->dma[i];
-		r = &img->rect;
-
-		if (!img->addr.type)
+		if (img->addr.type != ADDR_USER &&
+				img->addr.type != ADDR_USER_CONTIG)
 			continue;
 
-		/* caculate horizontally clipped region */
-		if (i == IMAGE_DST && clp->enable) {
-			c->addr = img->addr.start + (img->stride * clp->y1);
-			c->size = img->stride * (clp->y2 - clp->y1);
-		} else {
-			c->addr = img->addr.start + (img->stride * r->y1);
-			c->size = img->stride * (r->y2 - r->y1);
+		/* ! yuv format */
+		if (!is_yuvfmt(img->fmt)) {
+			r = &img->rect;
+
+			if (i == IMAGE_DST && clp->enable) {
+				y1 = clp->y1;
+				y2 = clp->y2;
+			} else {
+				y1 = r->y1;
+				y2 = r->y2;
+			}
+
+			c = &cmd->dma[i].base;
+			c->addr = img->addr.start + (img->stride * y1);
+			c->size = img->stride * (y2 - y1);
+
+			if (img->need_cacheopr) {
+				c->cached = c->size;
+				cmd->dma_all += c->cached;
+			}
+			continue;
 		}
 
-		/* check pagetable */
-		if (img->addr.type == ADDR_USER) {
-			pt = fimg2d_check_pagetable(mm, c->addr, c->size);
-			if (pt == PT_FAULT)
-				return -1;
-		}
+		stride = yuv_stride(img->width, img->fmt, img->order, 0);
 
-		if (img->need_cacheopr && i != IMAGE_TMP) {
+		c = &cmd->dma[i].base;
+		c->addr = img->addr.start;
+		c->size = stride * img->height;
+
+		if (img->need_cacheopr) {
 			c->cached = c->size;
 			cmd->dma_all += c->cached;
+		}
+
+		if (img->order == P2_CRCB || img->order == P2_CBCR) {
+			stride = yuv_stride(img->width, img->fmt,
+					img->order, 1);
+
+			c = &cmd->dma[i].plane2;
+			c->addr = img->plane2.start;
+			c->size = stride * img->height;
+
+			if (img->need_cacheopr) {
+				c->cached = c->size;
+				cmd->dma_all += c->cached;
+			}
+		}
+	}
+}
+
+static inline void inner_flush_clip_range(struct fimg2d_bltcmd *cmd)
+{
+	struct fimg2d_image *img;
+	struct fimg2d_clip *clp;
+	struct fimg2d_rect *r;
+	struct fimg2d_dma *c;
+	int clp_x, clp_w, clp_h, y, i, dir;
+	int x1, y1, x2, y2;
+	unsigned long start;
+
+	clp = &cmd->param.clipping;
+
+	for (i = 0; i < MAX_IMAGES; i++) {
+		img = &cmd->image[i];
+
+		dir = (i == IMAGE_DST) ? DMA_BIDIRECTIONAL : DMA_TO_DEVICE;
+
+		/* yuv format */
+		if (is_yuvfmt(img->fmt)) {
+			c = &cmd->dma[i].base;
+			if (c->cached)
+				fimg2d_dma_sync_inner(c->addr, c->cached, dir);
+
+			c = &cmd->dma[i].plane2;
+			if (c->cached)
+				fimg2d_dma_sync_inner(c->addr, c->cached, dir);
+
+			continue;
+		}
+
+		c = &cmd->dma[i].base;
+		if (!c->cached)
+			continue;
+
+		r = &img->rect;
+
+		if (i == IMAGE_DST && clp->enable) {
+			x1 = clp->x1;
+			y1 = clp->y1;
+			x2 = clp->x2;
+			y2 = clp->y2;
+		} else {
+			x1 = r->x1;
+			y1 = r->y1;
+			x2 = r->x2;
+			y2 = r->y2;
+		}
+
+		clp_x = pixel2offset(x1, img->fmt);
+		clp_w = width2bytes(x2 - x1, img->fmt);
+		clp_h = y2 - y1;
+
+		if (is_inner_flushrange(img->stride - clp_w))
+			fimg2d_dma_sync_inner(c->addr, c->cached, dir);
+		else {
+			for (y = 0; y < clp_h; y++) {
+				start = c->addr + (img->stride * y) + clp_x;
+				fimg2d_dma_sync_inner(start, clp_w, dir);
+			}
+		}
+	}
+}
+
+static inline void outer_flush_clip_range(struct fimg2d_bltcmd *cmd)
+{
+	struct mm_struct *mm = cmd->ctx->mm;
+	struct fimg2d_image *img;
+	struct fimg2d_clip *clp;
+	struct fimg2d_rect *r;
+	struct fimg2d_dma *c;
+	int clp_x, clp_w, clp_h, y, i, dir;
+	int x1, y1, x2, y2;
+	unsigned long start;
+
+	clp = &cmd->param.clipping;
+
+	for (i = 0; i < MAX_IMAGES; i++) {
+		img = &cmd->image[i];
+
+		/* clean pagetable on outercache */
+		c = &cmd->dma[i].base;
+		if (c->size)
+			fimg2d_clean_outer_pagetable(mm, c->addr, c->size);
+
+		c = &cmd->dma[i].plane2;
+		if (c->size)
+			fimg2d_clean_outer_pagetable(mm, c->addr, c->size);
+
+		dir = (i == IMAGE_DST) ?  CACHE_FLUSH : CACHE_CLEAN;
+
+		/* yuv format */
+		if (is_yuvfmt(img->fmt)) {
+			c = &cmd->dma[i].base;
+			if (c->cached) {
+				fimg2d_dma_sync_outer(mm, c->addr, c->cached,
+						dir);
+			}
+
+			c = &cmd->dma[i].plane2;
+			if (c->cached) {
+				fimg2d_dma_sync_outer(mm, c->addr, c->cached,
+						dir);
+			}
+
+			continue;
+		}
+
+		c = &cmd->dma[i].base;
+		if (!c->cached)
+			continue;
+
+		r = &img->rect;
+
+		if (i == IMAGE_DST && clp->enable) {
+			x1 = clp->x1;
+			y1 = clp->y1;
+			x2 = clp->x2;
+			y2 = clp->y2;
+		} else {
+			x1 = r->x1;
+			y1 = r->y1;
+			x2 = r->x2;
+			y2 = r->y2;
+		}
+
+		clp_x = pixel2offset(x1, img->fmt);
+		clp_w = width2bytes(x2 - x1, img->fmt);
+		clp_h = y2 - y1;
+
+		if (is_outer_flushrange(img->stride - clp_w))
+			fimg2d_dma_sync_outer(mm, c->addr, c->cached, dir);
+		else {
+			for (y = 0; y < clp_h; y++) {
+				start = c->addr + (img->stride * y) + clp_x;
+				fimg2d_dma_sync_outer(mm, start, clp_w, dir);
+			}
+		}
+	}
+}
+
+static int fimg2d_check_dma_sync(struct fimg2d_bltcmd *cmd)
+{
+	struct mm_struct *mm = cmd->ctx->mm;
+	struct fimg2d_dma *c;
+	enum pt_status pt;
+	int i, ret;
+
+	fimg2d_calc_dma_size(cmd);
+
+	for (i = 0; i < MAX_IMAGES; i++) {
+		c = &cmd->dma[i].base;
+		if (!c->size)
+			continue;
+
+		pt = fimg2d_check_pagetable(mm, c->addr, c->size);
+		if (pt == PT_FAULT) {
+			ret = -EFAULT;
+			goto err_pgtable;
 		}
 	}
 
 #ifdef PERF_PROFILE
 	perf_start(cmd->ctx, PERF_INNERCACHE);
 #endif
-
 	if (is_inner_flushall(cmd->dma_all))
 		flush_all_cpu_caches();
-	else {
-		for (i = 0; i < MAX_IMAGES; i++) {
-			img = &cmd->image[i];
-			c = &cmd->dma[i];
-			r = &img->rect;
-
-			if (!img->addr.type || !c->cached)
-				continue;
-
-			if (i == IMAGE_DST)
-				dir = DMA_BIDIRECTIONAL;
-			else
-				dir = DMA_TO_DEVICE;
-
-			if (i == IDST && clp->enable) {
-				clip_w = width2bytes(clp->x2 - clp->x1,
-							img->fmt);
-				clip_x = pixel2offset(clp->x1, img->fmt);
-				clip_h = clp->y2 - clp->y1;
-			} else {
-				clip_w = width2bytes(r->x2 - r->x1, img->fmt);
-				clip_x = pixel2offset(r->x1, img->fmt);
-				clip_h = r->y2 - r->y1;
-			}
-
-			if (is_inner_flushrange(img->stride - clip_w))
-				fimg2d_dma_sync_inner(c->addr, c->cached, dir);
-			else {
-				for (y = 0; y < clip_h; y++) {
-					clip_start = c->addr +
-						(img->stride * y) + clip_x;
-					fimg2d_dma_sync_inner(clip_start,
-								clip_w, dir);
-				}
-			}
-		}
-	}
+	else
+		inner_flush_clip_range(cmd);
 #ifdef PERF_PROFILE
 	perf_end(cmd->ctx, PERF_INNERCACHE);
 #endif
@@ -216,57 +434,16 @@ static int fimg2d_check_dma_sync(struct fimg2d_bltcmd *cmd)
 #endif
 	if (is_outer_flushall(cmd->dma_all))
 		outer_flush_all();
-	else {
-		for (i = 0; i < MAX_IMAGES; i++) {
-			img = &cmd->image[i];
-			c = &cmd->dma[i];
-			r = &img->rect;
-
-			if (!img->addr.type)
-				continue;
-
-			/* clean pagetable */
-			if (img->addr.type == ADDR_USER)
-				fimg2d_clean_outer_pagetable(mm, c->addr, c->size);
-
-			if (!c->cached)
-				continue;
-
-			if (i == IMAGE_DST)
-				dir = CACHE_FLUSH;
-			else
-				dir = CACHE_CLEAN;
-
-			if (i == IDST && clp->enable) {
-				clip_w = width2bytes(clp->x2 - clp->x1,
-							img->fmt);
-				clip_x = pixel2offset(clp->x1, img->fmt);
-				clip_h = clp->y2 - clp->y1;
-			} else {
-				clip_w = width2bytes(r->x2 - r->x1, img->fmt);
-				clip_x = pixel2offset(r->x1, img->fmt);
-				clip_h = r->y2 - r->y1;
-			}
-
-			if (is_outer_flushrange(img->stride - clip_w))
-				fimg2d_dma_sync_outer(mm, c->addr,
-							c->cached, dir);
-			else {
-				for (y = 0; y < clip_h; y++) {
-					clip_start = c->addr +
-						(img->stride * y) + clip_x;
-					fimg2d_dma_sync_outer(mm, clip_start,
-								clip_w, dir);
-				}
-			}
-		}
-	}
+	else
+		outer_flush_clip_range(cmd);
 #ifdef PERF_PROFILE
 	perf_end(cmd->ctx, PERF_OUTERCACHE);
 #endif
 #endif
-
 	return 0;
+
+err_pgtable:
+	return ret;
 }
 
 int fimg2d_add_command(struct fimg2d_control *info, struct fimg2d_context *ctx,
@@ -335,6 +512,17 @@ int fimg2d_add_command(struct fimg2d_control *info, struct fimg2d_context *ctx,
 err_user:
 	kfree(cmd);
 	return ret;
+}
+
+void fimg2d_del_command(struct fimg2d_control *info, struct fimg2d_bltcmd *cmd)
+{
+	struct fimg2d_context *ctx = cmd->ctx;
+
+	spin_lock(&info->bltlock);
+	fimg2d_dequeue(&cmd->node);
+	kfree(cmd);
+	atomic_dec(&ctx->ncmd);
+	spin_unlock(&info->bltlock);
 }
 
 void fimg2d_add_context(struct fimg2d_control *info, struct fimg2d_context *ctx)
