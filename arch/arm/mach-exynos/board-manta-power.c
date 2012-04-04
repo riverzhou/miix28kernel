@@ -14,6 +14,8 @@
 #include <linux/mfd/max77686.h>
 #include <linux/regulator/machine.h>
 
+#include <asm/system_misc.h>
+
 #include <mach/regs-pmu.h>
 
 #include "board-manta.h"
