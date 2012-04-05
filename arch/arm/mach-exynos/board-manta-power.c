@@ -384,20 +384,20 @@ static void manta_reboot(char str, const char *cmd)
 {
 	local_irq_disable();
 
-	writel(REBOOT_MODE_NO_LPM, EXYNOS_INFORM3); /* Don't enter lpm mode */
+	writel(REBOOT_MODE_NO_LPM, EXYNOS_INFORM2); /* Don't enter lpm mode */
 
 	if (!cmd) {
-		writel(REBOOT_MODE_PREFIX | REBOOT_MODE_NONE, EXYNOS_INFORM2);
+		writel(REBOOT_MODE_PREFIX | REBOOT_MODE_NONE, EXYNOS_INFORM3);
 	} else {
 		if (!strcmp(cmd, "recovery"))
 			writel(REBOOT_MODE_PREFIX | REBOOT_MODE_RECOVERY,
-			       EXYNOS_INFORM2);
+			       EXYNOS_INFORM3);
 		else if (!strcmp(cmd, "bootloader"))
 			writel(REBOOT_MODE_PREFIX | REBOOT_MODE_FAST_BOOT,
-			       EXYNOS_INFORM2);
+			       EXYNOS_INFORM3);
 		else
 			writel(REBOOT_MODE_PREFIX | REBOOT_MODE_NONE,
-			       EXYNOS_INFORM2);
+			       EXYNOS_INFORM3);
 	}
 
 	exynos5_restart(str, cmd); /* S/W reset: INFORM0~3:  Keep its value */
