@@ -65,6 +65,7 @@ obj-$(CONFIG_MACH_MANTA)		+= board-manta-display.o
 obj-$(CONFIG_MACH_MANTA)		+= board-manta-input.o
 obj-$(CONFIG_MACH_MANTA)		+= board-manta-power.o
 obj-$(CONFIG_MACH_MANTA)		+= board-manta-wifi.o
+obj-$(CONFIG_MACH_MANTA)		+= board-manta-media.o
 
 # device support
 

@@ -199,7 +199,11 @@ static void __init exynos_reserve_mem(void)
 		}
 	};
 
-	static const char map[] __initconst = "ion-exynos=ion;";
+	static const char map[] __initconst =
+		"ion-exynos=ion;"
+		"s5p-mfc-v6/f=fw;"
+		"s5p-mfc-v6/a=b1;"
+		;
 
 	exynos_cma_region_reserve(regions, NULL, 0, map);
 }
@@ -355,6 +359,7 @@ static void __init manta_machine_init(void)
 	exynos5_manta_battery_init();
 	exynos5_manta_wlan_init();
 	exynos5_manta_audio_init();
+	exynos5_manta_media_init();
 }
 
 MACHINE_START(MANTA, "Manta")
