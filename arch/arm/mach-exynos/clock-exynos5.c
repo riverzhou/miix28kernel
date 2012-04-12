@@ -779,6 +779,11 @@ static struct clk exynos5_init_clocks_off[] = {
 		.enable		= exynos5_clk_ip_peric_ctrl,
 		.ctrlbit	= (1 << 24),
 	}, {
+		.name		= "watchdog",
+		.parent		= &exynos5_clk_aclk_66.clk,
+		.enable		= exynos5_clk_ip_peris_ctrl,
+		.ctrlbit	= (1 << 19),
+	}, {
 		.name		= "rtc",
 		.parent		= &exynos5_clk_aclk_66.clk,
 		.enable		= exynos5_clk_ip_peris_ctrl,
@@ -1683,6 +1688,7 @@ static struct clksrc_clk *exynos5_sysclks[] = {
 	&exynos5_clk_mout_bpll_user,
 	&exynos5_clk_mout_cpll,
 	&exynos5_clk_mout_epll,
+	&exynos5_clk_mout_gpll,
 	&exynos5_clk_mout_mpll_fout,
 	&exynos5_clk_mout_mpll,
 	&exynos5_clk_mout_mpll_user,

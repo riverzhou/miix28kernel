@@ -46,7 +46,7 @@
 				 DW_MCI_CMD_ERROR_FLAGS  | SDMMC_INT_HLE)
 #define DW_MCI_SEND_STATUS	1
 #define DW_MCI_RECV_STATUS	2
-#define DW_MCI_DMA_THRESHOLD	16
+#define DW_MCI_DMA_THRESHOLD	4
 
 #ifdef CONFIG_MMC_DW_IDMAC
 struct idmac_desc {
@@ -541,8 +541,13 @@ static int dw_mci_submit_data_dma(struct dw_mci *host, struct mmc_data *data)
 		return -ENODEV;
 
 	sg_len = dw_mci_pre_dma_transfer(host, data, 0);
-	if (sg_len < 0)
+	if (sg_len < 0) {
+		host->dma_ops->stop(host);
 		return sg_len;
+	}
+
+	if (host->quirks & DW_MCI_QUIRK_DMA_DELAY)
+		mdelay(1);
 
 	host->using_dma = 1;
 
@@ -557,6 +562,7 @@ static int dw_mci_submit_data_dma(struct dw_mci *host, struct mmc_data *data)
 	mci_writel(host, CTRL, temp);
 
 	/* Disable RX/TX IRQs, let DMA handle it */
+	mci_writel(host, RINTSTS, SDMMC_INT_TXDR | SDMMC_INT_RXDR);
 	temp = mci_readl(host, INTMASK);
 	temp  &= ~(SDMMC_INT_RXDR | SDMMC_INT_TXDR);
 	mci_writel(host, INTMASK, temp);
