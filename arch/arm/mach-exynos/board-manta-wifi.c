@@ -225,23 +225,25 @@ static void exynos5_setup_wlan_cfg_gpio(int width)
 	for (gpio = EXYNOS5_GPC2(0); gpio < EXYNOS5_GPC2(2); gpio++) {
 		s3c_gpio_cfgpin(gpio, S3C_GPIO_SFN(2));
 		s3c_gpio_setpull(gpio, S3C_GPIO_PULL_NONE);
-		s5p_gpio_set_drvstr(gpio, S5P_GPIO_DRVSTR_LV4);
+		s5p_gpio_set_drvstr(gpio, S5P_GPIO_DRVSTR_LV2);
 	}
 
 	for (gpio = EXYNOS5_GPC2(3); gpio <= EXYNOS5_GPC2(6); gpio++) {
 		/* Data pin GPC2[3:6] to special-function 2 */
 		s3c_gpio_cfgpin(gpio, S3C_GPIO_SFN(2));
 		s3c_gpio_setpull(gpio, S3C_GPIO_PULL_UP);
-		s5p_gpio_set_drvstr(gpio, S5P_GPIO_DRVSTR_LV4);
+		s5p_gpio_set_drvstr(gpio, S5P_GPIO_DRVSTR_LV2);
 	}
 }
 
 static struct dw_mci_board exynos_wlan_pdata __initdata = {
 	.num_slots		= 1,
 	.quirks			= DW_MCI_QUIRK_BROKEN_CARD_DETECTION |
-				  DW_MCI_QUIRK_HIGHSPEED,
-	.bus_hz			= 66 * 1000 * 1000,
-	.caps			= MMC_CAP_4_BIT_DATA | MMC_CAP_SD_HIGHSPEED,
+				  DW_MCI_QUIRK_HIGHSPEED |
+				  DW_MCI_QUIRK_DMA_DELAY,
+	.bus_hz			= 200 * 1000 * 1000,
+	.caps			= MMC_CAP_UHS_SDR104 | MMC_CAP_UHS_DDR50 |
+				  MMC_CAP_4_BIT_DATA | MMC_CAP_SD_HIGHSPEED,
 	.fifo_depth		= 0x80,
 	.detect_delay_ms	= 200,
 	.hclk_name		= "dwmci",
@@ -264,7 +266,7 @@ static void __init manta_wlan_gpio(void)
 	gpio = GPIO_WLAN_PMENA;
 	s3c_gpio_cfgpin(gpio, S3C_GPIO_OUTPUT);
 	s3c_gpio_setpull(gpio, S3C_GPIO_PULL_NONE);
-	s5p_gpio_set_drvstr(gpio, S5P_GPIO_DRVSTR_LV4);
+	s5p_gpio_set_drvstr(gpio, S5P_GPIO_DRVSTR_LV2);
 	/* Turn ON power so wlan chip will be found */
 	gpio_set_value(gpio, 1);
 
@@ -272,7 +274,7 @@ static void __init manta_wlan_gpio(void)
 	gpio = GPIO_WLAN_IRQ;
 	s3c_gpio_cfgpin(gpio, S3C_GPIO_INPUT);
 	s3c_gpio_setpull(gpio, S3C_GPIO_PULL_NONE);
-	s5p_gpio_set_drvstr(gpio, S5P_GPIO_DRVSTR_LV4);
+	s5p_gpio_set_drvstr(gpio, S5P_GPIO_DRVSTR_LV2);
 
 	manta_wifi_resources[0].start = gpio_to_irq(gpio);
 	manta_wifi_resources[0].end = gpio_to_irq(gpio);
