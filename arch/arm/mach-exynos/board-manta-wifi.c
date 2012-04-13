@@ -244,6 +244,7 @@ static struct dw_mci_board exynos_wlan_pdata __initdata = {
 	.bus_hz			= 200 * 1000 * 1000,
 	.caps			= MMC_CAP_UHS_SDR104 | MMC_CAP_UHS_DDR50 |
 				  MMC_CAP_4_BIT_DATA | MMC_CAP_SD_HIGHSPEED,
+	.pm_caps		= MMC_PM_KEEP_POWER | MMC_PM_IGNORE_PM_NOTIFY,
 	.fifo_depth		= 0x80,
 	.detect_delay_ms	= 200,
 	.hclk_name		= "dwmci",
