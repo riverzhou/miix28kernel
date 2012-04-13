@@ -13,6 +13,7 @@
 #include <linux/io.h>
 #include <linux/mfd/max77686.h>
 #include <linux/regulator/machine.h>
+#include <linux/rtc.h>
 
 #include <asm/system_misc.h>
 
@@ -321,6 +322,19 @@ static struct max77686_wtsr_smpl wtsr_smpl_data = {
 	.smpl_timer_val = 0,	/* 0.5s */
 };
 
+/* If it's first boot, reset rtc to 1/1/2012 00:00:00(SUN) */
+static struct rtc_time init_time_data = {
+	.tm_sec = 0,
+	.tm_min = 0,
+	.tm_hour = 0,
+	.tm_wday = 0,
+	.tm_mday = 1,
+	.tm_mon = 0,
+	.tm_year = 112,
+	.tm_yday = 0,
+	.tm_isdst = 0,
+};
+
 static struct max77686_platform_data manta_max77686_info = {
 	.num_regulators = ARRAY_SIZE(max77686_regulators),
 	.regulators = max77686_regulators,
@@ -373,6 +387,7 @@ static struct max77686_platform_data manta_max77686_info = {
 
 	/* for RTC */
 	.wtsr_smpl = &wtsr_smpl_data,
+	.init_time = &init_time_data,
 };
 
 static struct i2c_board_info i2c_devs5[] __initdata = {
