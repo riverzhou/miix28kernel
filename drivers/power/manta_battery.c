@@ -74,11 +74,14 @@ static enum power_supply_property manta_battery_props[] = {
 	POWER_SUPPLY_PROP_VOLTAGE_NOW,
 	POWER_SUPPLY_PROP_CAPACITY,
 	POWER_SUPPLY_PROP_TECHNOLOGY,
+	POWER_SUPPLY_PROP_CURRENT_NOW,
 };
 
 static enum power_supply_property manta_power_props[] = {
 	POWER_SUPPLY_PROP_ONLINE,
 };
+
+static void manta_bat_update_data(struct manta_bat_data *battery);
 
 static int manta_bat_get_property(struct power_supply *ps,
 				enum power_supply_property psp,
@@ -105,7 +108,7 @@ static int manta_bat_get_property(struct power_supply *ps,
 		val->intval = 1;
 		break;
 	case POWER_SUPPLY_PROP_VOLTAGE_NOW:
-		/* TODO : update now */
+		manta_bat_update_data(battery);
 		val->intval = battery->batt_vcell;
 		if (val->intval == -1)
 			return -EINVAL;
@@ -117,6 +120,10 @@ static int manta_bat_get_property(struct power_supply *ps,
 		break;
 	case POWER_SUPPLY_PROP_TECHNOLOGY:
 		val->intval = POWER_SUPPLY_TECHNOLOGY_LION;
+		break;
+	case POWER_SUPPLY_PROP_CURRENT_NOW:
+		manta_bat_update_data(battery);
+		val->intval = battery->batt_current;
 		break;
 	default:
 		return -EINVAL;
