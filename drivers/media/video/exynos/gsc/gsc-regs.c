@@ -94,17 +94,77 @@ int gsc_wait_stop(struct gsc_dev *dev)
 	return -EBUSY;
 }
 
+void gsc_hw_set_in_chrom_stride(struct gsc_ctx *ctx)
+{
+	struct gsc_dev *dev = ctx->gsc_dev;
+	struct gsc_frame *frame = &ctx->s_frame;
+	u32 chrom_size, cfg;
+
+	cfg = readl(dev->regs + GSC_IN_CON);
+	cfg |= GSC_IN_CHROM_STRIDE_SEPAR;
+	writel(cfg, dev->regs + GSC_IN_CON);
+
+	cfg &= ~GSC_IN_CHROM_STRIDE_MASK;
+	chrom_size = ALIGN(frame->f_width / 2, 16) * 2;
+	cfg = GSC_IN_CHROM_STRIDE_VALUE(chrom_size);
+	writel(cfg, dev->regs + GSC_IN_CHROM_STRIDE);
+}
+
+void gsc_hw_set_out_chrom_stride(struct gsc_ctx *ctx)
+{
+	struct gsc_dev *dev = ctx->gsc_dev;
+	struct gsc_frame *frame = &ctx->d_frame;
+	u32 chrom_size, cfg;
+
+	cfg = readl(dev->regs + GSC_OUT_CON);
+	cfg |= GSC_OUT_CHROM_STRIDE_SEPAR;
+	writel(cfg, dev->regs + GSC_OUT_CON);
+
+	cfg &= ~GSC_OUT_CHROM_STRIDE_MASK;
+	chrom_size = ALIGN(frame->f_width / 2, 16) * 2;
+	cfg = GSC_OUT_CHROM_STRIDE_VALUE(chrom_size);
+	writel(cfg, dev->regs + GSC_OUT_CHROM_STRIDE);
+}
+
+void gsc_hw_set_in_pingpong_update(struct gsc_dev *dev)
+{
+	u32 cfg = readl(dev->regs + GSC_ENABLE);
+	cfg |= GSC_ENABLE_IN_PP_UPDATE;
+	writel(cfg, dev->regs + GSC_ENABLE);
+}
 
 void gsc_hw_set_one_frm_mode(struct gsc_dev *dev, bool mask)
 {
 	u32 cfg;
 
 	cfg = readl(dev->regs + GSC_ENABLE);
+	cfg &= ~(GSC_ENABLE_ON_CLEAR_MASK);
 	if (mask)
-		cfg |= GSC_ENABLE_ON_CLEAR;
-	else
-		cfg &= ~GSC_ENABLE_ON_CLEAR;
+		cfg |= GSC_ENABLE_ON_CLEAR_ONESHOT;
 	writel(cfg, dev->regs + GSC_ENABLE);
+}
+
+void gsc_hw_set_fire_bit_sync_mode(struct gsc_dev *dev, bool mask)
+{
+	u32 cfg;
+
+	cfg = readl(dev->regs + GSC_ENABLE);
+	cfg &= ~(GSC_ENABLE_PP_UPDATE_MODE_MASK);
+	if (mask)
+		cfg |= GSC_ENABLE_PP_UPDATE_FIRE_MODE;
+	writel(cfg, dev->regs + GSC_ENABLE);
+}
+
+int gsc_hw_get_mxr_path_status(void)
+{
+	int i, cnt = 0;
+
+	u32 cfg = readl(SYSREG_GSCBLK_CFG0);
+	for (i = 0; i < GSC_MAX_DEVS; i++) {
+		if (cfg & GSC_OUT_DST_MXR_SEL(i))
+			cnt++;
+	}
+	return (cnt > 2) ? 1 : 0;
 }
 
 int gsc_hw_get_input_buf_mask_status(struct gsc_dev *dev)
@@ -290,6 +350,16 @@ void gsc_hw_set_output_addr(struct gsc_dev *dev,
 	writel(addr->cr, dev->regs + GSC_OUT_BASE_ADDR_CR(index));
 }
 
+void gsc_hw_set_freerun_clock_mode(struct gsc_dev *dev, bool mask)
+{
+	u32 cfg = readl(dev->regs + GSC_ENABLE);
+
+	cfg &= ~(GSC_ENABLE_CLK_GATE_MODE_MASK);
+	if (mask)
+		cfg |= GSC_ENABLE_CLK_GATE_MODE_FREE;
+	writel(cfg, dev->regs + GSC_ENABLE);
+}
+
 void gsc_hw_set_input_path(struct gsc_ctx *ctx)
 {
 	struct gsc_dev *dev = ctx->gsc_dev;
@@ -376,7 +446,8 @@ void gsc_hw_set_in_image_format(struct gsc_ctx *ctx)
 	cfg = readl(dev->regs + GSC_IN_CON);
 	cfg &= ~(GSC_IN_RGB_TYPE_MASK | GSC_IN_YUV422_1P_ORDER_MASK |
 		 GSC_IN_CHROMA_ORDER_MASK | GSC_IN_FORMAT_MASK |
-		 GSC_IN_TILE_TYPE_MASK | GSC_IN_TILE_MODE);
+		 GSC_IN_TILE_TYPE_MASK | GSC_IN_TILE_MODE |
+		 GSC_IN_CHROM_STRIDE_SEL_MASK);
 	writel(cfg, dev->regs + GSC_IN_CON);
 
 	if (is_rgb(frame->fmt->pixelformat)) {
@@ -415,6 +486,9 @@ void gsc_hw_set_in_image_format(struct gsc_ctx *ctx)
 			cfg |= GSC_IN_YUV422_3P;
 		break;
 	};
+
+	if (is_AYV12(frame->fmt->pixelformat))
+		gsc_hw_set_in_chrom_stride(ctx);
 
 	if (is_tiled(frame->fmt))
 		cfg |= GSC_IN_TILE_C_16x8 | GSC_IN_TILE_MODE;
@@ -503,7 +577,8 @@ void gsc_hw_set_out_image_format(struct gsc_ctx *ctx)
 	cfg = readl(dev->regs + GSC_OUT_CON);
 	cfg &= ~(GSC_OUT_RGB_TYPE_MASK | GSC_OUT_YUV422_1P_ORDER_MASK |
 		 GSC_OUT_CHROMA_ORDER_MASK | GSC_OUT_FORMAT_MASK |
-		 GSC_OUT_TILE_TYPE_MASK | GSC_OUT_TILE_MODE);
+		 GSC_OUT_TILE_TYPE_MASK | GSC_OUT_TILE_MODE |
+		 GSC_OUT_CHROM_STRIDE_SEL_MASK);
 	writel(cfg, dev->regs + GSC_OUT_CON);
 
 	if (is_rgb(frame->fmt->pixelformat)) {
@@ -545,6 +620,9 @@ void gsc_hw_set_out_image_format(struct gsc_ctx *ctx)
 		cfg |= GSC_OUT_YUV420_3P;
 		break;
 	};
+
+	if (is_AYV12(frame->fmt->pixelformat))
+		gsc_hw_set_out_chrom_stride(ctx);
 
 	if (is_tiled(frame->fmt))
 		cfg |= GSC_OUT_TILE_C_16x8 | GSC_OUT_TILE_MODE;
@@ -639,14 +717,21 @@ void gsc_hw_set_sfr_update(struct gsc_ctx *ctx)
 	writel(cfg, dev->regs + GSC_ENABLE);
 }
 
-void gsc_hw_set_local_dst(int id, bool on)
+void gsc_hw_set_local_dst(int id, int out, bool on)
 {
 	u32 cfg = readl(SYSREG_GSCBLK_CFG0);
 
-	if (on)
-		cfg |= GSC_OUT_DST_SEL(id);
-	else
-		cfg &= ~(GSC_OUT_DST_SEL(id));
+	if (out == GSC_FIMD) {
+		if (on)
+			cfg |= GSC_OUT_DST_FIMD_SEL(id);
+		else
+			cfg &= ~(GSC_OUT_DST_FIMD_SEL(id));
+	} else if (out == GSC_MIXER) {
+		if (on)
+			cfg |= GSC_OUT_DST_MXR_SEL(id);
+		else
+			cfg &= ~(GSC_OUT_DST_MXR_SEL(id));
+	}
 	writel(cfg, SYSREG_GSCBLK_CFG0);
 }
 
@@ -656,6 +741,9 @@ void gsc_hw_set_sysreg_writeback(struct gsc_ctx *ctx)
 
 	u32 cfg = readl(SYSREG_GSCBLK_CFG1);
 
+	cfg &= ~GSC_BLK_SW_RESET_WB_DEST(dev->id);
+	writel(cfg, SYSREG_GSCBLK_CFG1);
+
 	cfg |= GSC_BLK_DISP1WB_DEST(dev->id);
 	cfg |= GSC_BLK_GSCL_WB_IN_SRC_SEL(dev->id);
 	cfg |= GSC_BLK_SW_RESET_WB_DEST(dev->id);
@@ -663,14 +751,85 @@ void gsc_hw_set_sysreg_writeback(struct gsc_ctx *ctx)
 	writel(cfg, SYSREG_GSCBLK_CFG1);
 }
 
-void gsc_hw_set_sysreg_camif(bool on)
+void gsc_hw_set_pxlasync_camif_lo_mask(struct gsc_dev *dev, bool on)
 {
-	u32 cfg = readl(SYSREG_GSCBLK_CFG0);
+	u32 cfg = 0;
 
-	if (on)
-		cfg |= GSC_PXLASYNC_CAMIF_TOP;
+	if (dev->id == 3) {
+		cfg = readl(SYSREG_GSCBLK_CFG0);
+		if (on)
+			cfg |= PXLASYNC_LO_MASK_CAMIF_TOP;
+		else
+			cfg &= ~(PXLASYNC_LO_MASK_CAMIF_TOP);
+		writel(cfg, SYSREG_GSCBLK_CFG0);
+	} else {
+		cfg = readl(SYSREG_GSCBLK_CFG2);
+		if (on)
+			cfg |= PXLASYNC_LO_MASK_CAMIF_GSCL(dev->id);
+		else
+			cfg &= ~PXLASYNC_LO_MASK_CAMIF_GSCL(dev->id);
+		writel(cfg, SYSREG_GSCBLK_CFG2);
+	}
+}
+
+void gsc_hw_set_h_coef(struct gsc_ctx *ctx)
+{
+	struct gsc_scaler *sc = &ctx->scaler;
+	struct gsc_dev *dev = ctx->gsc_dev;
+	int i, j, k, sc_ratio = 0;
+
+	if (sc->main_hratio <= GSC_SC_UP_MAX_RATIO)
+		sc_ratio = 0;
+	else if (sc->main_hratio <= GSC_SC_DOWN_RATIO_7_8)
+		sc_ratio = 1;
+	else if (sc->main_hratio <= GSC_SC_DOWN_RATIO_6_8)
+		sc_ratio = 2;
+	else if (sc->main_hratio <= GSC_SC_DOWN_RATIO_5_8)
+		sc_ratio = 3;
+	else if (sc->main_hratio <= GSC_SC_DOWN_RATIO_4_8)
+		sc_ratio = 4;
+	else if (sc->main_hratio <= GSC_SC_DOWN_RATIO_3_8)
+		sc_ratio = 5;
 	else
-		cfg &= ~(GSC_PXLASYNC_CAMIF_TOP);
+		sc_ratio = 6;
 
-	writel(cfg, SYSREG_GSCBLK_CFG0);
+	for (i = 0; i < 9; i++) {
+		for (j = 0; j < 8; j++) {
+			for (k = 0; k < 3; k++) {
+				writel(h_coef_8t[sc_ratio][i][j],
+				       dev->regs + GSC_HCOEF(i, j, k));
+			}
+		}
+	}
+}
+
+void gsc_hw_set_v_coef(struct gsc_ctx *ctx)
+{
+	struct gsc_scaler *sc = &ctx->scaler;
+	struct gsc_dev *dev = ctx->gsc_dev;
+	int i, j, k, sc_ratio = 0;
+
+	if (sc->main_vratio <= GSC_SC_UP_MAX_RATIO)
+		sc_ratio = 0;
+	else if (sc->main_vratio <= GSC_SC_DOWN_RATIO_7_8)
+		sc_ratio = 1;
+	else if (sc->main_vratio <= GSC_SC_DOWN_RATIO_6_8)
+		sc_ratio = 2;
+	else if (sc->main_vratio <= GSC_SC_DOWN_RATIO_5_8)
+		sc_ratio = 3;
+	else if (sc->main_vratio <= GSC_SC_DOWN_RATIO_4_8)
+		sc_ratio = 4;
+	else if (sc->main_vratio <= GSC_SC_DOWN_RATIO_3_8)
+		sc_ratio = 5;
+	else
+		sc_ratio = 6;
+
+	for (i = 0; i < 9; i++) {
+		for (j = 0; j < 4; j++) {
+			for (k = 0; k < 3; k++) {
+				writel(v_coef_4t[sc_ratio][i][j],
+				       dev->regs + GSC_VCOEF(i, j, k));
+			}
+		}
+	}
 }

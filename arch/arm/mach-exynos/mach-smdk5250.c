@@ -451,44 +451,6 @@ static struct s5p_platform_cec hdmi_cec_data __initdata = {
 };
 #endif
 
-#ifdef CONFIG_CMA
-/* defined in arch/arm/mach-exynos/reserve-mem.c */
-extern void exynos_cma_region_reserve(struct cma_region *,
-				struct cma_region *, size_t, const char *);
-
-static void __init exynos_reserve_mem(void)
-{
-	static struct cma_region regions[] = {
-		{
-			.name = "ion",
-			.size = CONFIG_ION_EXYNOS_CONTIGHEAP_SIZE * SZ_1K,
-			{
-				.alignment = SZ_1M
-			}
-		},
-#ifdef CONFIG_AUDIO_SAMSUNG_MEMSIZE_SRP
-		{
-			.name = "srp",
-			.size = CONFIG_AUDIO_SAMSUNG_MEMSIZE_SRP * SZ_1K,
-			.start = 0,
-		},
-#endif
-		{
-			.size = 0 /* END OF REGION DEFINITIONS */
-		}
-	};
-
-	static const char map[] __initconst = "ion-exynos=ion;"
-					      "samsung-rp=srp;";
-
-	exynos_cma_region_reserve(regions, NULL, 0, map);
-}
-#else /* CONFIG_CMA */
-static inline void exynos_reserve_mem(void)
-{
-}
-#endif
-
 #ifdef CONFIG_VIDEO_EXYNOS_FIMC_LITE
 static void __init smdk5250_camera_gpio_cfg(void)
 {
@@ -1149,28 +1111,6 @@ static struct platform_device *smdk5250_devices[] __initdata = {
 	&s3c_device_i2c4,
 	&s3c_device_i2c5,
 	&s3c_device_i2c7,
-	&SYSMMU_PLATDEV(mfc_l),
-	&SYSMMU_PLATDEV(mfc_r),
-	&SYSMMU_PLATDEV(2d),
-	&SYSMMU_PLATDEV(jpeg),
-	&SYSMMU_PLATDEV(gsc0),
-	&SYSMMU_PLATDEV(gsc1),
-	&SYSMMU_PLATDEV(gsc2),
-	&SYSMMU_PLATDEV(gsc3),
-	&SYSMMU_PLATDEV(flite0),
-	&SYSMMU_PLATDEV(flite1),
-	&SYSMMU_PLATDEV(tv),
-	&SYSMMU_PLATDEV(rot),
-	&SYSMMU_PLATDEV(is_isp),
-	&SYSMMU_PLATDEV(is_drc),
-	&SYSMMU_PLATDEV(is_fd),
-	&SYSMMU_PLATDEV(is_cpu),
-	&SYSMMU_PLATDEV(is_odc),
-	&SYSMMU_PLATDEV(is_sclrc),
-	&SYSMMU_PLATDEV(is_sclrp),
-	&SYSMMU_PLATDEV(is_dis0),
-	&SYSMMU_PLATDEV(is_dis1),
-	&SYSMMU_PLATDEV(is_3dnr),
 	&smdk5250_input_device,
 #ifdef CONFIG_VIDEO_EXYNOS_MFC
 	&s5p_device_mfc,
@@ -1254,6 +1194,106 @@ static struct platform_device *smdk5250_devices[] __initdata = {
 #endif
 };
 
+
+#if defined(CONFIG_CMA)
+/* defined in arch/arm/mach-exynos/reserve-mem.c */
+extern void exynos_cma_region_reserve(struct cma_region *,
+				struct cma_region *, size_t, const char *);
+static void __init exynos_reserve_mem(void)
+{
+	static struct cma_region regions[] = {
+		{
+			.name = "ion",
+#ifdef CONFIG_ION_EXYNOS_CONTIGHEAP_SIZE
+			.size = CONFIG_ION_EXYNOS_CONTIGHEAP_SIZE * SZ_1K,
+#endif
+			.start = 0
+		},
+#ifdef CONFIG_AUDIO_SAMSUNG_MEMSIZE_SRP
+		{
+			.name = "srp",
+			.size = CONFIG_AUDIO_SAMSUNG_MEMSIZE_SRP * SZ_1K,
+			.start = 0,
+		},
+#endif
+#ifdef CONFIG_EXYNOS_CONTENT_PATH_PROTECTION
+#ifdef CONFIG_ION_EXYNOS_DRM_MFC_SH
+		{
+			.name = "drm_mfc_sh",
+			.size = SZ_1M,
+		},
+#endif
+#endif
+		{
+			.size = 0
+		},
+	};
+#ifdef CONFIG_EXYNOS_CONTENT_PATH_PROTECTION
+	static struct cma_region regions_secure[] = {
+#ifdef CONFIG_ION_EXYNOS_DRM_VIDEO
+		{
+			.name = "drm_video",
+			.size = (
+#ifdef CONFIG_ION_EXYNOS_DRM_MEMSIZE_FIMD_VIDEO
+				CONFIG_ION_EXYNOS_DRM_MEMSIZE_FIMD_VIDEO +
+#endif
+#ifdef CONFIG_ION_EXYNOS_DRM_MEMSIZE_GSC
+				CONFIG_ION_EXYNOS_DRM_MEMSIZE_GSC +
+#endif
+#ifdef CONFIG_ION_EXYNOS_DRM_MEMSIZE_MFC_SECURE
+				CONFIG_ION_EXYNOS_DRM_MEMSIZE_MFC_SECURE +
+#endif
+				0) * SZ_1K,
+		},
+#endif
+#ifdef CONFIG_ION_EXYNOS_DRM_MFC_FW
+		{
+			.name = "drm_mfc_fw",
+			.size = SZ_1M,
+		},
+#endif
+#ifdef CONFIG_ION_EXYNOS_DRM_SECTBL
+		{
+			.name = "drm_sectbl",
+			.size = SZ_1M,
+		},
+#endif
+		{
+			.size = 0
+		},
+	};
+#else /* !CONFIG_EXYNOS_CONTENT_PATH_PROTECTION */
+	struct cma_region *regions_secure = NULL;
+#endif /* CONFIG_EXYNOS_CONTENT_PATH_PROTECTION */
+	static const char map[] __initconst =
+#ifdef CONFIG_EXYNOS_C2C
+		"samsung-c2c=c2c_shdmem;"
+#endif
+		"s3cfb.0=fimd;exynos5-fb.1=fimd;"
+		"samsung-rp=srp;"
+		"exynos-gsc.0=gsc0;exynos-gsc.1=gsc1;exynos-gsc.2=gsc2;exynos-gsc.3=gsc3;"
+		"exynos-fimc-lite.0=flite0;exynos-fimc-lite.1=flite1;"
+#ifdef CONFIG_EXYNOS_CONTENT_PATH_PROTECTION
+		"ion-exynos/mfc_sh=drm_mfc_sh;"
+		"ion-exynos/video=drm_video;"
+		"ion-exynos/mfc_fw=drm_mfc_fw;"
+		"ion-exynos/sectbl=drm_sectbl;"
+#endif
+		"ion-exynos=ion;"
+		"exynos-rot=rot;"
+		"s5p-mfc-v6/f=fw;"
+		"s5p-mfc-v6/a=b1;"
+		"s5p-mixer=tv;"
+		"exynos5-fimc-is=fimc_is;";
+
+	exynos_cma_region_reserve(regions, regions_secure, 0, map);
+}
+#else /* !CONFIG_CMA*/
+static inline void exynos_reserve_mem(void)
+{
+}
+#endif
+
 /* USB EHCI */
 static struct s5p_ehci_platdata smdk5250_ehci_pdata;
 
@@ -1309,71 +1349,39 @@ static void __init smdk5250_map_io(void)
 
 static void __init exynos_sysmmu_init(void)
 {
-#ifdef CONFIG_VIDEO_JPEG_V2X
-	sysmmu_set_owner(&SYSMMU_PLATDEV(jpeg).dev, &s5p_device_jpeg.dev);
+#ifdef CONFIG_VIDEO_EXYNOS_JPEG
+	platform_set_sysmmu(&SYSMMU_PLATDEV(jpeg).dev, &s5p_device_jpeg.dev);
 #endif
 #if defined(CONFIG_VIDEO_EXYNOS_MFC)
-	sysmmu_set_owner(&SYSMMU_PLATDEV(mfc_l).dev, &s5p_device_mfc.dev);
-	sysmmu_set_owner(&SYSMMU_PLATDEV(mfc_r).dev, &s5p_device_mfc.dev);
+	platform_set_sysmmu(&SYSMMU_PLATDEV(mfc_lr).dev, &s5p_device_mfc.dev);
 #endif
-#if defined(CONFIG_VIDEO_EXYNOS_TV)
-	ASSIGN_SYSMMU_POWERDOMAIN(tv, &exynos5_device_pd[PD_DISP1].dev);
-	sysmmu_set_owner(&SYSMMU_PLATDEV(tv).dev, &s5p_device_mixer.dev);
-
+#if defined(CONFIG_VIDEO_EXYNOS_TV) && defined(CONFIG_VIDEO_EXYNOS_MIXER)
+	platform_set_sysmmu(&SYSMMU_PLATDEV(tv).dev, &s5p_device_mixer.dev);
 #endif
 #ifdef CONFIG_VIDEO_EXYNOS_GSCALER
-	ASSIGN_SYSMMU_POWERDOMAIN(gsc0, &exynos5_device_pd[PD_GSCL].dev);
-	ASSIGN_SYSMMU_POWERDOMAIN(gsc1, &exynos5_device_pd[PD_GSCL].dev);
-	ASSIGN_SYSMMU_POWERDOMAIN(gsc2, &exynos5_device_pd[PD_GSCL].dev);
-	ASSIGN_SYSMMU_POWERDOMAIN(gsc3, &exynos5_device_pd[PD_GSCL].dev);
-	sysmmu_set_owner(&SYSMMU_PLATDEV(gsc0).dev, &exynos5_device_gsc0.dev);
-	sysmmu_set_owner(&SYSMMU_PLATDEV(gsc1).dev, &exynos5_device_gsc1.dev);
-	sysmmu_set_owner(&SYSMMU_PLATDEV(gsc2).dev, &exynos5_device_gsc2.dev);
-	sysmmu_set_owner(&SYSMMU_PLATDEV(gsc3).dev, &exynos5_device_gsc3.dev);
+	platform_set_sysmmu(&SYSMMU_PLATDEV(gsc0).dev,
+						&exynos5_device_gsc0.dev);
+	platform_set_sysmmu(&SYSMMU_PLATDEV(gsc1).dev,
+						&exynos5_device_gsc1.dev);
+	platform_set_sysmmu(&SYSMMU_PLATDEV(gsc2).dev,
+						&exynos5_device_gsc2.dev);
+	platform_set_sysmmu(&SYSMMU_PLATDEV(gsc3).dev,
+						&exynos5_device_gsc3.dev);
 #endif
 #ifdef CONFIG_VIDEO_EXYNOS_FIMC_LITE
-	ASSIGN_SYSMMU_POWERDOMAIN(flite0, &exynos5_device_pd[PD_GSCL].dev);
-	ASSIGN_SYSMMU_POWERDOMAIN(flite1, &exynos5_device_pd[PD_GSCL].dev);
-	sysmmu_set_owner(&SYSMMU_PLATDEV(flite0).dev, &exynos_device_flite0.dev);
-	sysmmu_set_owner(&SYSMMU_PLATDEV(flite1).dev, &exynos_device_flite1.dev);
+	platform_set_sysmmu(&SYSMMU_PLATDEV(camif0).dev,
+						&exynos_device_flite0.dev);
+	platform_set_sysmmu(&SYSMMU_PLATDEV(camif1).dev,
+						&exynos_device_flite1.dev);
 #endif
-#ifdef CONFIG_VIDEO_EXYNOS_ROTATOR
-	sysmmu_set_owner(&SYSMMU_PLATDEV(rot).dev, &exynos5_device_rotator.dev);
-#endif
+	platform_set_sysmmu(&SYSMMU_PLATDEV(rot).dev,
+						&exynos5_device_rotator.dev);
 #ifdef CONFIG_VIDEO_EXYNOS_FIMG2D
-	sysmmu_set_owner(&SYSMMU_PLATDEV(2d).dev, &s5p_device_fimg2d.dev);
+	platform_set_sysmmu(&SYSMMU_PLATDEV(2d).dev,
+						&s5p_device_fimg2d.dev);
 #endif
 #ifdef CONFIG_VIDEO_EXYNOS5_FIMC_IS
-	ASSIGN_SYSMMU_POWERDOMAIN(is_isp, &exynos5_device_pd[PD_ISP].dev);
-	ASSIGN_SYSMMU_POWERDOMAIN(is_drc, &exynos5_device_pd[PD_ISP].dev);
-	ASSIGN_SYSMMU_POWERDOMAIN(is_fd, &exynos5_device_pd[PD_ISP].dev);
-	ASSIGN_SYSMMU_POWERDOMAIN(is_cpu, &exynos5_device_pd[PD_ISP].dev);
-	ASSIGN_SYSMMU_POWERDOMAIN(is_odc, &exynos5_device_pd[PD_ISP].dev);
-	ASSIGN_SYSMMU_POWERDOMAIN(is_sclrc, &exynos5_device_pd[PD_ISP].dev);
-	ASSIGN_SYSMMU_POWERDOMAIN(is_sclrp, &exynos5_device_pd[PD_ISP].dev);
-	ASSIGN_SYSMMU_POWERDOMAIN(is_dis0, &exynos5_device_pd[PD_ISP].dev);
-	ASSIGN_SYSMMU_POWERDOMAIN(is_dis1, &exynos5_device_pd[PD_ISP].dev);
-	ASSIGN_SYSMMU_POWERDOMAIN(is_3dnr, &exynos5_device_pd[PD_ISP].dev);
-
-	sysmmu_set_owner(&SYSMMU_PLATDEV(is_isp).dev,
-						&exynos5_device_fimc_is.dev);
-	sysmmu_set_owner(&SYSMMU_PLATDEV(is_drc).dev,
-						&exynos5_device_fimc_is.dev);
-	sysmmu_set_owner(&SYSMMU_PLATDEV(is_fd).dev,
-						&exynos5_device_fimc_is.dev);
-	sysmmu_set_owner(&SYSMMU_PLATDEV(is_cpu).dev,
-						&exynos5_device_fimc_is.dev);
-	sysmmu_set_owner(&SYSMMU_PLATDEV(is_odc).dev,
-						&exynos5_device_fimc_is.dev);
-	sysmmu_set_owner(&SYSMMU_PLATDEV(is_sclrc).dev,
-						&exynos5_device_fimc_is.dev);
-	sysmmu_set_owner(&SYSMMU_PLATDEV(is_sclrp).dev,
-						&exynos5_device_fimc_is.dev);
-	sysmmu_set_owner(&SYSMMU_PLATDEV(is_dis0).dev,
-						&exynos5_device_fimc_is.dev);
-	sysmmu_set_owner(&SYSMMU_PLATDEV(is_dis1).dev,
-						&exynos5_device_fimc_is.dev);
-	sysmmu_set_owner(&SYSMMU_PLATDEV(is_3dnr).dev,
+	platform_set_sysmmu(&SYSMMU_PLATDEV(isp).dev,
 						&exynos5_device_fimc_is.dev);
 #endif
 }
@@ -1520,6 +1528,11 @@ static void __init smdk5250_machine_init(void)
 	exynos5_device_gsc2.dev.parent = &exynos5_device_pd[PD_GSCL].dev;
 	exynos5_device_gsc3.dev.parent = &exynos5_device_pd[PD_GSCL].dev;
 #endif
+	exynos5_gsc_set_pdev_name(0, "exynos5250-gsc");
+	exynos5_gsc_set_pdev_name(1, "exynos5250-gsc");
+	exynos5_gsc_set_pdev_name(2, "exynos5250-gsc");
+	exynos5_gsc_set_pdev_name(3, "exynos5250-gsc");
+
 	s3c_set_platdata(&exynos_gsc0_default_data, sizeof(exynos_gsc0_default_data),
 			&exynos5_device_gsc0);
 	s3c_set_platdata(&exynos_gsc1_default_data, sizeof(exynos_gsc1_default_data),

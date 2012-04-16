@@ -18,6 +18,7 @@
 #include <linux/spinlock.h>
 #include <linux/types.h>
 #include <linux/videodev2.h>
+#include <linux/videodev2_exynos_media.h>
 #include <linux/io.h>
 #include <linux/pm_runtime.h>
 #include <mach/videonode.h>
@@ -36,6 +37,8 @@
 #include <media/videobuf2-ion.h>
 #endif
 
+extern const int h_coef_8t[7][16][8];
+extern const int v_coef_4t[7][16][4];
 extern int gsc_dbg;
 
 #define gsc_info(fmt, args...)						\
@@ -75,8 +78,6 @@ extern int gsc_dbg;
 #define GSC_OUT_BUF_MAX			2
 #define GSC_MAX_CTRL_NUM		10
 #define GSC_OUT_MAX_MASK_NUM		7
-#define GSC_SC_ALIGN_4			4
-#define GSC_SC_ALIGN_2			2
 #define GSC_OUT_DEF_SRC			15
 #define GSC_OUT_DEF_DST			7
 #define DEFAULT_GSC_SINK_WIDTH		800
@@ -100,6 +101,14 @@ extern int gsc_dbg;
 #define	GSC_CTX_STOP_REQ		(1 << 6)
 #define	GSC_CTX_CAP			(1 << 10)
 
+#define GSC_SC_UP_MAX_RATIO		65536
+#define GSC_SC_DOWN_RATIO_7_8		74898
+#define GSC_SC_DOWN_RATIO_6_8		87381
+#define GSC_SC_DOWN_RATIO_5_8		104857
+#define GSC_SC_DOWN_RATIO_4_8		131072
+#define GSC_SC_DOWN_RATIO_3_8		174762
+#define GSC_SC_DOWN_RATIO_2_8		262144
+
 enum gsc_dev_flags {
 	/* for global */
 	ST_PWR_ON,
@@ -116,7 +125,6 @@ enum gsc_dev_flags {
 	ST_CAPT_RUN,
 	ST_CAPT_STREAM,
 	ST_CAPT_PIPE_STREAM,
-	ST_CAPT_SUSPENDED,
 	ST_CAPT_SHUT,
 	ST_CAPT_APPLY_CFG,
 	ST_CAPT_JPEG,
@@ -168,6 +176,7 @@ enum gsc_yuv_fmt {
 		     (img == V4L2_PIX_FMT_NV12M) | (img == V4L2_PIX_FMT_NV21M) | \
 		     (img == V4L2_PIX_FMT_YUV420M) | (img == V4L2_PIX_FMT_YVU420M) | \
 		     (img == V4L2_PIX_FMT_NV12MT_16X16))
+#define is_AYV12(img) (img == V4L2_PIX_FMT_YVU420M)
 
 #define gsc_m2m_run(dev) test_bit(ST_M2M_RUN, &(dev)->state)
 #define gsc_m2m_opened(dev) test_bit(ST_M2M_OPEN, &(dev)->state)
@@ -454,12 +463,10 @@ struct gsc_variant {
  * struct gsc_driverdata - per device type driver data for init time.
  *
  * @variant: the variant information for this driver.
- * @lclk_frequency: g-scaler clock frequency
  * @num_entities: the number of g-scalers
  */
 struct gsc_driverdata {
 	struct gsc_variant *variant[GSC_MAX_DEVS];
-	unsigned long	lclk_frequency;
 	int		num_entities;
 };
 
@@ -475,7 +482,6 @@ struct gsc_vb2 {
 
 	int (*cache_flush)(struct vb2_buffer *vb, u32 num_planes);
 	void (*set_cacheable)(void *alloc_ctx, bool cacheable);
-	void (*set_sharable)(void *alloc_ctx, bool sharable);
 };
 
 struct gsc_pipeline {
@@ -595,7 +601,7 @@ int gsc_try_crop(struct gsc_ctx *ctx, struct v4l2_crop *cr);
 int gsc_cal_prescaler_ratio(struct gsc_variant *var, u32 src, u32 dst, u32 *ratio);
 void gsc_get_prescaler_shfactor(u32 hratio, u32 vratio, u32 *sh);
 void gsc_check_src_scale_info(struct gsc_variant *var, struct gsc_frame *s_frame,
-			      u32 *wratio, u32 tx, u32 ty, u32 *hratio);
+			u32 *wratio, u32 tx, u32 ty, u32 *hratio, int rot);
 int gsc_check_scaler_ratio(struct gsc_variant *var, int sw, int sh, int dw,
 			   int dh, int rot, int out_path);
 int gsc_set_scaler_info(struct gsc_ctx *ctx);
@@ -758,6 +764,7 @@ void gsc_hw_set_input_buf_masking(struct gsc_dev *dev, u32 shift, bool enable);
 void gsc_hw_set_output_buf_masking(struct gsc_dev *dev, u32 shift, bool enable);
 void gsc_hw_set_input_addr(struct gsc_dev *dev, struct gsc_addr *addr, int index);
 void gsc_hw_set_output_addr(struct gsc_dev *dev, struct gsc_addr *addr, int index);
+void gsc_hw_set_freerun_clock_mode(struct gsc_dev *dev, bool mask);
 void gsc_hw_set_input_path(struct gsc_ctx *ctx);
 void gsc_hw_set_in_size(struct gsc_ctx *ctx);
 void gsc_hw_set_in_image_rgb(struct gsc_ctx *ctx);
@@ -771,14 +778,21 @@ void gsc_hw_set_mainscaler(struct gsc_ctx *ctx);
 void gsc_hw_set_rotation(struct gsc_ctx *ctx);
 void gsc_hw_set_global_alpha(struct gsc_ctx *ctx);
 void gsc_hw_set_sfr_update(struct gsc_ctx *ctx);
-void gsc_hw_set_local_dst(int id, bool on);
+void gsc_hw_set_local_dst(int id, int out, bool on);
 void gsc_hw_set_sysreg_writeback(struct gsc_ctx *ctx);
-void gsc_hw_set_sysreg_camif(bool on);
+void gsc_hw_set_pxlasync_camif_lo_mask(struct gsc_dev *dev, bool on);
+void gsc_hw_set_h_coef(struct gsc_ctx *ctx);
+void gsc_hw_set_v_coef(struct gsc_ctx *ctx);
+void gsc_hw_set_in_pingpong_update(struct gsc_dev *dev);
+void gsc_hw_set_in_chrom_stride(struct gsc_ctx *ctx);
+void gsc_hw_set_out_chrom_stride(struct gsc_ctx *ctx);
+void gsc_hw_set_fire_bit_sync_mode(struct gsc_dev *dev, bool mask);
 
 int gsc_hw_get_input_buf_mask_status(struct gsc_dev *dev);
 int gsc_hw_get_done_input_buf_index(struct gsc_dev *dev);
 int gsc_hw_get_done_output_buf_index(struct gsc_dev *dev);
 int gsc_hw_get_nr_unmask_bits(struct gsc_dev *dev);
+int gsc_hw_get_mxr_path_status(void);
 int gsc_wait_reset(struct gsc_dev *dev);
 int gsc_wait_operating(struct gsc_dev *dev);
 int gsc_wait_stop(struct gsc_dev *dev);

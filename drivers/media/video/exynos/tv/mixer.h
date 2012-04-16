@@ -22,6 +22,7 @@
 #include <linux/kernel.h>
 #include <linux/spinlock.h>
 #include <linux/wait.h>
+#include <linux/videodev2_exynos_media.h>
 #include <media/v4l2-device.h>
 #include <media/videobuf2-core.h>
 #include <media/exynos_mc.h>
@@ -301,7 +302,6 @@ struct mxr_vb2 {
 
 	int (*cache_flush)(struct vb2_buffer *vb, u32 num_planes);
 	void (*set_cacheable)(void *alloc_ctx, bool cacheable);
-	void (*set_sharable)(void *alloc_ctx, bool sharable);
 };
 
 /** sub-mixer 0,1 drivers instance */

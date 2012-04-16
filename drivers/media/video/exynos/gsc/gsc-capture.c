@@ -91,6 +91,7 @@ int gsc_cap_pipeline_s_stream(struct gsc_dev *gsc, int on)
 		return -ENODEV;
 
 	if (on) {
+		gsc_info("start stream");
 		ret = v4l2_subdev_call(p->sd_gsc, video, s_stream, 1);
 		if (ret < 0 && ret != -ENOIOCTLCMD)
 			return ret;
@@ -108,9 +109,7 @@ int gsc_cap_pipeline_s_stream(struct gsc_dev *gsc, int on)
 			ret = v4l2_subdev_call(p->sensor, video, s_stream, 1);
 		}
 	} else {
-		ret = v4l2_subdev_call(p->sd_gsc, video, s_stream, 0);
-		if (ret < 0 && ret != -ENOIOCTLCMD)
-			return ret;
+		gsc_info("stop stream");
 		if (p->disp) {
 			ret = v4l2_subdev_call(p->disp, video, s_stream, 0);
 			if (ret < 0 && ret != -ENOIOCTLCMD)
@@ -124,6 +123,10 @@ int gsc_cap_pipeline_s_stream(struct gsc_dev *gsc, int on)
 				return ret;
 			ret = v4l2_subdev_call(p->flite, video, s_stream, 0);
 		}
+
+		ret = v4l2_subdev_call(p->sd_gsc, video, s_stream, 0);
+		if (ret < 0 && ret != -ENOIOCTLCMD)
+			return ret;
 	}
 
 	return ret == -ENOIOCTLCMD ? 0 : ret;
@@ -160,10 +163,7 @@ static void gsc_capture_buf_queue(struct vb2_buffer *vb)
 	if (ret)
 		gsc_err("Failed to prepare output addr");
 
-	if (!test_bit(ST_CAPT_SUSPENDED, &gsc->state)) {
-		gsc_dbg("buf_index : %d", vb->v4l2_buf.index);
 		gsc_hw_set_output_buf_masking(gsc, vb->v4l2_buf.index, 0);
-	}
 
 	min_bufs = cap->reqbufs_cnt > 1 ? 2 : 1;
 
@@ -248,8 +248,8 @@ static int gsc_capture_subdev_s_stream(struct v4l2_subdev *sd, int enable)
 		if (gsc->pipeline.disp)
 			gsc_hw_set_sysreg_writeback(ctx);
 		else
-			gsc_hw_set_sysreg_camif(true);
-		
+			gsc_hw_set_pxlasync_camif_lo_mask(gsc, true);
+
 		gsc_hw_set_input_path(ctx);
 		gsc_hw_set_in_size(ctx);
 		gsc_hw_set_in_image_format(ctx);
@@ -261,6 +261,8 @@ static int gsc_capture_subdev_s_stream(struct v4l2_subdev *sd, int enable)
 		gsc_capture_scaler_info(ctx);
 		gsc_hw_set_prescaler(ctx);
 		gsc_hw_set_mainscaler(ctx);
+		gsc_hw_set_h_coef(ctx);
+		gsc_hw_set_v_coef(ctx);
 		
 		set_bit(ST_CAPT_PEND, &gsc->state);
 		
@@ -269,6 +271,7 @@ static int gsc_capture_subdev_s_stream(struct v4l2_subdev *sd, int enable)
 	} else {
 		gsc_info("stop");
 	}
+
 	return 0;
 }
 
@@ -308,12 +311,11 @@ static int gsc_capture_state_cleanup(struct gsc_dev *gsc)
 	gsc->state &= ~(1 << ST_CAPT_RUN | 1 << ST_CAPT_STREAM |
 			1 << ST_CAPT_PIPE_STREAM | 1 << ST_CAPT_PEND);
 
-	set_bit(ST_CAPT_SUSPENDED, &gsc->state);
 	spin_unlock_irqrestore(&gsc->slock, flags);
 
 	if (streaming) {
-		if (mdev->is_flite_on)
-		return gsc_cap_pipeline_s_stream(gsc, 0);
+		if (!mdev->is_flite_on)
+			return gsc_cap_pipeline_s_stream(gsc, 0);
 	else
 			return v4l2_subdev_call(gsc->cap.sd_cap, video,
 							s_stream, 0);
@@ -332,7 +334,7 @@ static int gsc_cap_stop_capture(struct gsc_dev *gsc)
 	gsc_info("G-Scaler h/w disable control");
 	gsc_hw_enable_control(gsc, false);
 	clear_bit(ST_CAPT_STREAM, &gsc->state);
-	ret = gsc_wait_operating(gsc);
+	ret = gsc_wait_stop(gsc);
 	if (ret) {
 		gsc_err("GSCALER_OP_STATUS is operating\n");
 		return ret;
@@ -707,6 +709,7 @@ static int gsc_capture_open(struct file *file)
 	}
 
 	set_bit(ST_CAPT_OPEN, &gsc->state);
+
 	pm_runtime_get_sync(&gsc->pdev->dev);
 
 	if (++gsc->cap.refcnt == 1) {
@@ -778,7 +781,6 @@ static int gsc_capture_close(struct file *file)
 		gsc_hw_enable_control(gsc, false);
 		clear_bit(ST_CAPT_STREAM, &gsc->state);
 		gsc_cap_pipeline_shutdown(gsc);
-		clear_bit(ST_CAPT_SUSPENDED, &gsc->state);
 	}
 
 	pm_runtime_put(&gsc->pdev->dev);
@@ -953,32 +955,27 @@ static struct v4l2_subdev *gsc_cap_remote_subdev(struct gsc_dev *gsc, u32 *pad)
 static int gsc_capture_g_crop(struct file *file, void *fh, struct v4l2_crop *crop)
 {
 	struct gsc_dev *gsc = video_drvdata(file);
-	struct v4l2_subdev_format format;
 	struct v4l2_subdev *subdev;
-	u32 pad;
+	struct v4l2_subdev_crop subdev_crop;
 	int ret;
 
-	subdev = gsc_cap_remote_subdev(gsc, &pad);
+	subdev = gsc_cap_remote_subdev(gsc, NULL);
 	if (subdev == NULL)
 		return -EINVAL;
 
 	/* Try the get crop operation first and fallback to get format if not
 	 * implemented.
 	 */
-	ret = v4l2_subdev_call(subdev, video, g_crop, crop);
-	if (ret != -ENOIOCTLCMD)
-		return ret;
-
-	format.pad = pad;
-	format.which = V4L2_SUBDEV_FORMAT_ACTIVE;
-	ret = v4l2_subdev_call(subdev, pad, get_fmt, NULL, &format);
+	subdev_crop.which = V4L2_SUBDEV_FORMAT_ACTIVE;
+	subdev_crop.pad = GSC_PAD_SOURCE;
+	ret = v4l2_subdev_call(subdev, pad, get_crop, NULL, &subdev_crop);
 	if (ret < 0)
 		return ret == -ENOIOCTLCMD ? -EINVAL : ret;
 
-	crop->c.left = 0;
-	crop->c.top = 0;
-	crop->c.width = format.format.width;
-	crop->c.height = format.format.height;
+	crop->c.left = subdev_crop.rect.left;
+	crop->c.top = subdev_crop.rect.top;
+	crop->c.width = subdev_crop.rect.width;
+	crop->c.height = subdev_crop.rect.height;
 
 	return 0;
 }
@@ -987,13 +984,21 @@ static int gsc_capture_s_crop(struct file *file, void *fh, struct v4l2_crop *cro
 {
 	struct gsc_dev *gsc = video_drvdata(file);
 	struct v4l2_subdev *subdev;
+	struct v4l2_subdev_crop subdev_crop;
 	int ret;
 
 	subdev = gsc_cap_remote_subdev(gsc, NULL);
 	if (subdev == NULL)
 		return -EINVAL;
 
-	ret = v4l2_subdev_call(subdev, video, s_crop, crop);
+	subdev_crop.which = V4L2_SUBDEV_FORMAT_ACTIVE;
+	subdev_crop.pad = GSC_PAD_SOURCE;
+	subdev_crop.rect.left = crop->c.left;
+	subdev_crop.rect.top = crop->c.top;
+	subdev_crop.rect.width = crop->c.width;
+	subdev_crop.rect.height = crop->c.height;
+
+	ret = v4l2_subdev_call(subdev, pad, set_crop, NULL, &subdev_crop);
 
 	return ret == -ENOIOCTLCMD ? -EINVAL : ret;
 }
