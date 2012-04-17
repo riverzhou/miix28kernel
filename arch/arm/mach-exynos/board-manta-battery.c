@@ -24,6 +24,9 @@
 
 #include "board-manta.h"
 
+#define TA_ADC_LOW		800
+#define TA_ADC_HIGH		1750
+
 #define	GPIO_USB_SEL1		EXYNOS5_GPH0(1)
 
 #define	GPIO_TA_EN		EXYNOS5_GPG1(5)
@@ -109,7 +112,7 @@ static int check_samsung_charger(void)
 	ta_adc = read_ta_adc();
 
 	/* ADC range was recommended by HW */
-	result = ta_adc > 1000 && ta_adc < 1500;
+	result = ta_adc > TA_ADC_LOW && ta_adc < TA_ADC_HIGH;
 	pr_debug("%s : adc(%d), return(%d)\n", __func__, ta_adc, result);
 	return result;
 }
