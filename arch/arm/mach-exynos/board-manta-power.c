@@ -74,6 +74,10 @@ static struct regulator_consumer_supply ldo16_supply[] = {
 	REGULATOR_SUPPLY("vhsic_1.8v", NULL),
 };
 
+static struct regulator_consumer_supply ldo17_supply[] = {
+	REGULATOR_SUPPLY("cam_core_1.8v", NULL),
+};
+
 static struct regulator_consumer_supply ldo18_supply[] = {
 	REGULATOR_SUPPLY("cam_io_from_1.8v", NULL),
 };
@@ -88,10 +92,6 @@ static struct regulator_consumer_supply ldo20_supply[] = {
 
 static struct regulator_consumer_supply ldo21_supply[] = {
 	REGULATOR_SUPPLY("vtf_2.8v", NULL),
-};
-
-static struct regulator_consumer_supply ldo22_supply[] = {
-	REGULATOR_SUPPLY("cam_core_1.8v", NULL),
 };
 
 static struct regulator_consumer_supply ldo23_supply[] = {
@@ -170,6 +170,8 @@ REGULATOR_INIT(ldo15, "VHSIC_1.0V", 1000000, 1000000, 1,
 	       REGULATOR_CHANGE_STATUS, 1);
 REGULATOR_INIT(ldo16, "VHSIC_1.8V", 1800000, 1800000, 0,
 	       REGULATOR_CHANGE_STATUS, 1);
+REGULATOR_INIT(ldo17, "CAM_CORE_1.8v", 1800000, 1800000, 0,
+	       REGULATOR_CHANGE_STATUS, 1);
 REGULATOR_INIT(ldo18, "CAM_IO_FROM_1.8V", 1800000, 1800000, 0,
 	       REGULATOR_CHANGE_STATUS, 1);
 REGULATOR_INIT(ldo19, "VT_CAM_1.8V", 1800000, 1800000, 0,
@@ -177,8 +179,6 @@ REGULATOR_INIT(ldo19, "VT_CAM_1.8V", 1800000, 1800000, 0,
 REGULATOR_INIT(ldo20, "VMEM_VDD_1.8V", 1800000, 1800000, 0,
 	       REGULATOR_CHANGE_STATUS, 1);
 REGULATOR_INIT(ldo21, "VTF_2.8V", 2800000, 2800000, 0,
-	       REGULATOR_CHANGE_STATUS, 1);
-REGULATOR_INIT(ldo22, "CAM_CORE_1.8v", 1800000, 1800000, 0,
 	       REGULATOR_CHANGE_STATUS, 1);
 REGULATOR_INIT(ldo23, "TSP_AVDD_2.8V", 2800000, 2800000, 0,
 	       REGULATOR_CHANGE_STATUS, 1);
@@ -287,11 +287,11 @@ static struct max77686_regulator_data max77686_regulators[] = {
 	{MAX77686_LDO14, &ldo14_init_data,},
 	{MAX77686_LDO15, &ldo15_init_data,},
 	{MAX77686_LDO16, &ldo16_init_data,},
+	{MAX77686_LDO17, &ldo17_init_data,},
 	{MAX77686_LDO18, &ldo18_init_data,},
 	{MAX77686_LDO19, &ldo19_init_data,},
 	{MAX77686_LDO20, &ldo20_init_data,},
 	{MAX77686_LDO21, &ldo21_init_data,},
-	{MAX77686_LDO22, &ldo22_init_data,},
 	{MAX77686_LDO23, &ldo23_init_data,},
 	{MAX77686_LDO24, &ldo24_init_data,},
 	{MAX77686_LDO25, &ldo25_init_data,},
