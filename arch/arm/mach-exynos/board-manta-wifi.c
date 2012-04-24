@@ -241,8 +241,8 @@ static struct dw_mci_board exynos_wlan_pdata __initdata = {
 	.quirks			= DW_MCI_QUIRK_BROKEN_CARD_DETECTION |
 				  DW_MCI_QUIRK_HIGHSPEED |
 				  DW_MCI_QUIRK_DMA_DELAY,
-	.bus_hz			= 200 * 1000 * 1000,
-	.caps			= MMC_CAP_UHS_SDR104 | MMC_CAP_UHS_DDR50 |
+	.bus_hz			= 50 * 1000 * 1000,
+	.caps			= MMC_CAP_UHS_SDR50 |
 				  MMC_CAP_4_BIT_DATA | MMC_CAP_SD_HIGHSPEED,
 	.pm_caps		= MMC_PM_KEEP_POWER | MMC_PM_IGNORE_PM_NOTIFY,
 	.fifo_depth		= 0x80,
