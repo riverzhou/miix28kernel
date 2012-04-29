@@ -68,6 +68,7 @@ static const char * const iio_chan_type_name_spec[] = {
 	[IIO_ANGL] = "angl",
 	[IIO_TIMESTAMP] = "timestamp",
 	[IIO_CAPACITANCE] = "capacitance",
+	[IIO_PRESSURE] = "pressure",
 };
 
 static const char * const iio_modifier_names[] = {
