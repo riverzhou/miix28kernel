@@ -286,7 +286,7 @@ void __init exynos5_manta_wlan_init(void)
 	pr_debug("%s: start\n", __func__);
 
 	exynos_dwmci_set_platdata(&exynos_wlan_pdata, 1);
-	dev_set_name(&exynos5_device_dwmci1.dev, "s3c-sdhci.1");
+	dev_set_name(&exynos5_device_dwmci1.dev, "exynos4-sdhci.1");
 	clk_add_alias("dwmci", "dw_mmc.1", "hsmmc", &exynos5_device_dwmci1.dev);
 	clk_add_alias("sclk_dwmci", "dw_mmc.1", "sclk_mmc",
 		      &exynos5_device_dwmci1.dev);
