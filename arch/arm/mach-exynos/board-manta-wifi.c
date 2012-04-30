@@ -240,7 +240,7 @@ static struct dw_mci_board exynos_wlan_pdata __initdata = {
 	.num_slots		= 1,
 	.quirks			= DW_MCI_QUIRK_BROKEN_CARD_DETECTION |
 				  DW_MCI_QUIRK_HIGHSPEED |
-				  DW_MCI_QUIRK_DMA_DELAY,
+				  DW_MCI_QUIRK_IDMAC_DTO,
 	.bus_hz			= 50 * 1000 * 1000,
 	.caps			= MMC_CAP_UHS_SDR50 |
 				  MMC_CAP_4_BIT_DATA | MMC_CAP_SD_HIGHSPEED,
