@@ -15,6 +15,7 @@
 
 #include <linux/errno.h>
 #include <linux/platform_device.h>
+#include <media/exynos_gscaler.h>
 
 #include <plat/cpu.h>
 #include <plat/devs.h>
@@ -25,6 +26,10 @@
 
 static struct platform_device *media_devices[] __initdata = {
 	&s5p_device_mfc,
+	&exynos5_device_gsc0,
+	&exynos5_device_gsc1,
+	&exynos5_device_gsc2,
+	&exynos5_device_gsc3,
 };
 
 static struct s5p_mfc_platdata manta_mfc_pd = {
@@ -34,12 +39,53 @@ static struct s5p_mfc_platdata manta_mfc_pd = {
 static void __init manta_media_sysmmu_init(void)
 {
 	platform_set_sysmmu(&SYSMMU_PLATDEV(mfc_lr).dev, &s5p_device_mfc.dev);
+	platform_set_sysmmu(&SYSMMU_PLATDEV(gsc0).dev,
+			    &exynos5_device_gsc0.dev);
+	platform_set_sysmmu(&SYSMMU_PLATDEV(gsc1).dev,
+			    &exynos5_device_gsc1.dev);
+	platform_set_sysmmu(&SYSMMU_PLATDEV(gsc2).dev,
+			    &exynos5_device_gsc2.dev);
+	platform_set_sysmmu(&SYSMMU_PLATDEV(gsc3).dev,
+			    &exynos5_device_gsc3.dev);
 }
 
 void __init exynos5_manta_media_init(void)
 {
 	manta_media_sysmmu_init();
 	s5p_mfc_set_platdata(&manta_mfc_pd);
+
+	dev_set_name(&exynos5_device_gsc0.dev, "exynos-gsc.0");
+	dev_set_name(&exynos5_device_gsc1.dev, "exynos-gsc.1");
+	dev_set_name(&exynos5_device_gsc2.dev, "exynos-gsc.2");
+	dev_set_name(&exynos5_device_gsc3.dev, "exynos-gsc.3");
+
+	clk_add_alias("gscl", "exynos5250-gsc.0", "gscl", &exynos5_device_gsc0.dev);
+	clk_add_alias("gscl", "exynos5250-gsc.1", "gscl", &exynos5_device_gsc1.dev);
+	clk_add_alias("gscl", "exynos5250-gsc.2", "gscl", &exynos5_device_gsc2.dev);
+	clk_add_alias("gscl", "exynos5250-gsc.3", "gscl", &exynos5_device_gsc3.dev);
+
+	exynos5_gsc_set_pdev_name(0, "exynos5250-gsc");
+	exynos5_gsc_set_pdev_name(1, "exynos5250-gsc");
+	exynos5_gsc_set_pdev_name(2, "exynos5250-gsc");
+	exynos5_gsc_set_pdev_name(3, "exynos5250-gsc");
+
+	s3c_set_platdata(&exynos_gsc0_default_data,
+			 sizeof(exynos_gsc0_default_data),
+			 &exynos5_device_gsc0);
+	s3c_set_platdata(&exynos_gsc1_default_data,
+			 sizeof(exynos_gsc1_default_data),
+			 &exynos5_device_gsc1);
+	s3c_set_platdata(&exynos_gsc2_default_data,
+			 sizeof(exynos_gsc2_default_data),
+			 &exynos5_device_gsc2);
+	s3c_set_platdata(&exynos_gsc3_default_data,
+			 sizeof(exynos_gsc3_default_data),
+			 &exynos5_device_gsc3);
+
+	exynos5_gsc_set_parent_clock("mout_aclk_300_gscl_mid", "mout_mpll_user");
+	exynos5_gsc_set_parent_clock("mout_aclk_300_gscl", "mout_aclk_300_gscl_mid");
+	exynos5_gsc_set_parent_clock("aclk_300_gscl", "dout_aclk_300_gscl");
+	exynos5_gsc_set_clock_rate("dout_aclk_300_gscl", 310000000);
 
 	platform_add_devices(media_devices, ARRAY_SIZE(media_devices));
 }
