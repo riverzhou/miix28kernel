@@ -95,7 +95,7 @@ static int bq24191_set_charging_enable(struct bq24191_chg_callbacks *ptr,
 	int ret;
 
 	if (!ptr) {
-		dev_err(&client->dev, "%s: null callbacks\n", __func__);
+		pr_err("%s: null callbacks\n", __func__);
 		return -EINVAL;
 	}
 
@@ -124,7 +124,7 @@ static int bq24191_set_charging_current(struct bq24191_chg_callbacks *ptr,
 	int ret;
 
 	if (!ptr) {
-		dev_err(&client->dev, "%s: null callbacks\n", __func__);
+		pr_err("%s: null callbacks\n", __func__);
 		return -EINVAL;
 	}
 
