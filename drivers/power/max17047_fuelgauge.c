@@ -145,7 +145,7 @@ static int max17047_get_temperature(struct max17047_fg_callbacks *ptr,
 	int ret;
 
 	if (!ptr) {
-		dev_err(&client->dev, "%s: null callbacks\n", __func__);
+		pr_err("%s: null callbacks\n", __func__);
 		return -EINVAL;
 	}
 
@@ -176,7 +176,7 @@ static int max17047_get_vcell(struct max17047_fg_callbacks *ptr)
 	u32 vcell;
 
 	if (!ptr) {
-		dev_err(&client->dev, "%s: null callbacks\n", __func__);
+		pr_err("%s: null callbacks\n", __func__);
 		return -EINVAL;
 	}
 
@@ -204,7 +204,7 @@ static int max17047_get_current(struct max17047_fg_callbacks *ptr,
 	s16 cur;
 
 	if (!ptr) {
-		dev_err(&client->dev, "%s: null callbacks\n", __func__);
+		pr_err("%s: null callbacks\n", __func__);
 		return -EINVAL;
 	}
 
@@ -231,7 +231,7 @@ static int max17047_get_soc(struct max17047_fg_callbacks *ptr)
 	int ret;
 
 	if (!ptr) {
-		dev_err(&client->dev, "%s: null callbacks\n", __func__);
+		pr_err("%s: null callbacks\n", __func__);
 		return -EINVAL;
 	}
 
