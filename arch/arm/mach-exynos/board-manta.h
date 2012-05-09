@@ -35,6 +35,7 @@ void exynos5_manta_media_init(void);
 void exynos5_manta_camera_init(void);
 void exynos5_manta_sensors_init(void);
 void exynos5_manta_gps_init(void);
+void exynos5_manta_jack_init(void);
 
 int manta_stmpe811_read_adc_data(u8 channel);
 
