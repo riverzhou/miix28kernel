@@ -218,6 +218,9 @@
 
 #define MXT_MAX_FINGER		10
 
+/* Touchscreen configuration infomation */
+#define MXT_FW_MAGIC		0x4D3C2B1A
+
 struct mxt_info {
 	u8 family_id;
 	u8 variant_id;
@@ -265,6 +268,56 @@ struct mxt_data {
 	unsigned int irq;
 	unsigned int max_x;
 	unsigned int max_y;
+	struct completion init_done;
+	unsigned int max_reportid;
+};
+
+/**
+ * struct mxt_fw_image - Represents a firmware file.
+ * @magic_code: Identifier of file type.
+ * @hdr_len: Size of file header (struct mxt_fw_image).
+ * @cfg_len: Size of configuration data.
+ * @fw_len: Size of firmware data.
+ * @cfg_crc: CRC of configuration settings.
+ * @fw_ver: Version of firmware.
+ * @build_ver: Build version of firmware.
+ * @data: Configuration data followed by firmware image.
+ */
+struct mxt_fw_image {
+	__le32 magic_code;
+	__le32 hdr_len;
+	__le32 cfg_len;
+	__le32 fw_len;
+	__le32 cfg_crc;
+	u8 fw_ver;
+	u8 build_ver;
+	u8 data[0];
+} __packed;
+
+/**
+ * struct mxt_cfg_data - Represents a configuration data item.
+ * @type: Type of object.
+ * @instance: Instance number of object.
+ * @size: Size of object.
+ * @register_val: Series of register values for object.
+ */
+struct mxt_cfg_data {
+	u8 type;
+	u8 instance;
+	u8 size;
+	u8 register_val[0];
+} __packed;
+
+struct mxt_fw_info {
+	u8 fw_ver;
+	u8 build_ver;
+	u32 hdr_len;
+	u32 cfg_len;
+	u32 fw_len;
+	u32 cfg_crc;
+	const u8 *cfg_raw_data;	/* start address of configuration data */
+	const u8 *fw_raw_data;	/* start address of firmware data */
+	struct mxt_data *data;
 };
 
 static bool mxt_object_readable(unsigned int type)
@@ -411,6 +464,28 @@ static int mxt_unlock_bootloader(struct i2c_client *client)
 	return 0;
 }
 
+static int mxt_probe_bootloader(struct i2c_client *client)
+{
+	u8 val;
+
+	if (i2c_master_recv(client, &val, 1) != 1) {
+		dev_err(&client->dev, "%s: i2c recv failed\n", __func__);
+		return -EIO;
+	}
+
+	if (val & (~MXT_BOOT_STATUS_MASK)) {
+		if (val & MXT_APP_CRC_FAIL)
+			dev_err(&client->dev, "Application CRC failure\n");
+		else
+			dev_err(&client->dev, "Device in bootloader mode\n");
+	} else {
+		dev_err(&client->dev, "%s: Unknow status\n", __func__);
+		return -EIO;
+	}
+
+	return 0;
+}
+
 static int mxt_fw_write(struct i2c_client *client,
 			     const u8 *data, unsigned int frame_size)
 {
@@ -485,6 +560,9 @@ mxt_get_object(struct mxt_data *data, u8 type)
 	struct mxt_object *object;
 	int i;
 
+	if (!data->object_table)
+		return NULL;
+
 	for (i = 0; i < data->info.object_num; i++) {
 		object = data->object_table + i;
 		if (object->type == type)
@@ -508,6 +586,30 @@ static int mxt_read_message(struct mxt_data *data,
 	reg = object->start_address;
 	return __mxt_read_reg(data->client, reg,
 			sizeof(struct mxt_message), message);
+}
+
+static int mxt_read_message_reportid(struct mxt_data *data,
+	struct mxt_message *message, u8 reportid)
+{
+	int try = 0;
+	int error;
+	int fail_count;
+
+	fail_count = data->max_reportid * 2;
+
+	while (++try < fail_count) {
+		error = mxt_read_message(data, message);
+		if (error)
+			return error;
+
+		if (message->reportid == 0xff)
+			return -EINVAL;
+
+		if (message->reportid == reportid)
+			return 0;
+	}
+
+	return -EINVAL;
 }
 
 static int mxt_read_object(struct mxt_data *data,
@@ -668,6 +770,156 @@ static irqreturn_t mxt_interrupt(int irq, void *dev_id)
 
 end:
 	return IRQ_HANDLED;
+}
+
+static int mxt_read_config_crc(struct mxt_data *data, u32 *crc)
+{
+	struct device *dev = &data->client->dev;
+	int error;
+	struct mxt_message message;
+	struct mxt_object *object;
+
+	object = mxt_get_object(data, MXT_GEN_COMMAND_T6);
+	if (!object)
+		return -EIO;
+
+	/* Try to read the config checksum of the existing cfg */
+	mxt_write_object(data, MXT_GEN_COMMAND_T6,
+		MXT_COMMAND_REPORTALL, 1);
+
+	/* Read message from command processor, which only has one report ID */
+	error = mxt_read_message_reportid(data, &message, object->max_reportid);
+	if (error) {
+		dev_err(dev, "Failed to retrieve CRC\n");
+		return error;
+	}
+
+	/* Bytes 1-3 are the checksum. */
+	*crc = message.message[1] | (message.message[2] << 8) |
+		(message.message[3] << 16);
+
+	return 0;
+}
+
+static int mxt_download_config(struct mxt_fw_info *fw_info)
+{
+	struct mxt_data *data = fw_info->data;
+	struct device *dev = &data->client->dev;
+	struct mxt_object *object;
+	struct mxt_cfg_data *cfg_data;
+	u32 current_crc;
+	u8 i;
+	u16 reg, index;
+	int ret;
+
+	if (!fw_info->cfg_raw_data) {
+		dev_err(dev, "Configuration data is Null\n");
+		return -EINVAL;
+	}
+
+	/* Get config CRC from device */
+	ret = mxt_read_config_crc(data, &current_crc);
+	if (ret)
+		return ret;
+
+	/* Check Version information */
+	if (fw_info->fw_ver != data->info.version) {
+		dev_err(dev, "Warning: version mismatch! %s\n", __func__);
+		return 0;
+	}
+	if (fw_info->build_ver != data->info.build) {
+		dev_err(dev, "Warning: build num mismatch! %s\n", __func__);
+		return 0;
+	}
+
+	/* Check config CRC */
+	if (current_crc == fw_info->cfg_crc) {
+		dev_info(dev, "Skip writing Config:[CRC 0x%06X]\n",
+			current_crc);
+		return 0;
+	}
+
+	dev_info(dev, "Writing Config:[CRC 0x%06X!=0x%06X]\n",
+		current_crc, fw_info->cfg_crc);
+
+	/* Write config info */
+	for (index = 0; index < fw_info->cfg_len;) {
+
+		if (index + sizeof(struct mxt_cfg_data) >= fw_info->cfg_len) {
+			dev_err(dev, "index(%d) of cfg_data exceeded total size(%d)!!\n",
+				index + sizeof(struct mxt_cfg_data),
+				fw_info->cfg_len);
+			return -EINVAL;
+		}
+
+		/* Get the info about each object */
+		cfg_data = (struct mxt_cfg_data *)
+					(&fw_info->cfg_raw_data[index]);
+
+		index += sizeof(struct mxt_cfg_data) + cfg_data->size;
+		if (index > fw_info->cfg_len) {
+			dev_err(dev, "index(%d) of cfg_data exceeded total size(%d) in T%d object!!\n",
+				index, fw_info->cfg_len, cfg_data->type);
+			return -EINVAL;
+		}
+
+		object = mxt_get_object(data, cfg_data->type);
+		if (!object) {
+			dev_err(dev, "T%d is Invalid object type\n",
+				cfg_data->type);
+			return -EINVAL;
+		}
+
+		/* Check and compare the size, instance of each object */
+		if (cfg_data->size > object->size) {
+			dev_err(dev, "T%d Object length exceeded!\n",
+				cfg_data->type);
+			return -EINVAL;
+		}
+		if (cfg_data->instance >= object->instances) {
+			dev_err(dev, "T%d Object instances exceeded!\n",
+				cfg_data->type);
+			return -EINVAL;
+		}
+
+		dev_dbg(dev, "Writing config for obj %d len %d instance %d (%d/%d)\n",
+			cfg_data->type, object->size,
+			cfg_data->instance, index, fw_info->cfg_len);
+
+		reg = object->start_address + object->size * cfg_data->instance;
+
+		/* Write register values of each object */
+		for (i = 0; i < cfg_data->size; i++) {
+			ret = mxt_write_reg(data->client, reg + i,
+					cfg_data->register_val[i]);
+			if (ret) {
+				dev_err(dev, "Write %dth byte of T%d Object failed\n",
+					object->type, i);
+				return ret;
+			}
+		}
+
+		/*
+		 * If firmware is upgraded, new bytes may be added to end of
+		 * objects. It is generally forward compatible to zero these
+		 * bytes - previous behaviour will be retained. However
+		 * this does invalidate the CRC and will force a config
+		 * download every time until the configuration is updated.
+		 */
+		if (cfg_data->size < object->size) {
+			dev_err(dev, "Warning: zeroing %d byte(s) in T%d\n",
+				 object->size - cfg_data->size, cfg_data->type);
+
+			for (i = cfg_data->size + 1; i < object->size; i++) {
+				ret = mxt_write_reg(data->client, reg + i, 0);
+				if (ret)
+					return ret;
+			}
+		}
+	}
+	dev_info(dev, "Updated configuration\n");
+
+	return ret;
 }
 
 static int mxt_check_reg_init(struct mxt_data *data)
@@ -848,11 +1100,14 @@ static int mxt_get_object_table(struct mxt_data *data)
 		}
 	}
 
+	/* Store maximum reportid */
+	data->max_reportid = reportid;
 	return 0;
 }
 
-static int mxt_initialize(struct mxt_data *data)
+static int mxt_initialize(struct mxt_fw_info *fw_info)
 {
+	struct mxt_data *data = fw_info->data;
 	struct i2c_client *client = data->client;
 	struct mxt_info *info = &data->info;
 	int error;
@@ -876,10 +1131,15 @@ static int mxt_initialize(struct mxt_data *data)
 		return error;
 
 	/* Check register init values */
-	error = mxt_check_reg_init(data);
-	if (error)
-		return error;
-
+	if (fw_info->cfg_raw_data) {
+		error = mxt_download_config(fw_info);
+		if (error)
+			return error;
+	} else {
+		error = mxt_check_reg_init(data);
+		if (error)
+			return error;
+	}
 	mxt_handle_pdata(data);
 
 	/* Backup to memory */
@@ -977,41 +1237,103 @@ static ssize_t mxt_object_show(struct device *dev,
 
 	return count;
 }
-
-static int mxt_load_fw(struct device *dev, const char *fn)
+static int mxt_verify_fw(struct mxt_fw_info *fw_info, const struct firmware *fw)
 {
-	struct mxt_data *data = dev_get_drvdata(dev);
+	struct mxt_data *data = fw_info->data;
+	struct device *dev = &data->client->dev;
+	struct mxt_fw_image *fw_img;
+
+	if (!fw) {
+		dev_err(dev, "could not find firmware file\n");
+		return -ENOENT;
+	}
+
+	fw_img = (struct mxt_fw_image *)fw->data;
+
+	if (le32_to_cpu(fw_img->magic_code) != MXT_FW_MAGIC) {
+		/* In case, firmware file only consist of firmware */
+		dev_dbg(dev, "Firmware file only consist of raw firmware\n");
+		fw_info->fw_len = fw->size;
+		fw_info->fw_raw_data = fw->data;
+	} else {
+		/*
+		 * In case, firmware file consist of header,
+		 * configuration, firmware.
+		 */
+		dev_dbg(dev, "Firmware file consist of header, configuration, firmware\n");
+		fw_info->fw_ver = fw_img->fw_ver;
+		fw_info->build_ver = fw_img->build_ver;
+		fw_info->hdr_len = le32_to_cpu(fw_img->hdr_len);
+		fw_info->cfg_len = le32_to_cpu(fw_img->cfg_len);
+		fw_info->fw_len = le32_to_cpu(fw_img->fw_len);
+		fw_info->cfg_crc = le32_to_cpu(fw_img->cfg_crc);
+
+		/* Check the firmware file with header */
+		if (fw_info->hdr_len != sizeof(struct mxt_fw_image)
+			|| fw_info->hdr_len + fw_info->cfg_len
+				+ fw_info->fw_len != fw->size) {
+			dev_err(dev, "Firmware file is invaild !!hdr size[%d] cfg,fw size[%d,%d] filesize[%d]\n",
+				fw_info->hdr_len, fw_info->cfg_len,
+				fw_info->fw_len, fw->size);
+			return -EINVAL;
+		}
+
+		if (!fw_info->cfg_len) {
+			dev_err(dev, "Firmware file dose not include configuration data\n");
+			return -EINVAL;
+		}
+		if (!fw_info->fw_len) {
+			dev_err(dev, "Firmware file dose not include raw firmware data\n");
+			return -EINVAL;
+		}
+
+		/* Get the address of configuration data */
+		fw_info->cfg_raw_data = fw_img->data;
+
+		/* Get the address of firmware data */
+		fw_info->fw_raw_data = fw_img->data + fw_info->cfg_len;
+
+	}
+
+	return 0;
+}
+
+static int mxt_load_fw(struct mxt_fw_info *fw_info)
+{
+	struct mxt_data *data = fw_info->data;
 	struct i2c_client *client = data->client_boot;
-	const struct firmware *fw = NULL;
+	struct device *dev = &data->client->dev;
+	const u8 *fw_data = fw_info->fw_raw_data;
+	size_t fw_size = fw_info->fw_len;
 	unsigned int frame_size;
 	unsigned int pos = 0;
 	int ret;
+	u8 val, retry_count = 5;
 
-	ret = request_firmware(&fw, fn, dev);
-	if (ret) {
-		dev_err(dev, "Unable to open firmware %s\n", fn);
-		return ret;
+	if (!fw_data) {
+		dev_err(dev, "firmware data is Null\n");
+		return -ENOMEM;
 	}
 
-	/* Change to the bootloader mode */
-	mxt_write_object(data, MXT_GEN_COMMAND_T6,
-			MXT_COMMAND_RESET, MXT_BOOT_VALUE);
-	msleep(MXT_RESET_TIME);
-
 	ret = mxt_check_bootloader(client, MXT_WAITING_BOOTLOAD_CMD);
-	if (ret)
-		goto out;
+	if (ret) {
+		/*may still be unlocked from previous update attempt */
+		ret = mxt_check_bootloader(client, MXT_WAITING_FRAME_DATA);
+		if (ret)
+			goto out;
+	} else {
+		dev_info(dev, "Unlocking bootloader\n");
+		/* Unlock bootloader */
+		mxt_unlock_bootloader(client);
+	}
 
-	/* Unlock bootloader */
-	mxt_unlock_bootloader(client);
-
-	while (pos < fw->size) {
+	while (pos < fw_size) {
 		ret = mxt_check_bootloader(client,
 						MXT_WAITING_FRAME_DATA);
 		if (ret)
 			goto out;
 
-		frame_size = ((*(fw->data + pos) << 8) | *(fw->data + pos + 1));
+		frame_size = ((*(fw_data + pos) << 8) | *(fw_data + pos + 1));
 
 		/* We should add 2 at frame size as the the firmware data is not
 		 * included the CRC bytes.
@@ -1019,7 +1341,7 @@ static int mxt_load_fw(struct device *dev, const char *fn)
 		frame_size += 2;
 
 		/* Write one frame to device */
-		mxt_fw_write(client, fw->data + pos, frame_size);
+		mxt_fw_write(client, fw_data + pos, frame_size);
 
 		ret = mxt_check_bootloader(client,
 						MXT_FRAME_CRC_PASS);
@@ -1028,12 +1350,26 @@ static int mxt_load_fw(struct device *dev, const char *fn)
 
 		pos += frame_size;
 
-		dev_dbg(dev, "Updated %d bytes / %zd bytes\n", pos, fw->size);
+		dev_dbg(dev, "Updated %d bytes / %zd bytes\n", pos, fw_size);
+	}
+
+	/* Wait for IC enter to app mode */
+	do {
+		ret = mxt_read_reg(data->client, MXT_FAMILY_ID, &val);
+		if (!ret)
+			break;
+
+		dev_err(dev, "Waiting IC enter app mode\n");
+		msleep(MXT_FWRESET_TIME);
+
+	} while (--retry_count);
+
+	if (!retry_count) {
+		dev_err(dev, "No response after firmware update\n");
+		return -EIO;
 	}
 
 out:
-	release_firmware(fw);
-
 	return ret;
 }
 
@@ -1042,29 +1378,64 @@ static ssize_t mxt_update_fw_store(struct device *dev,
 					const char *buf, size_t count)
 {
 	struct mxt_data *data = dev_get_drvdata(dev);
+	struct mxt_fw_info fw_info;
+	const struct firmware *fw = NULL;
+	const char *firmware_name = data->pdata->firmware_name ?: MXT_FW_NAME;
 	int error;
+
+	error = wait_for_completion_interruptible_timeout(&data->init_done,
+			msecs_to_jiffies(90 * MSEC_PER_SEC));
+
+	if (error <= 0) {
+		dev_err(dev, "error while waiting for device to init (%d)\n",
+			error);
+		return -EBUSY;
+	}
 
 	disable_irq(data->irq);
 
-	error = mxt_load_fw(dev, MXT_FW_NAME);
+	dev_info(dev, "Updating firmware from sysfs\n");
+
+	error = request_firmware(&fw, firmware_name, dev);
+	if (error) {
+		dev_err(dev, "Unable to open firmware %s\n", firmware_name);
+		goto out;
+	}
+
+	memset(&fw_info, 0, sizeof(struct mxt_fw_info));
+	fw_info.data = data;
+
+	error = mxt_verify_fw(&fw_info, fw);
+	if (error)
+		goto out;
+
+	/* Change to the bootloader mode */
+	error = mxt_write_object(data, MXT_GEN_COMMAND_T6,
+			MXT_COMMAND_RESET, MXT_BOOT_VALUE);
+	if (error)
+		goto out;
+
+	msleep(MXT_RESET_TIME);
+
+	error = mxt_load_fw(&fw_info);
 	if (error) {
 		dev_err(dev, "The firmware update failed(%d)\n", error);
-		count = error;
 	} else {
-		dev_dbg(dev, "The firmware update succeeded\n");
-
-		/* Wait for reset */
-		msleep(MXT_FWRESET_TIME);
-
+		dev_info(dev, "The firmware update succeeded\n");
 		kfree(data->object_table);
 		data->object_table = NULL;
 
-		mxt_initialize(data);
+		error = mxt_initialize(&fw_info);
+		if (error) {
+			dev_err(dev, "Failed to initialize\n");
+			goto out;
+		}
 	}
-
-	enable_irq(data->irq);
-
 	error = mxt_make_highchg(data);
+out:
+	enable_irq(data->irq);
+	release_firmware(fw);
+
 	if (error)
 		return error;
 
@@ -1084,12 +1455,18 @@ static const struct attribute_group mxt_attr_group = {
 	.attrs = mxt_attrs,
 };
 
-static void mxt_start(struct mxt_data *data)
+static int mxt_start(struct mxt_data *data)
 {
+	int error;
 	/* Touch enable */
-	mxt_write_object(data,
+	error = mxt_write_object(data,
 			MXT_TOUCH_MULTI_T9, MXT_TOUCH_CTRL, 0x83);
-	enable_irq(data->irq);
+	if (error)
+		dev_err(&data->client->dev, "Fail to start touch\n");
+	else
+		enable_irq(data->irq);
+
+	return error;
 }
 
 static void mxt_stop(struct mxt_data *data)
@@ -1116,10 +1493,32 @@ static void mxt_stop(struct mxt_data *data)
 static int mxt_input_open(struct input_dev *dev)
 {
 	struct mxt_data *data = input_get_drvdata(dev);
+	int ret;
 
-	mxt_start(data);
+	ret = wait_for_completion_interruptible_timeout(&data->init_done,
+			msecs_to_jiffies(90 * MSEC_PER_SEC));
+
+	if (ret < 0) {
+		dev_err(&dev->dev,
+			"error while waiting for device to init (%d)\n", ret);
+		ret = -ENXIO;
+		goto err_open;
+	}
+	if (ret == 0) {
+		dev_err(&dev->dev,
+			"timedout while waiting for device to init\n");
+		ret = -ENXIO;
+		goto err_open;
+	}
+
+	ret = mxt_start(data);
+	if (ret)
+		goto err_open;
 
 	return 0;
+
+err_open:
+	return ret;
 }
 
 static void mxt_input_close(struct input_dev *dev)
@@ -1127,6 +1526,191 @@ static void mxt_input_close(struct input_dev *dev)
 	struct mxt_data *data = input_get_drvdata(dev);
 
 	mxt_stop(data);
+}
+
+static int mxt_ts_finish_init(struct mxt_data *data)
+{
+	struct i2c_client *client = data->client;
+	int error;
+
+	error = request_threaded_irq(client->irq, NULL, mxt_interrupt,
+			data->pdata->irqflags, client->dev.driver->name, data);
+	if (error) {
+		dev_err(&client->dev, "Failed to register interrupt\n");
+		goto err_req_irq;
+	}
+
+	/*
+	* to prevent unnecessary report of touch event
+	* it will be enabled in open function
+	*/
+	mxt_stop(data);
+
+	error = mxt_make_highchg(data);
+	if (error) {
+		dev_err(&client->dev, "Failed to clear CHG pin\n");
+		goto err_req_irq;
+	}
+
+	dev_info(&client->dev,  "Mxt touch controller initialized\n");
+
+	/* for blocking to be excuted open function untile finishing ts init */
+	complete_all(&data->init_done);
+	return 0;
+
+err_req_irq:
+	return error;
+}
+
+static int mxt_ts_rest_init(struct mxt_fw_info *fw_info)
+{
+	struct mxt_data *data = fw_info->data;
+	struct device *dev = &data->client->dev;
+	int error;
+
+	error = mxt_initialize(fw_info);
+	if (error) {
+		dev_err(dev, "Failed to initialize\n");
+		goto err_free_mem;
+	}
+
+	error = mxt_ts_finish_init(data);
+	if (error)
+		goto err_free_mem;
+
+	return 0;
+
+err_free_mem:
+	kfree(data->object_table);
+	data->object_table = NULL;
+	return error;
+}
+
+static int mxt_enter_bootloader(struct mxt_data *data)
+{
+	struct device *dev = &data->client->dev;
+	int error;
+
+	data->object_table = kcalloc(data->info.object_num,
+				     sizeof(struct mxt_object),
+				     GFP_KERNEL);
+	if (!data->object_table) {
+		dev_err(dev, "%s Failed to allocate memory\n",
+			__func__);
+		error = -ENOMEM;
+		goto out;
+	}
+
+	/* Get object table information*/
+	error = mxt_get_object_table(data);
+	if (error)
+		goto err_free_mem;
+
+	/* Change to the bootloader mode */
+	mxt_write_object(data, MXT_GEN_COMMAND_T6,
+			MXT_COMMAND_RESET, MXT_BOOT_VALUE);
+	msleep(MXT_RESET_TIME);
+
+err_free_mem:
+	kfree(data->object_table);
+	data->object_table = NULL;
+
+out:
+	return error;
+}
+
+static int mxt_update_fw_on_probe(struct mxt_fw_info *fw_info)
+{
+	struct mxt_data *data = fw_info->data;
+	struct device *dev = &data->client->dev;
+	int error;
+
+	error = mxt_get_info(data);
+	if (error) {
+		/* need to check IC is in boot mode */
+		error = mxt_probe_bootloader(data->client_boot);
+		if (error) {
+			dev_err(dev, "Failed to verify bootloader's status\n");
+			goto out;
+		}
+
+		dev_info(dev, "Updating firmware from boot-mode\n");
+		goto load_fw;
+	}
+
+	/* compare the version to verify necessity of firmware updating */
+	if (data->info.version == fw_info->fw_ver
+			&& data->info.build == fw_info->build_ver) {
+		dev_dbg(dev, "Firmware version is same with in IC\n");
+		goto out;
+	}
+
+	dev_info(dev, "Updating firmware from app-mode : IC:0x%x,0x%x =! FW:0x%x,0x%x\n",
+			data->info.version, data->info.build,
+			fw_info->fw_ver, fw_info->build_ver);
+
+	error = mxt_enter_bootloader(data);
+	if (error) {
+		dev_err(dev, "Failed updating firmware\n");
+		goto out;
+	}
+
+load_fw:
+	error = mxt_load_fw(fw_info);
+	if (error)
+		dev_err(dev, "Failed updating firmware\n");
+	else
+		dev_info(dev, "succeeded updating firmware\n");
+out:
+	return error;
+}
+
+static void mxt_request_firmware_work_func(const struct firmware *fw,
+		void *context)
+{
+	struct mxt_data *data = context;
+	struct mxt_fw_info fw_info;
+	int error;
+
+	memset(&fw_info, 0, sizeof(struct mxt_fw_info));
+	fw_info.data = data;
+
+	error = mxt_verify_fw(&fw_info, fw);
+	if (error)
+		goto ts_rest_init;
+
+	/* Skip update on boot up if firmware file does not have a header */
+	if (!fw_info.hdr_len)
+		goto ts_rest_init;
+
+	error = mxt_update_fw_on_probe(&fw_info);
+	if (error)
+		goto out;
+
+ts_rest_init:
+	error = mxt_ts_rest_init(&fw_info);
+out:
+	if (error)
+		/* complete anyway, so open() doesn't get blocked */
+		complete_all(&data->init_done);
+
+	release_firmware(fw);
+}
+
+static int __devinit mxt_ts_init(struct mxt_data *data)
+{
+	struct i2c_client *client = data->client;
+	const char *firmware_name = data->pdata->firmware_name ?: MXT_FW_NAME;
+	int ret = 0;
+
+	ret = request_firmware_nowait(THIS_MODULE, true, firmware_name,
+			      &client->dev, GFP_KERNEL,
+			      data, mxt_request_firmware_work_func);
+	if (ret)
+		dev_err(&client->dev,
+			"cannot schedule firmware update (%d)\n", ret);
+
+	return ret;
 }
 
 static int __devinit mxt_probe(struct i2c_client *client,
@@ -1159,6 +1743,7 @@ static int __devinit mxt_probe(struct i2c_client *client,
 	data->input_dev = input_dev;
 	data->pdata = pdata;
 	data->irq = client->irq;
+	init_completion(&data->init_done);
 
 	mxt_calc_resolution(data);
 
@@ -1195,27 +1780,15 @@ static int __devinit mxt_probe(struct i2c_client *client,
 		goto err_free_mem;
 	}
 
-	error = mxt_initialize(data);
-	if (error)
-		goto err_free_object;
-
-	error = request_threaded_irq(client->irq, NULL, mxt_interrupt,
-			pdata->irqflags, client->dev.driver->name, data);
-	if (error) {
-		dev_err(&client->dev, "Failed to register interrupt\n");
-		goto err_free_object;
-	}
-	mxt_stop(data);
-
-	error = mxt_make_highchg(data);
-	if (error)
-		goto err_free_irq;
-
 	error = input_register_device(input_dev);
 	if (error)
-		goto err_free_irq;
+		goto err_unregister_client;
 
 	error = sysfs_create_group(&client->dev.kobj, &mxt_attr_group);
+	if (error)
+		goto err_unregister_device;
+
+	error = mxt_ts_init(data);
 	if (error)
 		goto err_unregister_device;
 
@@ -1224,11 +1797,8 @@ static int __devinit mxt_probe(struct i2c_client *client,
 err_unregister_device:
 	input_unregister_device(input_dev);
 	input_dev = NULL;
-err_free_irq:
-	enable_irq(client->irq);
-	free_irq(client->irq, data);
-err_free_object:
-	kfree(data->object_table);
+
+err_unregister_client:
 	i2c_unregister_device(data->client_boot);
 err_free_mem:
 	input_free_device(input_dev);
