@@ -576,10 +576,20 @@ static void mxt_input_touchevent(struct mxt_data *data,
 	int area;
 	int pressure;
 
+	if (id >= MXT_MAX_FINGER) {
+		dev_err(dev, "MXT_MAX_FINGER exceeded!\n");
+		return;
+	}
+
 	/* Check the touch is present on the screen */
 	if (!(status & MXT_DETECT)) {
 		if (status & MXT_RELEASE) {
 			dev_dbg(dev, "[%d] released\n", id);
+
+			finger[id].status = MXT_RELEASE;
+			mxt_input_report(data, id);
+		} else if (status & MXT_SUPPRESS) {
+			dev_dbg(dev, "[%d] suppressed\n", id);
 
 			finger[id].status = MXT_RELEASE;
 			mxt_input_report(data, id);
