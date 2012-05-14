@@ -522,11 +522,10 @@ static int mxt_write_object(struct mxt_data *data,
 	return mxt_write_reg(data->client, reg + offset, val);
 }
 
-static void mxt_input_report(struct mxt_data *data, int single_id)
+static void mxt_input_report(struct mxt_data *data)
 {
 	struct mxt_finger *finger = data->finger;
 	struct input_dev *input_dev = data->input_dev;
-	int status = finger[single_id].status;
 	int finger_num = 0;
 	int id;
 
@@ -551,15 +550,6 @@ static void mxt_input_report(struct mxt_data *data, int single_id)
 		} else {
 			finger[id].status = 0;
 		}
-	}
-
-	input_report_key(input_dev, BTN_TOUCH, finger_num > 0);
-
-	if (status != MXT_RELEASE) {
-		input_report_abs(input_dev, ABS_X, finger[single_id].x);
-		input_report_abs(input_dev, ABS_Y, finger[single_id].y);
-		input_report_abs(input_dev,
-				 ABS_PRESSURE, finger[single_id].pressure);
 	}
 
 	input_sync(input_dev);
@@ -587,12 +577,12 @@ static void mxt_input_touchevent(struct mxt_data *data,
 			dev_dbg(dev, "[%d] released\n", id);
 
 			finger[id].status = MXT_RELEASE;
-			mxt_input_report(data, id);
+			mxt_input_report(data);
 		} else if (status & MXT_SUPPRESS) {
 			dev_dbg(dev, "[%d] suppressed\n", id);
 
 			finger[id].status = MXT_RELEASE;
-			mxt_input_report(data, id);
+			mxt_input_report(data);
 		}
 		return;
 	}
@@ -622,7 +612,7 @@ static void mxt_input_touchevent(struct mxt_data *data,
 	finger[id].area = area;
 	finger[id].pressure = pressure;
 
-	mxt_input_report(data, id);
+	mxt_input_report(data);
 }
 
 static irqreturn_t mxt_interrupt(int irq, void *dev_id)
@@ -1176,18 +1166,8 @@ static int __devinit mxt_probe(struct i2c_client *client,
 	mxt_calc_resolution(data);
 
 	__set_bit(EV_ABS, input_dev->evbit);
-	__set_bit(EV_KEY, input_dev->evbit);
-	__set_bit(BTN_TOUCH, input_dev->keybit);
+	__set_bit(INPUT_PROP_DIRECT, input_dev->propbit);
 
-	/* For single touch */
-	input_set_abs_params(input_dev, ABS_X,
-			     0, data->max_x, 0, 0);
-	input_set_abs_params(input_dev, ABS_Y,
-			     0, data->max_y, 0, 0);
-	input_set_abs_params(input_dev, ABS_PRESSURE,
-			     0, 255, 0, 0);
-
-	/* For multi touch */
 	input_mt_init_slots(input_dev, MXT_MAX_FINGER);
 	input_set_abs_params(input_dev, ABS_MT_TOUCH_MAJOR,
 			     0, MXT_MAX_AREA, 0, 0);
