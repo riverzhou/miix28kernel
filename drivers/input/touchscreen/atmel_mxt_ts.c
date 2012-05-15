@@ -641,7 +641,7 @@ static irqreturn_t mxt_interrupt(int irq, void *dev_id)
 
 		max_reportid = object->max_reportid;
 		min_reportid = max_reportid -
-			(object->instances + 1) * object->num_report_ids + 1;
+			object->instances * object->num_report_ids + 1;
 		id = reportid - min_reportid;
 
 		if (reportid >= min_reportid && reportid <= max_reportid)
@@ -685,22 +685,20 @@ static int mxt_check_reg_init(struct mxt_data *data)
 		}
 
 		dev_dbg(dev, "Writing config for obj %d len %d (%d %d %d)\n",
-			object->type,
-			(object->size + 1) * (object->instances + 1),
-			object->size + 1, object->instances + 1,
-			num_instances);
+			object->type, object->size * object->instances,
+			object->size, object->instances, num_instances);
 
-		if (num_instances > (object->instances + 1)) {
+		if (num_instances > object->instances) {
 			dev_err(dev, "Too much config data for type %d\n",
 				object->type);
 			return -EINVAL;
 		}
 
-		for (i = 0; i < (object->size + 1) * num_instances; i++) {
+		for (i = 0; i < object->size * num_instances; i++) {
 			config_offset = index + i;
 			if (config_offset > pdata->config_length) {
 				dev_err(dev, "Not enough config data! Object %d expects %d bytes (%d instances)\n",
-					object->type, object->size + 1,
+					object->type, object->size,
 					num_instances);
 
 				return -EINVAL;
@@ -708,7 +706,7 @@ static int mxt_check_reg_init(struct mxt_data *data)
 			mxt_write_object(data, object->type, i,
 					 pdata->config[config_offset]);
 		}
-		index += (object->size + 1) * num_instances;
+		index += object->size * num_instances;
 	}
 
 	return 0;
@@ -837,18 +835,19 @@ static int mxt_get_object_table(struct mxt_data *data)
 
 		object->type = buf[0];
 		object->start_address = (buf[2] << 8) | buf[1];
-		object->size = buf[3];
-		object->instances = buf[4];
+		/* the real size of object is buf[3]+1 */
+		object->size = buf[3] + 1;
+		/* the real instances of object is buf[4]+1 */
+		object->instances = buf[4] + 1;
 		object->num_report_ids = buf[5];
 
 		dev_dbg(&data->client->dev,
 			"obj %d addr 0x%x size %d insts %d num_reps %d\n",
 			object->type, object->start_address, object->size,
-			object->instances + 1, object->num_report_ids);
+			object->instances, object->num_report_ids);
 
 		if (object->num_report_ids) {
-			reportid += object->num_report_ids *
-					(object->instances + 1);
+			reportid += object->num_report_ids * object->instances;
 			object->max_reportid = reportid;
 		}
 	}
@@ -963,7 +962,7 @@ static ssize_t mxt_object_show(struct device *dev,
 			continue;
 		}
 
-		for (j = 0; j < object->size + 1; j++) {
+		for (j = 0; j < object->size; j++) {
 			error = mxt_read_object(data,
 						object->type, j, &val);
 			if (error)
