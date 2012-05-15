@@ -729,12 +729,14 @@ static void mxt_handle_pdata(struct mxt_data *data)
 			pdata->orient);
 
 	/* Set touchscreen burst length */
-	mxt_write_object(data, MXT_TOUCH_MULTI_T9,
-			MXT_TOUCH_BLEN, pdata->blen);
+	if (pdata->blen)
+		mxt_write_object(data, MXT_TOUCH_MULTI_T9,
+				MXT_TOUCH_BLEN, pdata->blen);
 
 	/* Set touchscreen threshold */
-	mxt_write_object(data, MXT_TOUCH_MULTI_T9,
-			MXT_TOUCH_TCHTHR, pdata->threshold);
+	if (pdata->threshold)
+		mxt_write_object(data, MXT_TOUCH_MULTI_T9,
+				MXT_TOUCH_TCHTHR, pdata->threshold);
 
 	/* Set touchscreen resolution */
 	mxt_write_object(data, MXT_TOUCH_MULTI_T9,
