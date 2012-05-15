@@ -292,7 +292,7 @@ static void manta_bat_cable_work(struct work_struct *work)
 	case CABLE_TYPE_AC:
 		battery->charging_status = POWER_SUPPLY_STATUS_CHARGING;
 		manta_bat_enable_charging(battery, true);
-		wake_lock_timeout(&battery->vbus_wake_lock, HZ * 2);
+		wake_lock(&battery->vbus_wake_lock);
 		break;
 	default:
 		pr_err("%s: Invalid cable type\n", __func__);
