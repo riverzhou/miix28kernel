@@ -1111,10 +1111,23 @@ static void mxt_start(struct mxt_data *data)
 
 static void mxt_stop(struct mxt_data *data)
 {
+	int id, count = 0;
+
 	disable_irq(data->irq);
 	/* Touch disable */
 	mxt_write_object(data,
 			MXT_TOUCH_MULTI_T9, MXT_TOUCH_CTRL, 0);
+
+	/* release the finger which is remained */
+	for (id = 0; id < MXT_MAX_FINGER; id++) {
+		if (!data->finger[id].status)
+			continue;
+		data->finger[id].status = MXT_RELEASE;
+		count++;
+	}
+
+	if (count)
+		mxt_input_report(data);
 }
 
 static int mxt_input_open(struct input_dev *dev)
