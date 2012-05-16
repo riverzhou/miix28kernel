@@ -28,11 +28,14 @@
 #include <plat/dp.h>
 #include <plat/fb.h>
 #include <plat/gpio-cfg.h>
+#include <plat/iic.h>
 #include <plat/regs-fb-v4.h>
+#include <plat/tv-core.h>
 
 #include <mach/gpio.h>
 #include <mach/map.h>
 #include <mach/regs-clock.h>
+#include <mach/sysmmu.h>
 
 #include "common.h"
 
@@ -43,6 +46,10 @@
 
 #define GPIO_LCDP_SCL__18V	EXYNOS5_GPD0(6)
 #define GPIO_LCDP_SDA__18V	EXYNOS5_GPD0(7)
+
+#define GPIO_HDMI_HPD		EXYNOS5_GPX3(7)
+#define GPIO_HDMI_DCDC_EN	EXYNOS5_GPA0(4)
+#define GPIO_HDMI_LS_EN		EXYNOS5_GPG0(7)
 
 static void manta_lcd_set_power(struct plat_lcd_data *pd,
 				unsigned int power)
@@ -186,6 +193,22 @@ static struct platform_device exynos_device_md2 = {
 	.id = 2,
 };
 
+/* HDMI */
+static void manta_hdmiphy_enable(struct platform_device *pdev, int en)
+{
+	if (en) {
+		gpio_set_value(GPIO_HDMI_LS_EN, 1);
+		s5p_hdmiphy_enable(pdev, 1);
+	} else {
+		s5p_hdmiphy_enable(pdev, 0);
+		gpio_set_value(GPIO_HDMI_LS_EN, 0);
+	}
+}
+
+static struct s5p_hdmi_platdata hdmi_platdata __initdata = {
+	.hdmiphy_enable = manta_hdmiphy_enable,
+};
+
 static struct platform_device *manta_display_devices[] __initdata = {
 	&exynos_device_md0,
 	&exynos_device_md1,
@@ -194,6 +217,10 @@ static struct platform_device *manta_display_devices[] __initdata = {
 	&s5p_device_fimd1,
 	&manta_lcd,
 	&s5p_device_dp,
+
+	&s5p_device_i2c_hdmiphy,
+	&s5p_device_mixer,
+	&s5p_device_hdmi,
 };
 
 void __init exynos5_manta_display_init(void)
@@ -208,6 +235,18 @@ void __init exynos5_manta_display_init(void)
 	dev_set_name(&s5p_device_fimd1.dev, "exynos5-fb.1");
 	clk_add_alias("lcd", "exynos5-fb.1", "fimd", &s5p_device_fimd1.dev);
 	s5p_dp_set_platdata(&manta_dp_data);
+
+	gpio_request_one(GPIO_HDMI_HPD, GPIOF_IN, "HDMI_HPD");
+	/* HDMI Companion DC/DC converter and HPD circuitry */
+	gpio_request_one(GPIO_HDMI_DCDC_EN, GPIOF_OUT_INIT_HIGH, "HDMI_DCDC_EN");
+	/* HDMI Companion level shifters and LDO */
+	gpio_request_one(GPIO_HDMI_LS_EN, GPIOF_OUT_INIT_LOW, "HDMI_LS_EN");
+
+	s5p_hdmi_set_platdata(&hdmi_platdata);
+	dev_set_name(&s5p_device_hdmi.dev, "exynos5-hdmi");
+	clk_add_alias("hdmi", "s5p-hdmi", "hdmi", &s5p_device_hdmi.dev);
+	platform_set_sysmmu(&SYSMMU_PLATDEV(tv).dev, &s5p_device_mixer.dev);
+	s5p_i2c_hdmiphy_set_platdata(NULL);
 
 	platform_add_devices(manta_display_devices,
 			     ARRAY_SIZE(manta_display_devices));
