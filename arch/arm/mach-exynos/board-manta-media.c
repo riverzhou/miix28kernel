@@ -54,21 +54,6 @@ void __init exynos5_manta_media_init(void)
 	manta_media_sysmmu_init();
 	s5p_mfc_set_platdata(&manta_mfc_pd);
 
-	dev_set_name(&exynos5_device_gsc0.dev, "exynos-gsc.0");
-	dev_set_name(&exynos5_device_gsc1.dev, "exynos-gsc.1");
-	dev_set_name(&exynos5_device_gsc2.dev, "exynos-gsc.2");
-	dev_set_name(&exynos5_device_gsc3.dev, "exynos-gsc.3");
-
-	clk_add_alias("gscl", "exynos5250-gsc.0", "gscl", &exynos5_device_gsc0.dev);
-	clk_add_alias("gscl", "exynos5250-gsc.1", "gscl", &exynos5_device_gsc1.dev);
-	clk_add_alias("gscl", "exynos5250-gsc.2", "gscl", &exynos5_device_gsc2.dev);
-	clk_add_alias("gscl", "exynos5250-gsc.3", "gscl", &exynos5_device_gsc3.dev);
-
-	exynos5_gsc_set_pdev_name(0, "exynos5250-gsc");
-	exynos5_gsc_set_pdev_name(1, "exynos5250-gsc");
-	exynos5_gsc_set_pdev_name(2, "exynos5250-gsc");
-	exynos5_gsc_set_pdev_name(3, "exynos5250-gsc");
-
 	s3c_set_platdata(&exynos_gsc0_default_data,
 			 sizeof(exynos_gsc0_default_data),
 			 &exynos5_device_gsc0);
