@@ -1211,7 +1211,7 @@ static int __devinit mxt_probe(struct i2c_client *client,
 		dev_err(&client->dev, "Failed to register interrupt\n");
 		goto err_free_object;
 	}
-	disable_irq(client->irq);
+	mxt_stop(data);
 
 	error = mxt_make_highchg(data);
 	if (error)
