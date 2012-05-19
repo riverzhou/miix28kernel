@@ -366,6 +366,7 @@ static void __init manta_machine_init(void)
 	exynos5_manta_media_init();
 	exynos5_manta_camera_init();
 	exynos5_manta_sensors_init();
+	exynos5_manta_gps_init();
 
 }
 
