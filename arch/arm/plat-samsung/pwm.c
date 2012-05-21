@@ -19,6 +19,7 @@
 #include <linux/clk.h>
 #include <linux/io.h>
 #include <linux/pwm.h>
+#include <linux/spinlock.h>
 
 #include <mach/map.h>
 
@@ -52,6 +53,7 @@ static inline int pwm_is_tdiv(struct pwm_device *pwm)
 
 static DEFINE_MUTEX(pwm_lock);
 static LIST_HEAD(pwm_list);
+static spinlock_t pwm_spinlock;
 
 struct pwm_device *pwm_request(int pwm_id, const char *label)
 {
@@ -108,15 +110,15 @@ int pwm_enable(struct pwm_device *pwm)
 	unsigned long flags;
 	unsigned long tcon;
 
-	local_irq_save(flags);
+	spin_lock_irqsave(&pwm_spinlock, flags);
 
 	tcon = __raw_readl(S3C2410_TCON);
 	tcon |= pwm_tcon_start(pwm);
 	__raw_writel(tcon, S3C2410_TCON);
 
-	local_irq_restore(flags);
-
 	pwm->running = 1;
+
+	spin_unlock_irqrestore(&pwm_spinlock, flags);
 	return 0;
 }
 
@@ -127,15 +129,15 @@ void pwm_disable(struct pwm_device *pwm)
 	unsigned long flags;
 	unsigned long tcon;
 
-	local_irq_save(flags);
+	spin_lock_irqsave(&pwm_spinlock, flags);
 
 	tcon = __raw_readl(S3C2410_TCON);
 	tcon &= ~pwm_tcon_start(pwm);
 	__raw_writel(tcon, S3C2410_TCON);
 
-	local_irq_restore(flags);
-
 	pwm->running = 0;
+
+	spin_unlock_irqrestore(&pwm_spinlock, flags);
 }
 
 EXPORT_SYMBOL(pwm_disable);
@@ -210,9 +212,9 @@ int pwm_config(struct pwm_device *pwm, int duty_ns, int period_ns)
 		tcnt = period_ns / tin_ns;
 	} else
 		tin_ns = NS_IN_HZ / clk_get_rate(pwm->clk);
+	pwm->duty_ns = duty_ns;
 
 	/* Note, counters count down */
-
 	tcmp = duty_ns / tin_ns;
 	tcmp = tcnt - tcmp;
 	/* the pwm hw only checks the compare register after a decrement,
@@ -227,7 +229,7 @@ int pwm_config(struct pwm_device *pwm, int duty_ns, int period_ns)
 
 	/* Update the PWM register block. */
 
-	local_irq_save(flags);
+	spin_lock_irqsave(&pwm_spinlock, flags);
 
 	__raw_writel(tcmp, S3C2410_TCMPB(pwm->pwm_id));
 	__raw_writel(tcnt, S3C2410_TCNTB(pwm->pwm_id));
@@ -240,7 +242,7 @@ int pwm_config(struct pwm_device *pwm, int duty_ns, int period_ns)
 	tcon &= ~pwm_tcon_manulupdate(pwm);
 	__raw_writel(tcon, S3C2410_TCON);
 
-	local_irq_restore(flags);
+	spin_unlock_irqrestore(&pwm_spinlock, flags);
 
 	return 0;
 }
@@ -302,14 +304,13 @@ static int s3c_pwm_probe(struct platform_device *pdev)
 	clk_enable(pwm->clk);
 	clk_enable(pwm->clk_div);
 
-	local_irq_save(flags);
+	spin_lock_irqsave(&pwm_spinlock, flags);
 
 	tcon = __raw_readl(S3C2410_TCON);
 	tcon |= pwm_tcon_invert(pwm);
 	__raw_writel(tcon, S3C2410_TCON);
 
-	local_irq_restore(flags);
-
+	spin_unlock_irqrestore(&pwm_spinlock, flags);
 
 	ret = pwm_register(pwm);
 	if (ret) {
@@ -363,8 +364,8 @@ static int s3c_pwm_suspend(struct platform_device *pdev, pm_message_t state)
 	 * Otherwise driver leaves PWM unconfigured if same values
 	 * passed to pwm_config
 	 */
-	pwm->period_ns = 0;
-	pwm->duty_ns = 0;
+	pwm->duty_ns = -1;
+	pwm->period_ns = -1;
 
 	return 0;
 }
@@ -401,6 +402,8 @@ static struct platform_driver s3c_pwm_driver = {
 static int __init pwm_init(void)
 {
 	int ret;
+
+	spin_lock_init(&pwm_spinlock);
 
 	clk_scaler[0] = clk_get(NULL, "pwm-scaler0");
 	clk_scaler[1] = clk_get(NULL, "pwm-scaler1");
