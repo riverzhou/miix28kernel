@@ -254,6 +254,8 @@ static struct dw_mci_board exynos_dwmci0_pdata __initdata = {
 	.hclk_name		= "dwmci",
 	.cclk_name		= "sclk_dwmci",
 	.cfg_gpio		= exynos_dwmci0_cfg_gpio,
+	.sdr_timing		= 0x03020001,
+	.ddr_timing		= 0x03030002,
 };
 
 static struct platform_device *manta_devices[] __initdata = {
