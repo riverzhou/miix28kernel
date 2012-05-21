@@ -250,6 +250,8 @@ static struct dw_mci_board exynos_wlan_pdata __initdata = {
 	.hclk_name		= "dwmci",
 	.cclk_name		= "sclk_dwmci",
 	.cfg_gpio		= exynos5_setup_wlan_cfg_gpio,
+	.sdr_timing		= 0x03040003,
+	.ddr_timing		= 0x03030002,
 };
 
 static struct platform_device *manta_wlan_devs[] __initdata = {
