@@ -263,10 +263,10 @@ static void ion_exynos_heap_free(struct ion_buffer *buffer)
 	kfree(sgtable);
 }
 
-static struct scatterlist *ion_exynos_heap_map_dma(struct ion_heap *heap,
-					    struct ion_buffer *buffer)
+static struct sg_table *ion_exynos_heap_map_dma(struct ion_heap *heap,
+						struct ion_buffer *buffer)
 {
-	return ((struct sg_table *)buffer->priv_virt)->sgl;
+	return buffer->priv_virt;
 }
 
 static void ion_exynos_heap_unmap_dma(struct ion_heap *heap,
@@ -431,23 +431,27 @@ static int ion_exynos_contig_heap_phys(struct ion_heap *heap,
 	return 0;
 }
 
-static struct scatterlist *ion_exynos_contig_heap_map_dma(struct ion_heap *heap,
+static struct sg_table *ion_exynos_contig_heap_map_dma(struct ion_heap *heap,
 						   struct ion_buffer *buffer)
 {
-	struct scatterlist *sglist;
+	struct sg_table *table;
+	int ret;
 
-	sglist = vmalloc(sizeof(struct scatterlist));
-	if (!sglist)
+	table = kzalloc(sizeof(struct sg_table), GFP_KERNEL);
+	if (!table)
 		return ERR_PTR(-ENOMEM);
-	sg_init_table(sglist, 1);
-	sg_set_page(sglist, phys_to_page(buffer->priv_phys), buffer->size, 0);
-	return sglist;
+	ret = sg_alloc_table(table, 1, GFP_KERNEL);
+	if (ret)
+		return ERR_PTR(ret);
+	sg_init_one(table->sgl, phys_to_page(buffer->priv_phys), buffer->size);
+	return table;
 }
 
 static void ion_exynos_contig_heap_unmap_dma(struct ion_heap *heap,
-			       struct ion_buffer *buffer)
+					     struct ion_buffer *buffer)
 {
-	vfree(buffer->sglist);
+	if (buffer->sg_table)
+		sg_free_table(buffer->sg_table);
 }
 
 static int ion_exynos_contig_heap_map_user(struct ion_heap *heap,
@@ -761,6 +765,7 @@ static void ion_exynos_user_heap_destroy(struct ion_heap *heap)
 	kfree(heap);
 }
 
+#if 0
 enum ION_MSYNC_TYPE {
 	IMSYNC_DEV_TO_READ = 0,
 	IMSYNC_DEV_TO_WRITE = 1,
@@ -873,6 +878,7 @@ static long exynos_heap_ioctl(struct ion_client *client, unsigned int cmd,
 
 	return ret;
 }
+#endif
 
 static struct ion_heap *__ion_heap_create(struct ion_platform_heap *heap_data)
 {
@@ -937,7 +943,7 @@ static int exynos_ion_probe(struct platform_device *pdev)
 	if (!heaps)
 		return -ENOMEM;
 
-	ion_exynos = ion_device_create(&exynos_heap_ioctl);
+	ion_exynos = ion_device_create(NULL);
 	if (IS_ERR_OR_NULL(ion_exynos)) {
 		kfree(heaps);
 		return PTR_ERR(ion_exynos);

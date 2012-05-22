@@ -111,6 +111,17 @@ struct ion_platform_data {
 };
 
 /**
+ * ion_reserve() - reserve memory for ion heaps if applicable
+ * @data:	platform data specifying starting physical address and
+ *		size
+ *
+ * Calls memblock reserve to set aside memory for heaps that are
+ * located at specific memory addresses or of specfic sizes not
+ * managed by the kernel
+ */
+void ion_reserve(struct ion_platform_data *data);
+
+/**
  * ion_client_create() -  allocate a client and returns it
  * @dev:	the global ion device
  * @heap_mask:	mask of heaps this client can allocate from
@@ -127,27 +138,6 @@ struct ion_client *ion_client_create(struct ion_device *dev,
  * any handles it is holding.
  */
 void ion_client_destroy(struct ion_client *client);
-
-/**
- * ion_get_client() - obtain a user client from file descriptor from user
- * @fd:		the user client created by the request from user. This is
- *		passed from user.
- *
- * This function is requested by the device drivers that implement V4L2 and VB2
- * interfaces. Those device drivers just obtains virtual address of a buffer
- * even though it is allocated and mapped by ION. While they can retrieve the
- * handle of the buffer, they are unable to access it because they do not know
- * what client the handle belongs to.
- * Note that the client obtained by this function is not released until
- * ion_put_client() is called and the client is given.
- */
-struct ion_client *ion_get_user_client(unsigned int fd_client);
-
-/**
- * ion_put_client() - release the user client obtained by ion_get_client()
- * @client - The user client to release.
- */
-void ion_put_user_client(struct ion_client *user_client);
 
 /**
  * ion_alloc - allocate ion memory
@@ -210,103 +200,22 @@ void *ion_map_kernel(struct ion_client *client, struct ion_handle *handle);
 void ion_unmap_kernel(struct ion_client *client, struct ion_handle *handle);
 
 /**
- * ion_map_dma - create a dma mapping for a given handle
+ * ion_share_dma_buf() - given an ion client, create a dma-buf fd
  * @client:	the client
- * @handle:	handle to map
- *
- * Return an sglist describing the given handle
+ * @handle:	the handle
  */
-struct scatterlist *ion_map_dma(struct ion_client *client,
-				struct ion_handle *handle);
+int ion_share_dma_buf(struct ion_client *client, struct ion_handle *handle);
 
 /**
- * ion_unmap_dma() - destroy a dma mapping for a handle
+ * ion_import_dma_buf() - given an dma-buf fd from the ion exporter get handle
  * @client:	the client
- * @handle:	handle to unmap
- */
-void ion_unmap_dma(struct ion_client *client, struct ion_handle *handle);
-
-/**
- * ion_share() - given a handle, obtain a buffer to pass to other clients
- * @client:	the client
- * @handle:	the handle to share
+ * @fd:		the dma-buf fd
  *
- * Given a handle, return a buffer, which exists in a global name
- * space, and can be passed to other clients.  Should be passed into ion_import
- * to obtain a new handle for this buffer.
- *
- * NOTE: This function does do not an extra reference.  The burden is on the
- * caller to make sure the buffer doesn't go away while it's being passed to
- * another client.  That is, ion_free should not be called on this handle until
- * the buffer has been imported into the other client.
+ * Given an dma-buf fd that was allocated through ion via ion_share_dma_buf,
+ * import that fd and return a handle representing it.  If a dma-buf from
+ * another exporter is passed in this function will return ERR_PTR(-EINVAL)
  */
-struct ion_buffer *ion_share(struct ion_client *client,
-			     struct ion_handle *handle);
-
-/**
- * ion_import() - given an buffer in another client, import it
- * @client:	this blocks client
- * @buffer:	the buffer to import (as obtained from ion_share)
- *
- * Given a buffer, add it to the client and return the handle to use to refer
- * to it further.  This is called to share a handle from one kernel client to
- * another.
- */
-struct ion_handle *ion_import(struct ion_client *client,
-			      struct ion_buffer *buffer);
-
-/**
- * ion_share_fd() - given a handle, obtain a buffer(fd) to pass to userspace
- * @client:	the client
- * @handle:	the handle to share
- *
- * Given a handle, return a fd of a buffer which can be passed to userspace.
- * Should be passed into userspace or ion_import_fd to obtain a new handle for
- * this buffer.
- */
-int ion_share_fd(struct ion_client *client, struct ion_handle *handle);
-
-/**
- * ion_import_fd() - given an fd obtained via ION_IOC_SHARE ioctl, import it
- * @client:	this blocks client
- * @fd:		the fd
- *
- * A helper function for drivers that will be recieving ion buffers shared
- * with them from userspace.  These buffers are represented by a file
- * descriptor obtained as the return from the ION_IOC_SHARE ioctl.
- * This function coverts that fd into the underlying buffer, and returns
- * the handle to use to refer to it further.
- */
-struct ion_handle *ion_import_fd(struct ion_client *client, int fd);
-
-/**
- * ion_import_uva() - given a virtual address from user, that is mmapped on an
- *                    fd obtained via ION_IOCTL_SHARE ioctl, import it
- * @client:    this blocks client
- * @uva:       virtual address in userspace.
- * @offset:	How many bytes are distant from the beginning of the ION buffer
- *
- * A helper function for drivers that will be recieving ion buffers shared
- * with them from userspace.  These buffers are represented by a virtual
- * address that is mmaped on a file descriptor obtained as the return from the
- * ION_IOC_SHARE ioctl.
- * This function does same job with ion_import_fd().
- */
-struct ion_handle *ion_import_uva(struct ion_client *client, unsigned long uva,
-								off_t *offset);
-
-#ifdef CONFIG_ION_EXYNOS
-struct ion_handle *ion_exynos_get_user_pages(struct ion_client *client,
-			unsigned long uvaddr, size_t len, unsigned int flags);
-#else
-#include <linux/err.h>
-static inline struct ion_handle *ion_exynos_get_user_pages(
-				struct ion_client *client, unsigned long uvaddr,
-				size_t len, unsigned int flags)
-{
-	return ERR_PTR(-ENOSYS);
-}
-#endif
+struct ion_handle *ion_import_dma_buf(struct ion_client *client, int fd);
 
 #endif /* __KERNEL__ */
 
