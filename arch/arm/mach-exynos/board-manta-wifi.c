@@ -270,6 +270,8 @@ static void __init manta_wlan_gpio(void)
 	s3c_gpio_cfgpin(gpio, S3C_GPIO_OUTPUT);
 	s3c_gpio_setpull(gpio, S3C_GPIO_PULL_NONE);
 	s5p_gpio_set_drvstr(gpio, S5P_GPIO_DRVSTR_LV2);
+	/* Keep power state during suspend */
+	s5p_gpio_set_pd_cfg(gpio, S5P_GPIO_PD_PREV_STATE);
 	/* Turn ON power so wlan chip will be found */
 	gpio_set_value(gpio, 1);
 
