@@ -27,6 +27,8 @@
 
 #include <plat/devs.h>
 
+#include "board-manta.h"
+
 #define GPIO_ES305_WAKEUP	EXYNOS5_GPG0(3)
 #define GPIO_ES305_RESET	EXYNOS5_GPG0(4)
 #define GPIO_CODEC_LDO_EN	EXYNOS5_GPH1(1)
@@ -129,6 +131,7 @@ static struct wm8994_pdata wm1811_pdata = {
 	.micd_lvl_sel = 0xff,
 
 	.ldo_ena_always_driven = true,
+	.irq_base = MANTA_IRQ_BOARD_AUDIO_START,
 };
 
 static struct i2c_board_info i2c_devs7[] __initdata = {

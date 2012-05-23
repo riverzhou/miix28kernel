@@ -20,6 +20,10 @@
 
 /* board IRQ allocations */
 #define MANTA_IRQ_BOARD_PMIC_START	IRQ_BOARD_START
+#define MANTA_IRQ_BOARD_PMIC_NR		16
+#define MANTA_IRQ_BOARD_AUDIO_START	(IRQ_BOARD_START + \
+					MANTA_IRQ_BOARD_PMIC_NR)
+#define MANTA_IRQ_BOARD_AUDIO_NR	27
 
 void exynos5_manta_audio_init(void);
 void exynos5_manta_display_init(void);
