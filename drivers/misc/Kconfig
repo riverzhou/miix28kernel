@@ -267,6 +267,17 @@ config CS5535_CLOCK_EVENT_SRC
 	  MFGPTs have a better resolution and max interval than the
 	  generic PIT, and are suitable for use as high-res timers.
 
+config HAPTIC_ISA1200
+	tristate "Imagis ISA1200 Haptic Controller"
+	depends on I2C && ANDROID_TIMED_OUTPUT && HAVE_PWM
+	default n
+	help
+	  If you say yes here you get support for the Imagis ISA1200 haptic
+	  controller. ISA1200 is a haptic motor driver with register based
+	  architecture, allowing for I2C control.
+	  This driver provides haptic motor control and is accessed as a
+	  timed output device.
+
 config HP_ILO
 	tristate "Channel interface driver for the HP iLO processor"
 	depends on PCI
