@@ -483,6 +483,7 @@ static void __init manta_machine_init(void)
 	exynos5_manta_sensors_init();
 	exynos5_manta_gps_init();
 	exynos5_manta_jack_init();
+	exynos5_manta_vib_init();
 
 }
 
