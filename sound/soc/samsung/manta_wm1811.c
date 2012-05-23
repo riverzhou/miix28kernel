@@ -36,15 +36,11 @@ struct manta_wm1811 {
 static const struct snd_kcontrol_new manta_controls[] = {
 	SOC_DAPM_PIN_SWITCH("HP"),
 	SOC_DAPM_PIN_SWITCH("SPK"),
-	SOC_DAPM_PIN_SWITCH("RCV"),
-	SOC_DAPM_PIN_SWITCH("LINE"),
 };
 
-const struct snd_soc_dapm_widget manta_dapm_widgets[] = {
+const struct snd_soc_dapm_widget manta_widgets[] = {
 	SND_SOC_DAPM_HP("HP", NULL),
 	SND_SOC_DAPM_SPK("SPK", NULL),
-	SND_SOC_DAPM_SPK("RCV", NULL),
-	SND_SOC_DAPM_SPK("LINE", NULL),
 
 	SND_SOC_DAPM_MIC("Headset Mic", NULL),
 	SND_SOC_DAPM_MIC("Main Mic", NULL),
@@ -53,7 +49,7 @@ const struct snd_soc_dapm_widget manta_dapm_widgets[] = {
 	SND_SOC_DAPM_INPUT("S5P RP"),
 };
 
-const struct snd_soc_dapm_route manta_dapm_routes[] = {
+const struct snd_soc_dapm_route manta_paths[] = {
 	{ "HP", NULL, "HPOUT1L" },
 	{ "HP", NULL, "HPOUT1R" },
 
@@ -61,12 +57,6 @@ const struct snd_soc_dapm_route manta_dapm_routes[] = {
 	{ "SPK", NULL, "SPKOUTLP" },
 	{ "SPK", NULL, "SPKOUTRN" },
 	{ "SPK", NULL, "SPKOUTRP" },
-
-	{ "RCV", NULL, "HPOUT2N" },
-	{ "RCV", NULL, "HPOUT2P" },
-
-	{ "LINE", NULL, "LINEOUT1N" },
-	{ "LINE", NULL, "LINEOUT1P" },
 
 	{ "IN1LP", NULL, "MICBIAS1" },
 	{ "IN1LN", NULL, "MICBIAS1" },
@@ -102,12 +92,6 @@ static int manta_wm1811_aif1_hw_params(struct snd_pcm_substream *substream,
 	else
 		pll_out = params_rate(params) * 256;
 
-	ret = snd_soc_dai_set_fmt(codec_dai, SND_SOC_DAIFMT_I2S |
-					SND_SOC_DAIFMT_NB_NF |
-					SND_SOC_DAIFMT_CBM_CFM);
-	if (ret < 0)
-		return ret;
-
 	ret = snd_soc_dai_set_fmt(cpu_dai, SND_SOC_DAIFMT_I2S |
 					SND_SOC_DAIFMT_NB_NF |
 					SND_SOC_DAIFMT_CBM_CFM);
@@ -141,31 +125,48 @@ static int manta_wm1811_aif1_hw_params(struct snd_pcm_substream *substream,
 	return 0;
 }
 
-/*
- * manta WM1811 DAI operations.
- */
 static struct snd_soc_ops manta_wm1811_aif1_ops = {
 	.hw_params = manta_wm1811_aif1_hw_params,
 };
 
-static int manta_wm1811_init(struct snd_soc_pcm_runtime *rtd)
+static struct snd_soc_dai_link manta_dai[] = {
+	{
+		.name = "media-pri",
+		.stream_name = "Media primary",
+		.cpu_dai_name = "samsung-i2s.0",
+		.codec_dai_name = "wm8994-aif1",
+		.platform_name = "samsung-audio",
+		.codec_name = "wm8994-codec",
+		.dai_fmt = SND_SOC_DAIFMT_I2S |
+				SND_SOC_DAIFMT_NB_NF |
+				SND_SOC_DAIFMT_CBM_CFM,
+		.ops = &manta_wm1811_aif1_ops,
+	},
+	{
+		.name = "media-sec",
+		.stream_name = "Media secondary",
+		.cpu_dai_name = "samsung-i2s.4",
+		.codec_dai_name = "wm8994-aif1",
+#ifdef CONFIG_SND_SAMSUNG_ALP
+		.platform_name = "samsung-idma",
+#else
+		.platform_name = "samsung-audio",
+#endif
+		.codec_name = "wm8994-codec",
+		.dai_fmt = SND_SOC_DAIFMT_I2S |
+				SND_SOC_DAIFMT_NB_NF |
+				SND_SOC_DAIFMT_CBM_CFM,
+		.ops = &manta_wm1811_aif1_ops,
+	},
+};
+
+static int manta_late_probe(struct snd_soc_card *card)
 {
-	struct snd_soc_codec *codec = rtd->codec;
-	struct snd_soc_dai *codec_dai = rtd->codec_dai;
+	struct snd_soc_codec *codec = card->rtd[0].codec;
+	struct snd_soc_dai *codec_dai = card->rtd[0].codec_dai;
+	struct manta_wm1811 *machine =
+				snd_soc_card_get_drvdata(codec->card);
 	int ret;
-
-	ret = snd_soc_add_card_controls(rtd->card, manta_controls,
-				ARRAY_SIZE(manta_controls));
-
-	ret = snd_soc_dapm_new_controls(&codec->dapm, manta_dapm_widgets,
-				ARRAY_SIZE(manta_dapm_widgets));
-	if (ret != 0)
-		dev_err(codec->dev, "Failed to add DAPM widgets\n");
-
-	ret = snd_soc_dapm_add_routes(&codec->dapm, manta_dapm_routes,
-				ARRAY_SIZE(manta_dapm_routes));
-	if (ret != 0)
-		dev_err(codec->dev, "Failed to add DAPM routes\n");
 
 	ret = snd_soc_dai_set_sysclk(codec_dai, WM8994_SYSCLK_MCLK2,
 				MCLK2_FREQ, SND_SOC_CLOCK_IN);
@@ -181,41 +182,23 @@ static int manta_wm1811_init(struct snd_soc_pcm_runtime *rtd)
 	if (ret < 0)
 		dev_err(codec->dev, "Failed to disable S5P RP\n");
 
-	return snd_soc_dapm_sync(&codec->dapm);
+	return 0;
 }
-
-static struct snd_soc_dai_link manta_dai[] = {
-	{
-		.name = "media-pri",
-		.stream_name = "Media primary",
-		.cpu_dai_name = "samsung-i2s.0",
-		.codec_dai_name = "wm8994-aif1",
-		.platform_name = "samsung-audio",
-		.codec_name = "wm8994-codec",
-		.init = manta_wm1811_init,
-		.ops = &manta_wm1811_aif1_ops,
-	},
-	{
-		.name = "media-sec",
-		.stream_name = "Media secondary",
-		.cpu_dai_name = "samsung-i2s.4",
-		.codec_dai_name = "wm8994-aif1",
-#ifdef CONFIG_SND_SAMSUNG_ALP
-		.platform_name = "samsung-idma",
-#else
-		.platform_name = "samsung-audio",
-#endif
-		.codec_name = "wm8994-codec",
-		.ops = &manta_wm1811_aif1_ops,
-	},
-};
 
 static struct snd_soc_card manta = {
 	.name = "Manta-I2S",
-	.long_name = "Manta I2S",
 	.owner = THIS_MODULE,
 	.dai_link = manta_dai,
 	.num_links = ARRAY_SIZE(manta_dai),
+
+	.controls = manta_controls,
+	.num_controls = ARRAY_SIZE(manta_controls),
+	.dapm_widgets = manta_widgets,
+	.num_dapm_widgets = ARRAY_SIZE(manta_widgets),
+	.dapm_routes = manta_paths,
+	.num_dapm_routes = ARRAY_SIZE(manta_paths),
+
+	.late_probe = manta_late_probe,
 };
 
 static int __devinit snd_manta_probe(struct platform_device *pdev)
@@ -237,14 +220,14 @@ static int __devinit snd_manta_probe(struct platform_device *pdev)
 		goto err_clk_get;
 	}
 
+	snd_soc_card_set_drvdata(&manta, machine);
+
 	manta.dev = &pdev->dev;
 	ret = snd_soc_register_card(&manta);
 	if (ret) {
 		dev_err(&pdev->dev, "snd_soc_register_card failed %d\n", ret);
 		goto err_register_card;
 	}
-
-	snd_soc_card_set_drvdata(&manta, machine);
 
 	return 0;
 
