@@ -159,6 +159,7 @@ static int bmp182_get_raw_pressure(struct bmp182_data *barom,
 {
 	int err;
 	u32 buf = 0;
+	int range;
 
 	err = i2c_smbus_write_byte_data(barom->client,
 				BMP182_TAKE_MEAS_REG,
@@ -169,10 +170,11 @@ static int bmp182_get_raw_pressure(struct bmp182_data *barom,
 		return err;
 	}
 
-	msleep(2+(3 << barom->oversampling_rate));
+	range = 2 + (3 << barom->oversampling_rate);
+	usleep_range(range * 1000, (range + 1) * 1000);
 
 	err = i2c_smbus_read_i2c_block_data(barom->client,
-			BMP182_READ_MEAS_REG_U,	3, ((u8 *)&buf)+1);
+			BMP182_READ_MEAS_REG_U, 3, ((u8 *)&buf) + 1);
 	if (err != 3) {
 		pr_err("Fail to read uncompensated pressure\n");
 		return err >= 0 ? -EIO : err;
@@ -205,6 +207,7 @@ static void bmp182_get_pressure_data(struct work_struct *work)
 		return;
 	}
 
+	/* voodoo from BMP182 data sheet, BST-BMP182-DS000-00, page 15 */
 	x1 = ((raw_temperature - barom->bmp182_eeprom_vals.AC6) *
 	      barom->bmp182_eeprom_vals.AC5) >> 15;
 	x2 = (barom->bmp182_eeprom_vals.MC << 11) /
@@ -232,17 +235,16 @@ static void bmp182_get_pressure_data(struct work_struct *work)
 	x1 = (x1 * 3038) >> 16;
 	x2 = (-7357 * p) >> 16;
 
-	mutex_lock(&barom->lock);
 	barom->pressure = p + ((x1 + x2 + 3791) >> 4);
-	mutex_unlock(&barom->lock);
 	pr_debug("calibrated pressure: %d\n", barom->pressure);
 
-	iio_push_event(iio_priv_to_dev(barom),
+	if (iio_push_event(iio_priv_to_dev(barom),
 			IIO_UNMOD_EVENT_CODE(IIO_PRESSURE,
 				0,
 				IIO_EV_TYPE_THRESH,
 				IIO_EV_DIR_EITHER),
-			iio_get_time_ns());
+			iio_get_time_ns()))
+		pr_err("Could not push IIO_PRESSURE event");
 }
 
 static int __devinit bmp182_read_store_eeprom_val(struct bmp182_data *barom)
@@ -296,11 +298,14 @@ static ssize_t bmp182_sampling_frequency_store(struct device *dev,
 				const char *buf,
 				size_t size)
 {
-	int new_value;
+	unsigned int new_value;
 	struct bmp182_data *barom = iio_priv(dev_get_drvdata(dev));
+	int err;
 
-	if (sscanf(buf, "%d", &new_value) != 1)
-		return -EINVAL;
+	err = kstrtouint(buf, 10, &new_value);
+	if (err)
+		return err;
+
 	if (new_value < SAMP_FREQ_MIN)
 		new_value = SAMP_FREQ_MIN;
 	else if (new_value > SAMP_FREQ_MAX)
@@ -340,9 +345,7 @@ static ssize_t bmp182_oversampling_store(struct device *dev,
 		return err;
 	if (oversampling > 3)
 		oversampling = 3;
-	mutex_lock(&barom->lock);
 	barom->oversampling_rate = oversampling;
-	mutex_unlock(&barom->lock);
 	return count;
 }
 
@@ -451,7 +454,7 @@ static int __devinit bmp182_probe(struct i2c_client *client,
 				I2C_FUNC_SMBUS_WRITE_BYTE |
 				I2C_FUNC_SMBUS_READ_I2C_BLOCK)) {
 		pr_err("client not i2c capable\n");
-		return -EIO;
+		return -ENOSYS;
 	}
 
 	indio_dev = iio_allocate_device(sizeof(*barom));
