@@ -20,6 +20,7 @@
 #include <linux/platform_device.h>
 #include <linux/slab.h>
 
+#include <sound/jack.h>
 #include <sound/pcm.h>
 #include <sound/pcm_params.h>
 #include <sound/soc.h>
@@ -31,6 +32,7 @@
 
 struct manta_wm1811 {
 	struct clk *clk;
+	struct snd_soc_jack jack;
 };
 
 static const struct snd_kcontrol_new manta_controls[] = {
@@ -181,6 +183,16 @@ static int manta_late_probe(struct snd_soc_card *card)
 	ret = snd_soc_dapm_disable_pin(&codec->dapm, "S5P RP");
 	if (ret < 0)
 		dev_err(codec->dev, "Failed to disable S5P RP\n");
+
+	ret = snd_soc_jack_new(codec, "Headset",
+				SND_JACK_HEADSET | SND_JACK_MECHANICAL,
+				&machine->jack);
+	if (ret) {
+		dev_err(codec->dev, "Failed to create jack: %d\n", ret);
+		return ret;
+	}
+
+	wm8958_mic_detect(codec, &machine->jack, NULL, NULL);
 
 	return 0;
 }
