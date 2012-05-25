@@ -635,15 +635,16 @@ static void dw_mci_setup_bus(struct dw_mci_slot *slot, int force)
 	u32 div;
 
 	if ((slot->clock != host->current_speed) || force) {
+		div = host->bus_hz / slot->clock;
 		if ((host->bus_hz % slot->clock) &&
 			(host->bus_hz > slot->clock))
 			/*
 			 * move the + 1 after the divide to prevent
 			 * over-clocking the card.
 			 */
-			div = ((host->bus_hz / slot->clock) >> 1) + 1;
-		else
-			div = (host->bus_hz  / slot->clock) >> 1;
+			div++;
+
+		div = (host->bus_hz != slot->clock) ? DIV_ROUND_UP(div, 2) : 0;
 
 		dev_info(&slot->mmc->class_dev,
 			 "Bus speed (slot %d) = %dHz (slot req %dHz, actual %dHZ"
@@ -970,8 +971,8 @@ static void dw_mci_command_complete(struct dw_mci *host, struct mmc_command *cmd
 			mdelay(20);
 
 		if (cmd->data) {
-			host->data = NULL;
 			dw_mci_stop_dma(host);
+			host->data = NULL;
 		}
 	}
 }
@@ -1765,7 +1766,8 @@ static void dw_mci_work_routine_card(struct work_struct *work)
 
 #ifdef CONFIG_MMC_DW_IDMAC
 				ctrl = mci_readl(host, BMOD);
-				ctrl |= 0x01; /* Software reset of DMA */
+				/* Software reset of DMA */
+				ctrl |= SDMMC_IDMAC_SWRESET;
 				mci_writel(host, BMOD, ctrl);
 #endif
 
@@ -2064,7 +2066,7 @@ int __devinit dw_mci_probe(struct dw_mci *host)
 	/* Reset all blocks */
 	if (!mci_wait_reset(&host->dev, host)) {
 		ret = -ENODEV;
-		goto err_dmaunmap;
+		goto err_free_hclk;
 	}
 
 	host->dma_ops = host->pdata->dma_ops;
