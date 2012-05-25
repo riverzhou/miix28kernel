@@ -1,6 +1,7 @@
 /*
  * Copyright (C) 2012 Google, Inc.
  * Copyright (c) 2012 Samsung Electronics Co., Ltd.
+ * Copyright (C) 2012 Wolfson Microelectronics
  *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
@@ -32,6 +33,7 @@
 
 struct manta_wm1811 {
 	struct clk *clk;
+	bool clock_on;
 	struct snd_soc_jack jack;
 };
 
@@ -75,6 +77,48 @@ const struct snd_soc_dapm_route manta_paths[] = {
 	{ "AIF1DAC1R", NULL, "S5P RP" },
 };
 
+static int manta_set_bias_level_post(struct snd_soc_card *card,
+					struct snd_soc_dapm_context *dapm,
+					enum snd_soc_bias_level level)
+{
+	struct snd_soc_dai *codec_dai = card->rtd[0].codec_dai;
+	struct manta_wm1811 *machine =
+				snd_soc_card_get_drvdata(card);
+	int ret;
+
+	if (dapm->dev != codec_dai->dev)
+		return 0;
+
+	if (level == SND_SOC_BIAS_STANDBY) {
+		/*
+		 * Playback/capture has stopped, so switch to the slower
+		 * MCLK2 for reduced power consumption. hw_params handles
+		 * turning the FLL back on when needed.
+		 */
+		ret = snd_soc_dai_set_sysclk(codec_dai, WM8994_SYSCLK_MCLK2,
+						MCLK2_FREQ, SND_SOC_CLOCK_IN);
+		if (ret < 0) {
+			pr_err("Failed to switch away from FLL: %d\n", ret);
+			return ret;
+		}
+
+		ret = snd_soc_dai_set_pll(codec_dai, WM8994_FLL1,
+						0, 0, 0);
+		if (ret < 0) {
+			pr_err("Failed to stop FLL: %d\n", ret);
+			return ret;
+		}
+
+		/* Stop the reference clock for the codec's FLL */
+		if (machine->clock_on) {
+			clk_disable(machine->clk);
+			machine->clock_on = false;
+		}
+	}
+
+	return 0;
+}
+
 static int manta_wm1811_aif1_hw_params(struct snd_pcm_substream *substream,
 	struct snd_pcm_hw_params *params)
 {
@@ -85,6 +129,12 @@ static int manta_wm1811_aif1_hw_params(struct snd_pcm_substream *substream,
 				snd_soc_card_get_drvdata(rtd->codec->card);
 	unsigned int pll_out;
 	int ret;
+
+	/* Start the reference clock for the codec's FLL */
+	if (!machine->clock_on) {
+		clk_enable(machine->clk);
+		machine->clock_on = true;
+	}
 
 	/* AIF1CLK should be >=3MHz for optimal performance */
 	if (params_format(params) == SNDRV_PCM_FORMAT_S24_LE)
@@ -100,23 +150,11 @@ static int manta_wm1811_aif1_hw_params(struct snd_pcm_substream *substream,
 	if (ret < 0)
 		return ret;
 
-	/* Start the reference clock for the codec's FLL */
-	clk_enable(machine->clk);
-
 	/* Switch the FLL */
 	ret = snd_soc_dai_set_pll(codec_dai, WM8994_FLL1, WM8994_FLL_SRC_MCLK1,
 					MCLK1_FREQ, pll_out);
 	if (ret < 0)
 		dev_err(codec_dai->dev, "Unable to start FLL1\n");
-
-	/* Give the FLL time to lock */
-	usleep_range(50000, 100000);
-
-	/*
-	 * Now the FLL is running we can stop the reference clock. The
-	 * FLL will maintain frequency with no reference.
-	 */
-	clk_disable(machine->clk);
 
 	/* Then switch AIF1CLK to it */
 	ret = snd_soc_dai_set_sysclk(codec_dai, WM8994_SYSCLK_FLL1,
@@ -202,6 +240,8 @@ static struct snd_soc_card manta = {
 	.owner = THIS_MODULE,
 	.dai_link = manta_dai,
 	.num_links = ARRAY_SIZE(manta_dai),
+
+	.set_bias_level_post = manta_set_bias_level_post,
 
 	.controls = manta_controls,
 	.num_controls = ARRAY_SIZE(manta_controls),
