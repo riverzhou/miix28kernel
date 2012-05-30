@@ -151,44 +151,66 @@ static struct gpio_event_direct_entry manta_keypad_key_map[] = {
 	{
 		.gpio   = EXYNOS5_GPX2(7),
 		.code   = KEY_POWER,
+		.dev    = 0,
 	},
 	{
 		.gpio   = EXYNOS5_GPX2(0),
 		.code   = KEY_VOLUMEUP,
+		.dev    = 0,
 	},
 	{
 		.gpio   = EXYNOS5_GPX2(1),
 		.code   = KEY_VOLUMEDOWN,
+		.dev    = 0,
+	}
+};
+
+static struct gpio_event_direct_entry manta_switch_map[] = {
+	{
+		.gpio   = EXYNOS5_GPX1(3),
+		.code   = SW_LID,
+		.dev    = 1,
 	}
 };
 
 static struct gpio_event_input_info manta_keypad_key_info = {
 	.info.func              = gpio_event_input_func,
 	.info.no_suspend        = true,
-	.debounce_time.tv64	= 5 * NSEC_PER_MSEC,
+	.debounce_time.tv64     = 5 * NSEC_PER_MSEC,
 	.type                   = EV_KEY,
 	.keymap                 = manta_keypad_key_map,
 	.keymap_size            = ARRAY_SIZE(manta_keypad_key_map)
 };
 
-static struct gpio_event_info *manta_keypad_input_info[] = {
-	&manta_keypad_key_info.info,
+static struct gpio_event_input_info manta_switch_info = {
+	.info.func              = gpio_event_input_func,
+	.info.no_suspend        = true,
+	.debounce_time.tv64     = 10 * NSEC_PER_MSEC,
+	.type                   = EV_SW,
+	.keymap                 = manta_switch_map,
+	.keymap_size            = ARRAY_SIZE(manta_switch_map)
 };
 
-static struct gpio_event_platform_data manta_keypad_data = {
+static struct gpio_event_info *manta_event_input_info[] = {
+	&manta_keypad_key_info.info,
+	&manta_switch_info.info,
+};
+
+static struct gpio_event_platform_data manta_event_data = {
 	.names  = {
 		"manta-keypad",
+		"manta-switch",
 		NULL,
 	},
-	.info           = manta_keypad_input_info,
-	.info_count     = ARRAY_SIZE(manta_keypad_input_info),
+	.info           = manta_event_input_info,
+	.info_count     = ARRAY_SIZE(manta_event_input_info),
 };
 
-static struct platform_device manta_keypad_device = {
+static struct platform_device manta_event_device = {
 	.name   = GPIO_EVENT_DEV_NAME,
 	.id     = 0,
 	.dev    = {
-		.platform_data = &manta_keypad_data,
+		.platform_data = &manta_event_data,
 	},
 };
 
@@ -330,7 +352,7 @@ static struct platform_device *manta_devices[] __initdata = {
 	&s3c_device_i2c7,
 	&s3c_device_adc,
 	&s3c_device_wdt,
-	&manta_keypad_device,
+	&manta_event_device,
 	&exynos5_device_dwmci0,
 	&exynos_device_ion,
 	&s3c_device_usb_hsotg,
