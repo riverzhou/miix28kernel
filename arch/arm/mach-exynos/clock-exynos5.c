@@ -37,6 +37,12 @@ static struct sleep_save exynos5_clock_save[] = {
 	SAVE_ITEM(EXYNOS5_CLKSRC_MASK_MAUDIO),
 	SAVE_ITEM(EXYNOS5_CLKSRC_MASK_PERIC0),
 	SAVE_ITEM(EXYNOS5_CLKSRC_MASK_PERIC1),
+	SAVE_ITEM(EXYNOS5_CLKSRC_MASK_ISP),
+	SAVE_ITEM(EXYNOS5_CLKGATE_IP_SYSRGT),
+	SAVE_ITEM(EXYNOS5_CLKGATE_IP_ACP),
+	SAVE_ITEM(EXYNOS5_CLKGATE_IP_ISP0),
+	SAVE_ITEM(EXYNOS5_CLKGATE_IP_ISP1),
+	SAVE_ITEM(EXYNOS5_CLKGATE_SCLK_ISP),
 	SAVE_ITEM(EXYNOS5_CLKGATE_IP_GSCL),
 	SAVE_ITEM(EXYNOS5_CLKGATE_IP_DISP1),
 	SAVE_ITEM(EXYNOS5_CLKGATE_IP_MFC),
@@ -45,7 +51,12 @@ static struct sleep_save exynos5_clock_save[] = {
 	SAVE_ITEM(EXYNOS5_CLKGATE_IP_FSYS),
 	SAVE_ITEM(EXYNOS5_CLKGATE_IP_PERIC),
 	SAVE_ITEM(EXYNOS5_CLKGATE_IP_PERIS),
+	SAVE_ITEM(EXYNOS5_CLKGATE_IP_CDREX),
 	SAVE_ITEM(EXYNOS5_CLKGATE_BLOCK),
+	SAVE_ITEM(EXYNOS5_CLKDIV_ACP),
+	SAVE_ITEM(EXYNOS5_CLKDIV_ISP0),
+	SAVE_ITEM(EXYNOS5_CLKDIV_ISP1),
+	SAVE_ITEM(EXYNOS5_CLKDIV_ISP2),
 	SAVE_ITEM(EXYNOS5_CLKDIV_TOP0),
 	SAVE_ITEM(EXYNOS5_CLKDIV_TOP1),
 	SAVE_ITEM(EXYNOS5_CLKDIV_GSCL),
@@ -63,6 +74,9 @@ static struct sleep_save exynos5_clock_save[] = {
 	SAVE_ITEM(EXYNOS5_CLKDIV_PERIC4),
 	SAVE_ITEM(EXYNOS5_CLKDIV_PERIC5),
 	SAVE_ITEM(EXYNOS5_SCLK_DIV_ISP),
+	SAVE_ITEM(EXYNOS5_CLKDIV2_RATIO0),
+	SAVE_ITEM(EXYNOS5_CLKDIV2_RATIO1),
+	SAVE_ITEM(EXYNOS5_CLKDIV4_RATIO),
 	SAVE_ITEM(EXYNOS5_CLKSRC_TOP0),
 	SAVE_ITEM(EXYNOS5_CLKSRC_TOP1),
 	SAVE_ITEM(EXYNOS5_CLKSRC_TOP2),
@@ -191,6 +205,11 @@ static int exynos5_clksrc_mask_gscl_ctrl(struct clk *clk, int enable)
 static int exynos5_clksrc_mask_peric0_ctrl(struct clk *clk, int enable)
 {
 	return s5p_gatectrl(EXYNOS5_CLKSRC_MASK_PERIC0, clk, enable);
+}
+
+static int exynos5_clksrc_mask_gen_ctrl(struct clk *clk, int enable)
+{
+	return s5p_gatectrl(EXYNOS5_CLKSRC_MASK_GEN, clk, enable);
 }
 
 static int exynos5_clk_ip_acp_ctrl(struct clk *clk, int enable)
@@ -1032,6 +1051,11 @@ static struct clk exynos5_init_clocks_off[] = {
 		.enable		= exynos5_clk_ip_peric_ctrl,
 		.ctrlbit	= (1 << 14),
 	}, {
+		.name		= "adc",
+		.parent		= &exynos5_clk_aclk_66.clk,
+		.enable		= exynos5_clk_ip_peric_ctrl,
+		.ctrlbit	= (1 << 15),
+	}, {
 		.name		= SYSMMU_CLOCK_NAME,
 		.devname	= SYSMMU_CLOCK_DEVNAME(mfc_lr, 0),
 		.enable		= &exynos5_clk_ip_mfc_ctrl,
@@ -1583,9 +1607,12 @@ static struct clksrc_clk exynos5_clksrcs[] = {
 	}, {
 		.clk	= {
 			.name		= "sclk_jpeg",
-			.parent		= &exynos5_clk_mout_cpll.clk,
+			.enable		= exynos5_clksrc_mask_gen_ctrl,
+			.ctrlbit	= (1 << 0),
 		},
-		.reg_div = { .reg = EXYNOS5_CLKDIV_GEN, .shift = 4, .size = 3 },
+		.sources = &exynos5_clkset_group,
+		.reg_src = { .reg = EXYNOS5_CLKSRC_GEN, .shift = 0, .size = 4 },
+		.reg_div = { .reg = EXYNOS5_CLKDIV_GEN, .shift = 4, .size = 4 },
 	}, {
 		.clk	= {
 			.name		= "sclk_usbdrd30",
@@ -1836,20 +1863,20 @@ static struct {
 	 * clock divider for COPY, HPM
 	 * PLL M, P, S
 	 */
-	APLL_FREQ(1700, 0, 3, 7, 7, 6, 1, 3, 0, 0, 2, 0,   0, 0),
-	APLL_FREQ(1600, 0, 3, 7, 7, 6, 1, 3, 0, 0, 2, 0,   0, 0),
-	APLL_FREQ(1500, 0, 3, 7, 7, 5, 1, 3, 0, 0, 2, 0,   0, 0),
-	APLL_FREQ(1400, 0, 3, 7, 7, 6, 1, 3, 0, 0, 2, 0,   0, 0),
-	APLL_FREQ(1300, 0, 3, 7, 7, 6, 1, 3, 0, 0, 2, 325, 6, 0),
-	APLL_FREQ(1200, 0, 3, 7, 7, 5, 1, 3, 0, 0, 2, 200, 4, 0),
-	APLL_FREQ(1100, 0, 2, 7, 7, 5, 1, 2, 0, 0, 2, 275, 6, 0),
-	APLL_FREQ(1000, 0, 2, 7, 7, 4, 1, 2, 0, 0, 2, 125, 3, 0),
-	APLL_FREQ(900,  0, 2, 7, 7, 4, 1, 2, 0, 0, 2, 150, 4, 0),
-	APLL_FREQ(800,  0, 2, 7, 7, 3, 1, 1, 0, 0, 2, 100, 3, 0),
+	APLL_FREQ(1700, 0, 3, 7, 7, 7, 3, 5, 0, 0, 2, 425, 6, 0),
+	APLL_FREQ(1600, 0, 3, 7, 7, 7, 1, 4, 0, 0, 2, 200, 3, 0),
+	APLL_FREQ(1500, 0, 2, 7, 7, 7, 1, 4, 0, 0, 2, 250, 4, 0),
+	APLL_FREQ(1400, 0, 2, 7, 7, 6, 1, 4, 0, 0, 2, 175, 3, 0),
+	APLL_FREQ(1300, 0, 2, 7, 7, 6, 1, 3, 0, 0, 2, 325, 6, 0),
+	APLL_FREQ(1200, 0, 2, 7, 7, 5, 1, 3, 0, 0, 2, 200, 4, 0),
+	APLL_FREQ(1100, 0, 3, 7, 7, 5, 1, 3, 0, 0, 2, 275, 6, 0),
+	APLL_FREQ(1000, 0, 1, 7, 7, 4, 1, 2, 0, 0, 2, 125, 3, 0),
+	APLL_FREQ(900,  0, 1, 7, 7, 4, 1, 2, 0, 0, 2, 150, 4, 0),
+	APLL_FREQ(800,  0, 1, 7, 7, 4, 1, 2, 0, 0, 2, 100, 3, 0),
 	APLL_FREQ(700,  0, 1, 7, 7, 3, 1, 1, 0, 0, 2, 175, 3, 1),
-	APLL_FREQ(600,  0, 1, 7, 7, 2, 1, 1, 0, 0, 2, 200, 4, 1),
+	APLL_FREQ(600,  0, 1, 7, 7, 3, 1, 1, 0, 0, 2, 200, 4, 1),
 	APLL_FREQ(500,  0, 1, 7, 7, 2, 1, 1, 0, 0, 2, 125, 3, 1),
-	APLL_FREQ(400,  0, 1, 7, 7, 1, 1, 1, 0, 0, 2, 100, 3, 1),
+	APLL_FREQ(400,  0, 1, 7, 7, 2, 1, 1, 0, 0, 2, 100, 3, 1),
 	APLL_FREQ(300,  0, 1, 7, 7, 1, 1, 1, 0, 0, 2, 200, 4, 2),
 	APLL_FREQ(200,  0, 1, 7, 7, 1, 1, 1, 0, 0, 2, 100, 3, 2),
 };

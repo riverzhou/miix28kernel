@@ -33,7 +33,6 @@
 #include <mach/regs-pmu.h>
 #include <mach/regs-gpio.h>
 #include <mach/pmu.h>
-#include <mach/smc.h>
 
 #include <plat/cpu.h>
 #include <plat/clock.h>
@@ -281,12 +280,12 @@ static struct map_desc exynos5_iodesc[] __initdata = {
 	}, {
 		.virtual	= (unsigned long)S5P_VA_GIC_CPU,
 		.pfn		= __phys_to_pfn(EXYNOS5_PA_GIC_CPU),
-		.length		= SZ_64K,
+		.length		= SZ_8K,
 		.type		= MT_DEVICE,
 	}, {
 		.virtual	= (unsigned long)S5P_VA_GIC_DIST,
 		.pfn		= __phys_to_pfn(EXYNOS5_PA_GIC_DIST),
-		.length		= SZ_64K,
+		.length		= SZ_4K,
 		.type		= MT_DEVICE,
 	}, {
 		.virtual	= (unsigned long)S3C_VA_USB_HSPHY,
@@ -727,35 +726,6 @@ static int __init exynos4_l2x0_cache_init(void)
 }
 early_initcall(exynos4_l2x0_cache_init);
 #endif
-
-static int __init exynos5_l2_cache_init(void)
-{
-	unsigned int val;
-
-	if (!soc_is_exynos5250())
-		return 0;
-
-	asm volatile("mrc p15, 0, %0, c1, c0, 0\n"
-		     "bic %0, %0, #(1 << 2)\n"	/* cache disable */
-		     "mcr p15, 0, %0, c1, c0, 0\n"
-		     "mrc p15, 1, %0, c9, c0, 2\n"
-		     : "=r"(val));
-
-	val |= (1 << 9) | (1 << 5) | (2 << 6) | (2 << 0);
-
-#ifdef CONFIG_ARM_TRUSTZONE
-	exynos_smc(SMC_CMD_REG, SMC_REG_ID_CP15(9, 1, 0, 2), val, 0);
-#else
-	asm volatile("mcr p15, 1, %0, c9, c0, 2\n" : : "r"(val));
-#endif
-	asm volatile("mrc p15, 0, %0, c1, c0, 0\n"
-		     "orr %0, %0, #(1 << 2)\n"	/* cache enable */
-		     "mcr p15, 0, %0, c1, c0, 0\n"
-		     : : "r"(val));
-
-	return 0;
-}
-early_initcall(exynos5_l2_cache_init);
 
 static int __init exynos_init(void)
 {
