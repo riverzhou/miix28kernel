@@ -42,12 +42,19 @@
 #include <mach/exynos-ion.h>
 #include <mach/dwmci.h>
 
+#include "../../../drivers/staging/android/ram_console.h"
 #include "board-manta.h"
 #include "common.h"
+#include "resetreason.h"
+
+static struct ram_console_platform_data ramconsole_pdata;
 
 static struct platform_device ramconsole_device = {
 	.name           = "ram_console",
 	.id             = -1,
+	.dev		= {
+		.platform_data = &ramconsole_pdata,
+	},
 };
 
 static struct platform_device persistent_trace_device = {
@@ -357,7 +364,7 @@ static void __init manta_machine_init(void)
 	manta_gpio_power_init();
 
 	manta_udc_init();
-
+	ramconsole_pdata.bootinfo = exynos_get_resetreason();
 	platform_add_devices(manta_devices, ARRAY_SIZE(manta_devices));
 
 	exynos5_manta_power_init();
