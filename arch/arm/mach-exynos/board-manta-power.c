@@ -322,11 +322,11 @@ static struct max77686_wtsr_smpl wtsr_smpl_data = {
 	.smpl_timer_val = 0,	/* 0.5s */
 };
 
-/* If it's first boot, reset rtc to 1/1/2012 00:00:00(SUN) */
+/* If it's first boot, reset rtc to 1/1/2012 12:00:00(SUN) */
 static struct rtc_time init_time_data = {
 	.tm_sec = 0,
 	.tm_min = 0,
-	.tm_hour = 0,
+	.tm_hour = 12,
 	.tm_wday = 0,
 	.tm_mday = 1,
 	.tm_mon = 0,
