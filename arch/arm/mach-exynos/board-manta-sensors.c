@@ -11,7 +11,7 @@
  * GNU General Public License for more details.
  */
 
-#include <linux/bh1721fvc.h>
+#include <linux/platform_data/bh1721fvc.h>
 #include <linux/kernel.h>
 #include <linux/i2c.h>
 #include <linux/gpio.h>
