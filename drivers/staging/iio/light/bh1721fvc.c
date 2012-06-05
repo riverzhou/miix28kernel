@@ -23,7 +23,7 @@
 #include <linux/i2c.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
-#include <linux/bh1721fvc.h>
+#include <linux/platform_data/bh1721fvc.h>
 #include "../iio.h"
 #include "../sysfs.h"
 #include "../events.h"
@@ -249,6 +249,7 @@ static ssize_t bh1721fvc_mode_store(struct device *dev,
 				pr_err("Failed to change to mode %s",
 					bh1721fvc_mode_data[new_measure_mode].
 					name);
+				mutex_unlock(&bh1721fvc->lock);
 				return -EIO;
 			}
 		}
@@ -421,12 +422,18 @@ static int __devinit bh1721fvc_i2c_probe(struct i2c_client *client,
 	int err;
 	struct bh1721fvc_data *bh1721fvc;
 	struct iio_dev *indio_dev;
-	struct bh1721fvc_platform_data *pdata = client->dev.platform_data;
+	struct bh1721fvc_platform_data *pdata;
 	struct i2c_adapter *adapter = to_i2c_adapter(client->dev.parent);
 
 	if (!i2c_check_functionality(adapter, I2C_FUNC_I2C |
 					I2C_FUNC_SMBUS_WRITE_BYTE))
 		return -ENOSYS;
+
+	pdata = client->dev.platform_data;
+	if (!pdata) {
+		pr_err("no platform data\n");
+		return -EINVAL;
+	}
 
 	indio_dev = iio_allocate_device(sizeof(*bh1721fvc));
 	if (!indio_dev)
@@ -494,6 +501,7 @@ err_iio_register_device_light:
 err_create_workqueue:
 	mutex_destroy(&bh1721fvc->lock);
 err_reset_failed:
+	gpio_free(bh1721fvc->reset_pin);
 err_reset_request:
 err_reset_invalid:
 	iio_free_device(indio_dev);
@@ -512,6 +520,7 @@ static int __devexit bh1721fvc_i2c_remove(struct i2c_client *client)
 
 	destroy_workqueue(bh1721fvc->wq);
 	mutex_destroy(&bh1721fvc->lock);
+	gpio_free(bh1721fvc->reset_pin);
 	iio_free_device(indio_dev);
 
 	return 0;
