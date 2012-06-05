@@ -20,6 +20,8 @@
 #include <linux/input/mt.h>
 #include <linux/interrupt.h>
 #include <linux/slab.h>
+#include <linux/gpio.h>
+#include <linux/regulator/consumer.h>
 
 /* Version */
 #define MXT_VER_20		20
@@ -221,6 +223,14 @@
 /* Touchscreen configuration infomation */
 #define MXT_FW_MAGIC		0x4D3C2B1A
 
+/* Voltage supplies */
+static const char * const mxt_supply_names[] = {
+	/* keep the order for power sequence */
+	"vdd",
+	"avdd",
+	"xvdd",
+};
+
 struct mxt_info {
 	u8 family_id;
 	u8 variant_id;
@@ -276,6 +286,8 @@ struct mxt_data {
 	struct completion init_done;
 	unsigned int max_reportid;
 	struct mxt_reportid *reportid_table;
+	bool enabled;
+	struct regulator_bulk_data supplies[ARRAY_SIZE(mxt_supply_names)];
 };
 
 /**
@@ -1436,6 +1448,75 @@ out:
 	return ret;
 }
 
+static int mxt_power_on(struct mxt_data *data)
+{
+	const struct mxt_platform_data *pdata = data->pdata;
+	struct device *dev = &data->client->dev;
+	int i, ret;
+
+	if (data->enabled)
+		return 0;
+
+	/* Enable regulators according to order */
+	for (i = 0; i < ARRAY_SIZE(data->supplies); i++) {
+		ret = regulator_enable(data->supplies[i].consumer);
+		if (ret) {
+			dev_err(dev, "Fail to enable regulator %s\n",
+				data->supplies[i].supply);
+			goto err;
+		}
+	}
+	/* Deassert reset pin */
+	if (pdata->gpio_reset) {
+		usleep_range(1000, 1500);
+		gpio_set_value(pdata->gpio_reset, 1);
+	}
+
+	if (pdata->reset_msec)
+		msleep(pdata->reset_msec);
+
+	data->enabled = true;
+
+	return 0;
+
+err:
+	while (--i >= 0)
+		regulator_disable(data->supplies[i].consumer);
+	return ret;
+}
+
+static int mxt_power_off(struct mxt_data *data)
+{
+	const struct mxt_platform_data *pdata = data->pdata;
+	int ret;
+
+	if (!data->enabled)
+		return 0;
+
+	/* Assert reset pin */
+	if (pdata->gpio_reset)
+		gpio_set_value(pdata->gpio_reset, 0);
+
+	/* Disable regulator */
+	ret = regulator_bulk_disable(ARRAY_SIZE(data->supplies),
+			 data->supplies);
+
+	if (ret)
+		goto err;
+
+	data->enabled = false;
+
+	return 0;
+
+err:
+	/* Deassert reset pin */
+	if (pdata->gpio_reset) {
+		usleep_range(1000, 1500);
+		gpio_set_value(pdata->gpio_reset, 1);
+	}
+	return ret;
+}
+
 static ssize_t mxt_update_fw_store(struct device *dev,
 					struct device_attribute *attr,
 					const char *buf, size_t count)
@@ -1787,17 +1868,39 @@ static int __devinit mxt_probe(struct i2c_client *client,
 	struct mxt_data *data;
 	struct input_dev *input_dev;
 	u16 boot_address;
-	int error;
+	int error, i;
 
 	if (!pdata)
 		return -EINVAL;
 
 	data = kzalloc(sizeof(struct mxt_data), GFP_KERNEL);
-	input_dev = input_allocate_device();
-	if (!data || !input_dev) {
+	if (!data) {
 		dev_err(&client->dev, "Failed to allocate memory\n");
+		return -ENOMEM;
+	}
+
+	for (i = 0; i < ARRAY_SIZE(mxt_supply_names); i++)
+		data->supplies[i].supply = mxt_supply_names[i];
+
+	error = regulator_bulk_get(&client->dev, ARRAY_SIZE(data->supplies),
+				 data->supplies);
+	if (error)
+		goto err_get_regulator;
+
+	if (pdata->gpio_reset) {
+		error = gpio_request_one(pdata->gpio_reset, GPIOF_OUT_INIT_LOW,
+					 "atmel_mxt_ts nRESET");
+		if (error) {
+			dev_err(&client->dev, "Unable to get the reset gpio.\n");
+			goto err_request_gpio;
+		}
+	}
+
+	input_dev = input_allocate_device();
+	if (!input_dev) {
+		dev_err(&client->dev, "Failed to allocate input device\n");
 		error = -ENOMEM;
-		goto err_free_mem;
+		goto err_allocate_input_device;
 	}
 
 	input_dev->name = "Atmel maXTouch Touchscreen";
@@ -1844,32 +1947,47 @@ static int __devinit mxt_probe(struct i2c_client *client,
 		dev_err(&client->dev, "Fail to register sub client[0x%x]\n",
 			 boot_address);
 		error = -ENODEV;
-		goto err_free_mem;
+		goto err_create_sub_client;
 	}
 
 	error = input_register_device(input_dev);
 	if (error)
-		goto err_unregister_client;
+		goto err_register_input_device;
 
 	error = sysfs_create_group(&client->dev.kobj, &mxt_attr_group);
 	if (error)
-		goto err_unregister_device;
+		goto err_create_attr_group;
+
+	error = mxt_power_on(data);
+	if (error)
+		goto err_power_on;
 
 	error = mxt_ts_init(data);
 	if (error)
-		goto err_unregister_device;
+		goto err_init;
 
 	return 0;
 
-err_unregister_device:
+err_init:
+	mxt_power_off(data);
+err_power_on:
+	sysfs_remove_group(&client->dev.kobj, &mxt_attr_group);
+err_create_attr_group:
 	input_unregister_device(input_dev);
 	input_dev = NULL;
 
-err_unregister_client:
+err_register_input_device:
 	i2c_unregister_device(data->client_boot);
-err_free_mem:
+err_create_sub_client:
 	input_free_device(input_dev);
+err_allocate_input_device:
+	if (pdata->gpio_reset)
+		gpio_free(pdata->gpio_reset);
+err_request_gpio:
+	regulator_bulk_free(ARRAY_SIZE(data->supplies), data->supplies);
+err_get_regulator:
 	kfree(data);
+
 	return error;
 }
 
@@ -1884,6 +2002,10 @@ static int __devexit mxt_remove(struct i2c_client *client)
 	i2c_unregister_device(data->client_boot);
 	kfree(data->object_table);
 	kfree(data->reportid_table);
+	mxt_power_off(data);
+	regulator_bulk_free(ARRAY_SIZE(data->supplies), data->supplies);
+	if (data->pdata->gpio_reset)
+		gpio_free(data->pdata->gpio_reset);
 	kfree(data);
 
 	return 0;
