@@ -14,6 +14,8 @@
 #include <linux/mfd/max77686.h>
 #include <linux/regulator/machine.h>
 #include <linux/rtc.h>
+#include <linux/regulator/fixed.h>
+#include <linux/platform_device.h>
 
 #include <asm/system_misc.h>
 
@@ -44,7 +46,7 @@ static struct regulator_consumer_supply ldo8_supply[] = {
 };
 
 static struct regulator_consumer_supply ldo9_supply[] = {
-	REGULATOR_SUPPLY("touch_vdd_1.8v", NULL),
+	REGULATOR_SUPPLY("vdd", "3-004a"),
 };
 
 static struct regulator_consumer_supply ldo10_supply[] = {
@@ -76,7 +78,7 @@ static struct regulator_consumer_supply ldo19_supply[] = {
 };
 
 static struct regulator_consumer_supply ldo23_supply[] = {
-	REGULATOR_SUPPLY("touch_avdd", NULL),
+	REGULATOR_SUPPLY("avdd", "3-004a"),
 };
 
 static struct regulator_consumer_supply ldo24_supply[] = {
@@ -334,6 +336,61 @@ static struct i2c_board_info i2c_devs5[] __initdata = {
 	},
 };
 
+/* Fixed regulators */
+static struct regulator_consumer_supply mxt_xvdd_supply =
+	REGULATOR_SUPPLY("xvdd", "3-004a");
+
+static struct regulator_init_data mxt_booster_voltage_init_data = {
+	.constraints = {
+		.valid_ops_mask = REGULATOR_CHANGE_STATUS,
+	},
+};
+
+static struct fixed_voltage_config mxt_booster_regulator_data = {
+	.supply_name = "MXT_BOOSTER",
+	.gpio = EXYNOS5_GPD1(1),
+	.enable_high = 1,
+	.init_data = &mxt_booster_voltage_init_data,
+};
+
+static struct platform_device mxt_booster_regulator_device = {
+	.name = "reg-fixed-voltage",
+	.id = 0,
+	.dev = {
+		.platform_data = &mxt_booster_regulator_data,
+	}
+};
+
+static struct regulator_init_data mxt_xvdd_voltage_init_data = {
+	.constraints = {
+		.valid_ops_mask = REGULATOR_CHANGE_STATUS,
+	},
+	.num_consumer_supplies	= 1,
+	.consumer_supplies	= &mxt_xvdd_supply,
+	.supply_regulator = "MXT_BOOSTER",
+};
+
+static struct fixed_voltage_config mxt_xvdd_regulator_data = {
+	.supply_name = "MXT_XVDD",
+	.gpio = EXYNOS5_GPG0(1),
+	.startup_delay = 3000,
+	.enable_high = 1,
+	.init_data = &mxt_xvdd_voltage_init_data,
+};
+
+static struct platform_device mxt_xvdd_regulator_device = {
+	.name = "reg-fixed-voltage",
+	.id = 1,
+	.dev = {
+		.platform_data = &mxt_xvdd_regulator_data,
+	}
+};
+
+static struct platform_device *mxt_fixed_regulator_devices[] __initdata = {
+	&mxt_booster_regulator_device,
+	&mxt_xvdd_regulator_device,
+};
+
 static void manta_power_off(void)
 {
 	local_irq_disable();
@@ -369,4 +426,7 @@ void __init exynos5_manta_power_init(void)
 	arm_pm_restart = manta_reboot;
 
 	i2c_register_board_info(5, i2c_devs5, ARRAY_SIZE(i2c_devs5));
+
+	platform_add_devices(mxt_fixed_regulator_devices,
+				ARRAY_SIZE(mxt_fixed_regulator_devices));
 }
