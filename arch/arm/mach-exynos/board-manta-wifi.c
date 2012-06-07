@@ -231,7 +231,7 @@ static void exynos5_setup_wlan_cfg_gpio(int width)
 	for (gpio = EXYNOS5_GPC2(3); gpio <= EXYNOS5_GPC2(6); gpio++) {
 		/* Data pin GPC2[3:6] to special-function 2 */
 		s3c_gpio_cfgpin(gpio, S3C_GPIO_SFN(2));
-		s3c_gpio_setpull(gpio, S3C_GPIO_PULL_UP);
+		s3c_gpio_setpull(gpio, S3C_GPIO_PULL_NONE);
 		s5p_gpio_set_drvstr(gpio, S5P_GPIO_DRVSTR_LV3);
 	}
 }
