@@ -243,6 +243,7 @@ static struct dw_mci_board exynos_wlan_pdata __initdata = {
 				  DW_MCI_QUIRK_IDMAC_DTO |
 				  DW_MCI_QUIRK_REQUEST_DELAY,
 	.bus_hz			= 50 * 1000 * 1000,
+	.max_bus_hz		= 50 * 1000 * 1000,
 	.caps			= MMC_CAP_UHS_SDR50 |
 				  MMC_CAP_4_BIT_DATA | MMC_CAP_SD_HIGHSPEED,
 	.pm_caps		= MMC_PM_KEEP_POWER | MMC_PM_IGNORE_PM_NOTIFY,
