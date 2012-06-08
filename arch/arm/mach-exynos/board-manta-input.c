@@ -28,6 +28,8 @@
 #define GPIO_TOUCH_CHG		EXYNOS5_GPG1(2)
 #define GPIO_TOUCH_RESET	EXYNOS5_GPG1(3)
 
+#define MXT_FIRMWARE_FOR_NV	"maxtouch_nv.fw"
+
 static struct regulator *touch_dvdd;
 static struct regulator *touch_avdd;
 
@@ -39,6 +41,7 @@ static struct mxt_platform_data atmel_mxt_ts_pdata = {
 	.orient         = MXT_DIAGONAL,
 	.irqflags       = IRQF_TRIGGER_LOW | IRQF_ONESHOT,
 	.boot_address   = 0x26,
+	.firmware_name  = MXT_FIRMWARE_FOR_NV,
 };
 
 static struct i2c_board_info i2c_devs3[] __initdata = {
