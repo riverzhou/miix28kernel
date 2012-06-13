@@ -27,6 +27,8 @@
 
 #define GPIO_TOUCH_CHG		EXYNOS5_GPG1(2)
 #define GPIO_TOUCH_RESET	EXYNOS5_GPG1(3)
+#define GPIO_TOUCH_EN_BOOSTER	EXYNOS5_GPD1(1)
+#define GPIO_TOUCH_EN_XVDD	EXYNOS5_GPG0(1)
 
 #define MXT_FIRMWARE_FOR_NV	"maxtouch_nv.fw"
 
@@ -61,6 +63,16 @@ void __init exynos5_manta_input_init(void)
 	gpio_request(GPIO_TOUCH_RESET, "TSP_RST");
 	s3c_gpio_cfgpin(GPIO_TOUCH_RESET, S3C_GPIO_OUTPUT);
 	s3c_gpio_setpull(GPIO_TOUCH_RESET, S3C_GPIO_PULL_NONE);
+
+	gpio_request(GPIO_TOUCH_EN_XVDD, "TSP_XVDD");
+	s3c_gpio_cfgpin(GPIO_TOUCH_EN_XVDD, S3C_GPIO_OUTPUT);
+	s3c_gpio_setpull(GPIO_TOUCH_EN_XVDD, S3C_GPIO_PULL_NONE);
+	gpio_set_value(GPIO_TOUCH_EN_XVDD, 0);
+
+	gpio_request(GPIO_TOUCH_EN_BOOSTER, "TSP_BOOSTER");
+	s3c_gpio_cfgpin(GPIO_TOUCH_EN_BOOSTER, S3C_GPIO_OUTPUT);
+	s3c_gpio_setpull(GPIO_TOUCH_EN_BOOSTER, S3C_GPIO_PULL_NONE);
+	gpio_set_value(GPIO_TOUCH_EN_BOOSTER, 1);
 }
 
 /*
@@ -96,6 +108,7 @@ static int __init exynos5_manta_touch_init(void)
 	gpio_set_value(GPIO_TOUCH_RESET, 0);
 	regulator_enable(touch_dvdd);
 	regulator_enable(touch_avdd);
+	gpio_set_value(GPIO_TOUCH_EN_XVDD, 1);
 	usleep_range(1000, 1500);
 	gpio_set_value(GPIO_TOUCH_RESET, 1);
 	msleep(300);
