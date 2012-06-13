@@ -21,7 +21,7 @@
 #include <kbase/src/common/mali_kbase_mem.h>
 #include <kbase/src/common/mali_midg_regmap.h>
 #include <kbase/src/linux/mali_kbase_mem_linux.h>
-#include <uk/mali_ukk.h>
+#include <kbase/mali_ukk.h>
 
 #include <linux/module.h>
 #include <linux/init.h>
@@ -42,33 +42,46 @@
 #include <kbase/src/platform/mali_kbase_runtime_pm.h>
 #include <linux/pm_runtime.h>
 #include <linux/workqueue.h>
+#include <kbase/src/common/mali_kbase_gator.h>
 
-#define RUNTIME_PM_DELAY_TIME 10
-
-/** Suspend callback from the OS.
- *
- * This is called by Linux runtime PM when the device should suspend.
- *
- * @param dev	The device to suspend
- *
- * @return A standard Linux error code
- */
-int kbase_device_runtime_suspend(struct device *dev)
+#define RUNTIME_PM_DELAY_TIME 100
+static void kbase_device_runtime_workqueue_callback(struct work_struct *work)
 {
-	return kbase_platform_cmu_pmu_control(dev, 0);
+	int result;
+	struct kbase_device *kbdev;
+
+	kbdev = container_of(work, struct kbase_device, runtime_pm_workqueue.work);
+	/********************************************
+	 *
+	 *  This is workaround about occurred kernel panic when you turn off the system.
+	 *
+	 *  System kernel will call the "__pm_runtime_disable" when you turn off the system.
+	 *  After that function, System kernel do not run the runtimePM API more.
+	 *
+	 *  So, this code is check the "dev->power.disable_depth" value is not zero.
+	 *
+	********************************************/
+	if(kbdev->osdev.dev->power.disable_depth > 0)
+		return;
+
+	result = pm_runtime_suspend(kbdev->osdev.dev);
+	kbase_platform_clock_off(kbdev);
+
+#if MALI_GATOR_SUPPORT
+	kbase_trace_mali_timeline_event(GATOR_MAKE_EVENT(ACTIVITY_RTPM_CHANGED, ACTIVITY_RTPM));
+#endif
+#if MALI_RTPM_DEBUG
+	printk( "kbase_device_runtime_workqueue_callback, usage_count=%d\n", atomic_read(&kbdev->osdev.dev->power.usage_count));
+#endif
+
+	if(result < 0 && result != -EAGAIN)
+		OSK_PRINT_ERROR(OSK_BASE_PM, "pm_runtime_put_sync failed (%d)\n", result);
 }
-
-/** Resume callback from the OS.
- *
- * This is called by Linux runtime PM when the device should resume from suspension.
- *
- * @param dev	The device to resume
- *
- * @return A standard Linux error code
- */
-int kbase_device_runtime_resume(struct device *dev)
+void kbase_device_runtime_init_workqueue(struct device *dev)
 {
-	return kbase_platform_cmu_pmu_control(dev, 1);
+	struct kbase_device *kbdev;
+	kbdev = dev_get_drvdata(dev);
+	INIT_DELAYED_WORK(&kbdev->runtime_pm_workqueue, kbase_device_runtime_workqueue_callback);
 }
 
 /** Disable runtime pm
@@ -77,49 +90,100 @@ int kbase_device_runtime_resume(struct device *dev)
  *
  * @return A standard Linux error code
  */
-void kbase_device_runtime_disable(struct device *dev)
+void kbase_device_runtime_disable(struct kbase_device *kbdev)
 {
-    pm_runtime_disable(dev);
+	pm_runtime_disable(kbdev->osdev.dev);
 }
 
-/** Initialize runtiem pm fields in given device 
+/** Initialize runtiem pm fields in given device
  *
  * @param dev	The device to initialize
  *
  * @return A standard Linux error code
  */
-static void kbase_device_runtime_init(struct device *dev)
+
+mali_error kbase_device_runtime_init(struct kbase_device *kbdev)
 {
-	pm_suspend_ignore_children(dev, true);
-	pm_runtime_enable(dev);
+	pm_suspend_ignore_children(kbdev->osdev.dev, true);
+	pm_runtime_enable(kbdev->osdev.dev);
+	kbase_device_runtime_init_workqueue(kbdev->osdev.dev);
+	return MALI_ERROR_NONE;
 }
 
-static int rp_started = 1;
 void kbase_device_runtime_get_sync(struct device *dev)
 {
 	int result;
+	struct kbase_device *kbdev;
+	struct exynos_context *platform;
+	kbdev = dev_get_drvdata(dev);
 
-	if(rp_started) {
-		kbase_device_runtime_init(dev);
-		rp_started = 0;
+	platform = (struct exynos_context *) kbdev->platform_context;
+	if(!platform)
+		return;
+
+	/********************************************
+	 *
+	 *  This is workaround about occurred kernel panic when you turn off the system.
+	 *
+	 *  System kernel will call the "__pm_runtime_disable" when you turn off the system.
+	 *  After that function, System kernel do not run the runtimePM API more.
+	 *
+	 *  So, this code is check the "dev->power.disable_depth" value is not zero.
+	 *
+	********************************************/
+	if(dev->power.disable_depth > 0) {
+		if(platform->cmu_pmu_status == 0)
+			kbase_platform_cmu_pmu_control(kbdev, 1);
+		return;
 	}
 
-	result = pm_runtime_get_sync(dev);
-	//OSK_PRINT_ERROR(OSK_BASE_PM, "get_sync, usage_count=%d  \n", atomic_read(&dev->power.usage_count));
-	if(result < 0)
+	if(delayed_work_pending(&kbdev->runtime_pm_workqueue)) {
+		cancel_delayed_work_sync(&kbdev->runtime_pm_workqueue);
+	}
+
+	kbase_platform_clock_on(kbdev);
+	pm_runtime_get_noresume(dev);
+	result = pm_runtime_resume(dev);
+
+#if MALI_GATOR_SUPPORT
+	kbase_trace_mali_timeline_event(GATOR_MAKE_EVENT(ACTIVITY_RTPM_CHANGED, ACTIVITY_RTPM) | 1);
+#endif
+#if MALI_RTPM_DEBUG
+	//printk( "kbase_device_runtime_get_sync, usage_count=%d, runtime_status=%d\n", atomic_read(&dev->power.usage_count), dev->power.runtime_status);
+	printk( "+++kbase_device_runtime_get_sync, usage_count=%d\n", atomic_read(&dev->power.usage_count));
+#endif
+
+	/********************************************
+	 *
+	 *  This check is re-confirm about maybe context switch by another cpu when turn off the system.
+	 *
+	 *  runtimePM put_sync -------- runtimePM get_sync -------- runtimePM put_sync          : CPU 0
+	 *                                      \
+	 *                                       \ ( context running by another core. )
+	 *                                        \
+	 *                                         - (turn off the system) runtimePM disable    : CPU 1
+	 *                                                                    \
+	 *                                                                     \
+	 *                                                                      => do not success implement runtimePM API
+	********************************************/
+	if(result < 0 && result == -EAGAIN)
+		kbase_platform_cmu_pmu_control(kbdev, 1);
+	else if(result < 0)
 		OSK_PRINT_ERROR(OSK_BASE_PM, "pm_runtime_get_sync failed (%d)\n", result);
 }
 
 void kbase_device_runtime_put_sync(struct device *dev)
 {
-	int result;
+	struct kbase_device *kbdev;
+	kbdev = dev_get_drvdata(dev);
 
-	if(rp_started) {
-		return;
+	if(delayed_work_pending(&kbdev->runtime_pm_workqueue)) {
+		cancel_delayed_work_sync(&kbdev->runtime_pm_workqueue);
 	}
 
-	result = pm_runtime_put_sync(dev);
-	//OSK_PRINT_ERROR(OSK_BASE_PM, "put_sync, usage_count=%d  \n", atomic_read(&dev->power.usage_count));
-	if(result < 0)
-		OSK_PRINT_ERROR(OSK_BASE_PM, "pm_runtime_put_sync failed (%d)\n", result);
+	pm_runtime_put_noidle(kbdev->osdev.dev);
+	schedule_delayed_work(&kbdev->runtime_pm_workqueue, RUNTIME_PM_DELAY_TIME/(1000/HZ));
+#if MALI_RTPM_DEBUG
+	printk( "---kbase_device_runtime_put_sync, usage_count=%d\n", atomic_read(&kbdev->osdev.dev->power.usage_count));
+#endif
 }

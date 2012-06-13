@@ -14,7 +14,6 @@
  * @file mali_kbase_platform.c
  * Platform-dependent init.
  */
-
 #include <osk/mali_osk.h>
 #include <kbase/src/common/mali_kbase.h>
 #include <kbase/src/common/mali_kbase_pm.h>
@@ -22,7 +21,7 @@
 #include <kbase/src/common/mali_kbase_mem.h>
 #include <kbase/src/common/mali_midg_regmap.h>
 #include <kbase/src/linux/mali_kbase_mem_linux.h>
-#include <uk/mali_ukk.h>
+#include <kbase/mali_ukk.h>
 
 #include <linux/module.h>
 #include <linux/init.h>
@@ -46,20 +45,28 @@
 #include <mach/pmu.h>
 #include <mach/regs-pmu.h>
 #include <asm/delay.h>
+#include <kbase/src/platform/mali_kbase_platform.h>
 #include <kbase/src/platform/mali_kbase_runtime_pm.h>
 #include <kbase/src/platform/mali_kbase_dvfs.h>
 
-#define VITHAR_DEFAULT_CLOCK 533000000
-static int kbase_platform_power_clock_init(struct device *dev)
-{
-	int timeout;
-	int err;
-	struct clk *gpll = NULL;
+#include <kbase/src/common/mali_kbase_gator.h>
 
-	struct kbase_device *kbdev;
-	kbdev = dev_get_drvdata(dev);
-	if (!kbdev)
+#define VITHAR_DEFAULT_CLOCK 533000000
+
+static struct clk *clk_g3d = NULL;
+static int clk_g3d_status = 0;
+
+static int kbase_platform_power_clock_init(kbase_device *kbdev)
+{
+	struct device *dev =  kbdev->osdev.dev;
+	int timeout;
+	struct exynos_context *platform;
+
+	platform = (struct exynos_context *) kbdev->platform_context;
+	if(NULL == platform)
+	{
 		panic("oops");
+	}
 
 	/* Turn on G3D power */
 	__raw_writel(0x7, EXYNOS5_G3D_CONFIGURATION);
@@ -75,78 +82,91 @@ static int kbase_platform_power_clock_init(struct device *dev)
 		timeout--;
 		udelay(100);
 	}
-
 	/* Turn on G3D clock */
-	gpll = clk_get(dev, "mout_gpll");
-	if(IS_ERR(gpll)) {
-		OSK_PRINT_ERROR(OSK_BASE_PM, "failed to clk_get [mout_gpll]\n");
+	clk_g3d = clk_get(dev, "g3d");
+	if(IS_ERR(clk_g3d)) {
+		clk_g3d = NULL;
+		OSK_PRINT_ERROR(OSK_BASE_PM, "failed to clk_get [clk_g3d]\n");
+	}else{
+		clk_enable(clk_g3d);
+		clk_g3d_status = 1;
+	}
+
+	platform->sclk_g3d = clk_get(dev, "aclk_400_g3d");
+	if(IS_ERR(platform->sclk_g3d)) {
+		OSK_PRINT_ERROR(OSK_BASE_PM, "failed to clk_get [sclk_g3d]\n");
 		goto out;
 	}
 
-	kbdev->sclk_g3d = clk_get(dev, "aclk_400_g3d");
-	if(IS_ERR(kbdev->sclk_g3d)) {
-		OSK_PRINT_ERROR(OSK_BASE_PM, "failed to clk_get [aclk_400_g3d]\n");
-		goto out;
-	}
-
-	err = clk_set_parent(kbdev->sclk_g3d, gpll);
-	if(err < 0) {
-		OSK_PRINT_ERROR(OSK_BASE_PM, "failed to clk_set_parent\n");
-		goto out;
-	}
-
-	err = clk_set_rate(kbdev->sclk_g3d, VITHAR_DEFAULT_CLOCK);
-	if(err < 0) {
+	clk_set_rate(platform->sclk_g3d, VITHAR_DEFAULT_CLOCK);
+	if(IS_ERR(platform->sclk_g3d)) {
 		OSK_PRINT_ERROR(OSK_BASE_PM, "failed to clk_set_rate [sclk_g3d] = %d\n", VITHAR_DEFAULT_CLOCK);
 		goto out;
 	}
-
-	(void) clk_enable(kbdev->sclk_g3d);
+	(void) clk_enable(platform->sclk_g3d);
 
 	return 0;
 out:
 	return -EPERM;
 }
 
-static int kbase_platform_clock_on(struct device *dev)
+int kbase_platform_clock_on(struct kbase_device *kbdev)
 {
-	struct kbase_device *kbdev;
-	kbdev = dev_get_drvdata(dev);
-
+	struct exynos_context *platform;
 	if (!kbdev)
 		return -ENODEV;
 
-	(void) clk_enable(kbdev->sclk_g3d);
+	platform = (struct exynos_context *) kbdev->platform_context;
+	if (!platform)
+		return -ENODEV;
+
+	if (clk_g3d_status == 1)
+		return 0;
+
+	if(clk_g3d)
+	{
+		(void) clk_enable(clk_g3d);
+	}
+	else
+	{
+		(void) clk_enable(platform->sclk_g3d);
+	}
 
 	return 0;
 }
 
-static int kbase_platform_clock_off(struct device *dev)
+int kbase_platform_clock_off(struct kbase_device *kbdev)
 {
-	struct kbase_device *kbdev;
-	kbdev = dev_get_drvdata(dev);
-
+	struct exynos_context *platform;
 	if (!kbdev)
 		return -ENODEV;
 
-	(void)clk_disable(kbdev->sclk_g3d);
+	platform = (struct exynos_context *) kbdev->platform_context;
+	if (!platform)
+		return -ENODEV;
 
+	if (clk_g3d_status == 0)
+		return 0;
+
+	if(clk_g3d)
+	{
+		(void)clk_disable(clk_g3d);
+	}
+	else
+	{
+		(void)clk_disable(platform->sclk_g3d);
+	}
 	return 0;
 }
 
-static inline int kbase_platform_is_power_on(void)
+int kbase_platform_is_power_on(void)
 {
-    return ((__raw_readl(EXYNOS5_G3D_STATUS) & 0x7) == 0x7) ? 1 : 0;
+	return ((__raw_readl(EXYNOS5_G3D_STATUS) & 0x7) == 0x7) ? 1 : 0;
 }
 
-static int kbase_platform_power_on(struct device *dev)
+static int kbase_platform_power_on(void)
 {
 	int timeout;
-	struct kbase_device *kbdev;
-	kbdev = dev_get_drvdata(dev);
-
-	if (!kbdev)
-		return -ENODEV;
 
 	/* Turn on G3D  */
 	__raw_writel(0x7, EXYNOS5_G3D_CONFIGURATION);
@@ -167,14 +187,9 @@ static int kbase_platform_power_on(struct device *dev)
 	return 0;
 }
 
-static int kbase_platform_power_off(struct device *dev)
+static int kbase_platform_power_off(void)
 {
 	int timeout;
-	struct kbase_device *kbdev;
-	kbdev = dev_get_drvdata(dev);
-
-	if (!kbdev)
-		return -ENODEV;
 
 	/* Turn off G3D  */
 	__raw_writel(0x0, EXYNOS5_G3D_CONFIGURATION);
@@ -195,61 +210,78 @@ static int kbase_platform_power_off(struct device *dev)
 	return 0;
 }
 
-int kbase_platform_cmu_pmu_control(struct device *dev, int control)
+int kbase_platform_cmu_pmu_control(struct kbase_device *kbdev, int control)
 {
-	struct kbase_device *kbdev;
-	kbdev = dev_get_drvdata(dev);
-
+	unsigned long flags;
+	struct exynos_context *platform;
 	if (!kbdev)
-		return -ENODEV;
-
-	osk_spinlock_irq_lock(&kbdev->pm.cmu_pmu_lock);
-
-	if(control == 0) // off
 	{
-		if(kbdev->pm.cmu_pmu_status == 0)
+		return -ENODEV;
+	}
+
+	platform = (struct exynos_context *) kbdev->platform_context;
+	if (!platform)
+	{
+		return -ENODEV;
+	}
+
+	spin_lock_irqsave(&platform->cmu_pmu_lock, flags);
+
+#if MALI_GATOR_SUPPORT
+	kbase_trace_mali_timeline_event(GATOR_MAKE_EVENT(ACTIVITY_RTPM_CHANGED, ACTIVITY_RTPM) | control);
+#endif
+	/* off */
+	if(control == 0)
+	{
+		if(platform->cmu_pmu_status == 0)
 		{
-			osk_spinlock_irq_unlock(&kbdev->pm.cmu_pmu_lock);
+			spin_unlock_irqrestore(&platform->cmu_pmu_lock, flags);
 			return 0;
 		}
 
-		if(kbase_platform_power_off(dev))
+		if(kbase_platform_power_off())
 			panic("failed to turn off g3d power\n");
-		if(kbase_platform_clock_off(dev))
+		if(kbase_platform_clock_off(kbdev))
+
 			panic("failed to turn off sclk_g3d\n");
 
-		kbdev->pm.cmu_pmu_status = 0;
+		platform->cmu_pmu_status = 0;
 #if MALI_RTPM_DEBUG
 		printk( KERN_ERR "3D cmu_pmu_control - off\n" );
-#endif
+#endif /* MALI_RTPM_DEBUG */
 	}
-	else // on
+	else
 	{
-		if(kbdev->pm.cmu_pmu_status == 1)
+		/* on */
+		if(platform->cmu_pmu_status == 1)
 		{
-			osk_spinlock_irq_unlock(&kbdev->pm.cmu_pmu_lock);
+			spin_unlock_irqrestore(&platform->cmu_pmu_lock, flags);
 			return 0;
 		}
 
-		if(kbase_platform_clock_on(dev))
+		if(kbase_platform_clock_on(kbdev))
 			panic("failed to turn on sclk_g3d\n");
-		if(kbase_platform_power_on(dev))
+		if(kbase_platform_power_on())
 			panic("failed to turn on g3d power\n");
 
-		kbdev->pm.cmu_pmu_status = 1;
+		platform->cmu_pmu_status = 1;
 #if MALI_RTPM_DEBUG
 		printk( KERN_ERR "3D cmu_pmu_control - on\n");
-#endif
+#endif /* MALI_RTPM_DEBUG */
 	}
 
-	osk_spinlock_irq_unlock(&kbdev->pm.cmu_pmu_lock);
+
+
+	spin_unlock_irqrestore(&platform->cmu_pmu_lock, flags);
 
 	return 0;
 }
 
+#ifdef CONFIG_VITHAR_DEBUG_SYS
 static ssize_t show_clock(struct device *dev, struct device_attribute *attr, char *buf)
 {
 	struct kbase_device *kbdev;
+	struct exynos_context *platform;
 	ssize_t ret = 0;
 	unsigned int clkrate;
 
@@ -258,14 +290,18 @@ static ssize_t show_clock(struct device *dev, struct device_attribute *attr, cha
 	if (!kbdev)
 		return -ENODEV;
 
-	if(!kbdev->sclk_g3d)
+	platform = (struct exynos_context *) kbdev->platform_context;
+	if(!platform)
 		return -ENODEV;
 
-	clkrate = clk_get_rate(kbdev->sclk_g3d);
+	if(!platform->sclk_g3d)
+		return -ENODEV;
+
+	clkrate = clk_get_rate(platform->sclk_g3d);
 	ret += snprintf(buf+ret, PAGE_SIZE-ret, "Current sclk_g3d[G3D_BLK] = %dMhz", clkrate/1000000);
 
 	/* To be revised  */
-	ret += snprintf(buf+ret, PAGE_SIZE-ret, "\nPossible settings : 533, 400, 266, 200, 160, 133, 100, 50Mhz");
+	ret += snprintf(buf+ret, PAGE_SIZE-ret, "\nPossible settings : 533, 450, 400, 350, 266, 160, 100Mhz");
 
 	if (ret < PAGE_SIZE - 1)
 		ret += snprintf(buf+ret, PAGE_SIZE-ret, "\n");
@@ -282,54 +318,44 @@ static ssize_t show_clock(struct device *dev, struct device_attribute *attr, cha
 static ssize_t set_clock(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
 {
 	struct kbase_device *kbdev;
-	unsigned int tmp = 0;
-	unsigned int cmd = 0;
+	struct exynos_context *platform;
+	unsigned int tmp = 0, freq = 0;
 	kbdev = dev_get_drvdata(dev);
 
 	if (!kbdev)
 		return -ENODEV;
 
-	if(!kbdev->sclk_g3d)
+	platform = (struct exynos_context *) kbdev->platform_context;
+	if(!platform)
+		return -ENODEV;
+
+	if(!platform->sclk_g3d)
 		return -ENODEV;
 
 	if (sysfs_streq("533", buf)) {
-	    cmd = 1;
-	    clk_set_rate(kbdev->sclk_g3d, 533000000);
+		freq=533;
+	} else if (sysfs_streq("450", buf)) {
+		freq=450;
 	} else if (sysfs_streq("400", buf)) {
-	    cmd = 1;
-	    clk_set_rate(kbdev->sclk_g3d, 400000000);
+		freq=400;
+	} else if (sysfs_streq("350", buf)) {
+		freq=350;
 	} else if (sysfs_streq("266", buf)) {
-	    cmd = 1;
-	    clk_set_rate(kbdev->sclk_g3d, 267000000);
-	} else if (sysfs_streq("200", buf)) {
-	    cmd = 1;
-	    clk_set_rate(kbdev->sclk_g3d, 200000000);
+		freq=266;
 	} else if (sysfs_streq("160", buf)) {
-	    cmd = 1;
-	    clk_set_rate(kbdev->sclk_g3d, 160000000);
-	} else if (sysfs_streq("133", buf)) {
-	    cmd = 1;
-	    clk_set_rate(kbdev->sclk_g3d, 134000000);
+		freq=160;
 	} else if (sysfs_streq("100", buf)) {
-	    cmd = 1;
-	    clk_set_rate(kbdev->sclk_g3d, 100000000);
-	} else if (sysfs_streq("50", buf)) {
-	    cmd = 1;
-	    clk_set_rate(kbdev->sclk_g3d, 50000000);
+		freq=100;
 	} else {
-	    dev_err(dev, "set_clock: invalid value\n");
-	    return -ENOENT;
+		dev_err(dev, "set_clock: invalid value\n");
+		return -ENOENT;
 	}
 
-	if(cmd == 1) {
-	    /* Waiting for clock is stable */
-	    do {
+	kbase_platform_dvfs_set_level(kbdev, kbase_platform_dvfs_get_level(freq));
+	/* Waiting for clock is stable */
+	do {
 		tmp = __raw_readl(EXYNOS5_CLKDIV_STAT_TOP0);
-	    } while (tmp & 0x1000000);
-	}
-	else if(cmd == 2) {
-	    /* Do we need to check */
-	}
+	} while (tmp & 0x1000000);
 
 	return count;
 }
@@ -346,7 +372,7 @@ static ssize_t show_fbdev(struct device *dev, struct device_attribute *attr, cha
 		return -ENODEV;
 
 	for(i = 0 ; i < num_registered_fb ; i++) {
-	    ret += snprintf(buf+ret, PAGE_SIZE-ret, "fb[%d] xres=%d, yres=%d, addr=0x%lx\n", i, registered_fb[i]->var.xres, registered_fb[i]->var.yres, registered_fb[i]->fix.smem_start);
+		ret += snprintf(buf+ret, PAGE_SIZE-ret, "fb[%d] xres=%d, yres=%d, addr=0x%lx\n", i, registered_fb[i]->var.xres, registered_fb[i]->var.yres, registered_fb[i]->fix.smem_start);
 	}
 
 	if (ret < PAGE_SIZE - 1)
@@ -359,7 +385,7 @@ static ssize_t show_fbdev(struct device *dev, struct device_attribute *attr, cha
 	}
 
 	return ret;
-} 
+}
 
 typedef enum {
 	L1_I_tag_RAM = 0x00,
@@ -386,23 +412,23 @@ static inline void asm_ramindex_mrc(u32 *DL1Data0, u32 *DL1Data1, u32 *DL1Data2,
 
 	if(DL1Data0)
 	{
-	    asm volatile("mrc p15, 0, %0, c15, c1, 0" : "=r" (val));
-	    *DL1Data0 = val;
+		asm volatile("mrc p15, 0, %0, c15, c1, 0" : "=r" (val));
+		*DL1Data0 = val;
 	}
 	if(DL1Data1)
 	{
-	    asm volatile("mrc p15, 0, %0, c15, c1, 1" : "=r" (val));
-	    *DL1Data1 = val;
+		asm volatile("mrc p15, 0, %0, c15, c1, 1" : "=r" (val));
+		*DL1Data1 = val;
 	}
 	if(DL1Data2)
 	{
-	    asm volatile("mrc p15, 0, %0, c15, c1, 2" : "=r" (val));
-	    *DL1Data2 = val;
+		asm volatile("mrc p15, 0, %0, c15, c1, 2" : "=r" (val));
+		*DL1Data2 = val;
 	}
 	if(DL1Data3)
 	{
-	    asm volatile("mrc p15, 0, %0, c15, c1, 3" : "=r" (val));
-	    *DL1Data3 = val;
+		asm volatile("mrc p15, 0, %0, c15, c1, 3" : "=r" (val));
+		*DL1Data3 = val;
 	}
 }
 
@@ -433,107 +459,107 @@ static ssize_t show_dtlb(struct device *dev, struct device_attribute *attr, char
 		return -ENODEV;
 
 	/* L1-I tag RAM */
-	if(ramindex == L1_I_tag_RAM) 
+	if(ramindex == L1_I_tag_RAM)
 	{
-	    printk("Not implemented yet\n");
+		printk("Not implemented yet\n");
 	}
 	/* L1-I data RAM */
-	else if(ramindex == L1_I_data_RAM) 
+	else if(ramindex == L1_I_data_RAM)
 	{
-	    printk("Not implemented yet\n");
+		printk("Not implemented yet\n");
 	}
 	/* L1-I BTB RAM */
-	else if(ramindex == L1_I_BTB_RAM) 
+	else if(ramindex == L1_I_BTB_RAM)
 	{
-	    printk("Not implemented yet\n");
+		printk("Not implemented yet\n");
 	}
 	/* L1-I GHB RAM */
-	else if(ramindex == L1_I_GHB_RAM) 
+	else if(ramindex == L1_I_GHB_RAM)
 	{
-	    printk("Not implemented yet\n");
+		printk("Not implemented yet\n");
 	}
 	/* L1-I TLB RAM */
-	else if(ramindex == L1_I_TLB_RAM) 
+	else if(ramindex == L1_I_TLB_RAM)
 	{
-	    printk("L1-I TLB RAM\n");
-	    for(entries = 0 ; entries < 32 ; entries++)
-	    {
-		get_tlb_array((((u8)ramindex) << 24) + entries, &DL1Data0, &DL1Data1, &DL1Data2, NULL);
-		printk("entries[%d], DL1Data0=%08x, DL1Data1=%08x DL1Data2=%08x\n", entries, DL1Data0, DL1Data1 & 0xffff, 0x0);
-	    }
+		printk("L1-I TLB RAM\n");
+		for(entries = 0 ; entries < 32 ; entries++)
+		{
+			get_tlb_array((((u8)ramindex) << 24) + entries, &DL1Data0, &DL1Data1, &DL1Data2, NULL);
+			printk("entries[%d], DL1Data0=%08x, DL1Data1=%08x DL1Data2=%08x\n", entries, DL1Data0, DL1Data1 & 0xffff, 0x0);
+		}
 	}
 	/* L1-I indirect predictor RAM */
-	else if(ramindex == L1_I_indirect_predictor_RAM) 
+	else if(ramindex == L1_I_indirect_predictor_RAM)
 	{
-	    printk("Not implemented yet\n");
+		printk("Not implemented yet\n");
 	}
 	/* L1-D tag RAM */
-	else if(ramindex == L1_D_tag_RAM) 
+	else if(ramindex == L1_D_tag_RAM)
 	{
-	    printk("Not implemented yet\n");
+		printk("Not implemented yet\n");
 	}
 	/* L1-D data RAM */
-	else if(ramindex == L1_D_data_RAM) 
+	else if(ramindex == L1_D_data_RAM)
 	{
-	    printk("Not implemented yet\n");
+		printk("Not implemented yet\n");
 	}
 	/* L1-D load TLB array */
 	else if(ramindex == L1_D_load_TLB_array)
 	{
-	    printk("L1-D load TLB array\n");
-	    for(entries = 0 ; entries < 32 ; entries++)
-	    {
-		get_tlb_array((((u8)ramindex) << 24) + entries, &DL1Data0, &DL1Data1, &DL1Data2, &DL1Data3);
-		printk("entries[%d], DL1Data0=%08x, DL1Data1=%08x, DL1Data2=%08x, DL1Data3=%08x\n", entries, DL1Data0, DL1Data1, DL1Data2, DL1Data3 & 0x3f);
-	    }
+		printk("L1-D load TLB array\n");
+		for(entries = 0 ; entries < 32 ; entries++)
+		{
+			get_tlb_array((((u8)ramindex) << 24) + entries, &DL1Data0, &DL1Data1, &DL1Data2, &DL1Data3);
+			printk("entries[%d], DL1Data0=%08x, DL1Data1=%08x, DL1Data2=%08x, DL1Data3=%08x\n", entries, DL1Data0, DL1Data1, DL1Data2, DL1Data3 & 0x3f);
+		}
 	}
 	/* L1-D store TLB array */
 	else if(ramindex == L1_D_store_TLB_array)
 	{
-	    printk("\nL1-D store TLB array\n");
-	    for(entries = 0 ; entries < 32 ; entries++)
-	    {
-		get_tlb_array((((u8)ramindex) << 24) + entries, &DL1Data0, &DL1Data1, &DL1Data2, &DL1Data3);
-		printk("entries[%d], DL1Data0=%08x, DL1Data1=%08x, DL1Data2=%08x, DL1Data3=%08x\n", entries, DL1Data0, DL1Data1, DL1Data2, DL1Data3 & 0x3f);
-	    }
+		printk("\nL1-D store TLB array\n");
+		for(entries = 0 ; entries < 32 ; entries++)
+		{
+			get_tlb_array((((u8)ramindex) << 24) + entries, &DL1Data0, &DL1Data1, &DL1Data2, &DL1Data3);
+			printk("entries[%d], DL1Data0=%08x, DL1Data1=%08x, DL1Data2=%08x, DL1Data3=%08x\n", entries, DL1Data0, DL1Data1, DL1Data2, DL1Data3 & 0x3f);
+		}
 	}
 	/* L2 tag RAM */
-	else if(ramindex == L2_tag_RAM) 
+	else if(ramindex == L2_tag_RAM)
 	{
-	    printk("Not implemented yet\n");
+		printk("Not implemented yet\n");
 	}
 	/* L2 data RAM */
-	else if(ramindex == L2_data_RAM) 
+	else if(ramindex == L2_data_RAM)
 	{
-	    printk("Not implemented yet\n");
+		printk("Not implemented yet\n");
 	}
 	/* L2 snoop tag RAM */
-	else if(ramindex == L2_snoop_tag_RAM) 
+	else if(ramindex == L2_snoop_tag_RAM)
 	{
-	    printk("Not implemented yet\n");
+		printk("Not implemented yet\n");
 	}
 	/* L2 data ECC RAM */
-	else if(ramindex == L2_data_ECC_RAM) 
+	else if(ramindex == L2_data_ECC_RAM)
 	{
-	    printk("Not implemented yet\n");
+		printk("Not implemented yet\n");
 	}
 	/* L2 dirty RAM */
-	else if(ramindex == L2_dirty_RAM) 
+	else if(ramindex == L2_dirty_RAM)
 	{
-	    printk("Not implemented yet\n");
+		printk("Not implemented yet\n");
 	}
 	/* L2 TLB array */
 	else if(ramindex == L2_TLB_RAM)
 	{
-	    printk("\nL2 TLB array\n");
-	    for(ways = 0 ; ways < 4 ; ways++)
-	    {
-		for(entries = 0 ; entries < 512 ; entries++)
+		printk("\nL2 TLB array\n");
+		for(ways = 0 ; ways < 4 ; ways++)
 		{
-		    get_tlb_array((ramindex << 24) + (ways << 18) + entries, &DL1Data0, &DL1Data1, &DL1Data2, &DL1Data3);
-		    printk("ways[%d]:entries[%d], DL1Data0=%08x, DL1Data1=%08x, DL1Data2=%08x, DL1Data3=%08x\n", ways, entries, DL1Data0, DL1Data1, DL1Data2, DL1Data3);
+			for(entries = 0 ; entries < 512 ; entries++)
+			{
+				get_tlb_array((ramindex << 24) + (ways << 18) + entries, &DL1Data0, &DL1Data1, &DL1Data2, &DL1Data3);
+				printk("ways[%d]:entries[%d], DL1Data0=%08x, DL1Data1=%08x, DL1Data2=%08x, DL1Data3=%08x\n", ways, entries, DL1Data0, DL1Data1, DL1Data2, DL1Data3);
+			}
 		}
-	    }
 	}
 	else {
 	}
@@ -549,7 +575,7 @@ static ssize_t show_dtlb(struct device *dev, struct device_attribute *attr, char
 		ret = PAGE_SIZE-1;
 	}
 	return ret;
-} 
+}
 
 static ssize_t set_dtlb(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
 {
@@ -560,45 +586,45 @@ static ssize_t set_dtlb(struct device *dev, struct device_attribute *attr, const
 		return -ENODEV;
 
 	if (sysfs_streq("L1_I_tag_RAM", buf)) {
-	    ramindex = L1_I_tag_RAM;
+		ramindex = L1_I_tag_RAM;
 	} else if (sysfs_streq("L1_I_data_RAM", buf)) {
-	    ramindex = L1_I_data_RAM;
+		ramindex = L1_I_data_RAM;
 	} else if (sysfs_streq("L1_I_BTB_RAM", buf)) {
-	    ramindex = L1_I_BTB_RAM;
+		ramindex = L1_I_BTB_RAM;
 	} else if (sysfs_streq("L1_I_GHB_RAM", buf)) {
-	    ramindex = L1_I_GHB_RAM;
+		ramindex = L1_I_GHB_RAM;
 	} else if (sysfs_streq("L1_I_TLB_RAM", buf)) {
-	    ramindex = L1_I_TLB_RAM;
+		ramindex = L1_I_TLB_RAM;
 	} else if (sysfs_streq("L1_I_indirect_predictor_RAM", buf)) {
-	    ramindex = L1_I_indirect_predictor_RAM;
+		ramindex = L1_I_indirect_predictor_RAM;
 	} else if (sysfs_streq("L1_D_tag_RAM", buf)) {
-	    ramindex = L1_D_tag_RAM;
+		ramindex = L1_D_tag_RAM;
 	} else if (sysfs_streq("L1_D_data_RAM", buf)) {
-	    ramindex = L1_D_data_RAM;
+		ramindex = L1_D_data_RAM;
 	} else if (sysfs_streq("L1_D_load_TLB_array", buf)) {
-	    ramindex = L1_D_load_TLB_array;
+		ramindex = L1_D_load_TLB_array;
 	} else if (sysfs_streq("L1_D_store_TLB_array", buf)) {
-	    ramindex = L1_D_store_TLB_array;
+		ramindex = L1_D_store_TLB_array;
 	} else if (sysfs_streq("L2_tag_RAM", buf)) {
-	    ramindex = L2_tag_RAM;
+		ramindex = L2_tag_RAM;
 	} else if (sysfs_streq("L2_data_RAM", buf)) {
-	    ramindex = L2_data_RAM;
+		ramindex = L2_data_RAM;
 	} else if (sysfs_streq("L2_snoop_tag_RAM", buf)) {
-	    ramindex = L2_snoop_tag_RAM;
+		ramindex = L2_snoop_tag_RAM;
 	} else if (sysfs_streq("L2_data_ECC_RAM", buf)) {
-	    ramindex = L2_data_ECC_RAM;
+		ramindex = L2_data_ECC_RAM;
 	} else if (sysfs_streq("L2_dirty_RAM", buf)) {
-	    ramindex = L2_dirty_RAM;
+		ramindex = L2_dirty_RAM;
 	} else if (sysfs_streq("L2_TLB_RAM", buf)) {
-	    ramindex = L2_TLB_RAM;
+		ramindex = L2_TLB_RAM;
 	} else {
-	    printk("Invalid value....\n\n");
-	    printk("Available options are one of below\n");
-	    printk("L1_I_tag_RAM, L1_I_data_RAM, L1_I_BTB_RAM\n");
-	    printk("L1_I_GHB_RAM, L1_I_TLB_RAM, L1_I_indirect_predictor_RAM\n");
-	    printk("L1_D_tag_RAM, L1_D_data_RAM, L1_D_load_TLB_array, L1_D_store_TLB_array\n");
-	    printk("L2_tag_RAM, L2_data_RAM, L2_snoop_tag_RAM, L2_data_ECC_RAM\n");
-	    printk("L2_dirty_RAM, L2_TLB_RAM\n");
+		printk("Invalid value....\n\n");
+		printk("Available options are one of below\n");
+		printk("L1_I_tag_RAM, L1_I_data_RAM, L1_I_BTB_RAM\n");
+		printk("L1_I_GHB_RAM, L1_I_TLB_RAM, L1_I_indirect_predictor_RAM\n");
+		printk("L1_D_tag_RAM, L1_D_data_RAM, L1_D_load_TLB_array, L1_D_store_TLB_array\n");
+		printk("L2_tag_RAM, L2_data_RAM, L2_snoop_tag_RAM, L2_data_ECC_RAM\n");
+		printk("L2_dirty_RAM, L2_TLB_RAM\n");
 	}
 
 	return count;
@@ -630,40 +656,13 @@ static ssize_t show_vol(struct device *dev, struct device_attribute *attr, char 
 	return ret;
 }
 
-static ssize_t set_vol(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
-{
-	struct kbase_device *kbdev;
-	kbdev = dev_get_drvdata(dev);
-
-	if (!kbdev)
-		return -ENODEV;
-
-	if (sysfs_streq("950000", buf)) {
-	    kbase_platform_set_voltage(dev, 950000);
-	} else if (sysfs_streq("1000000", buf)) {
-	    kbase_platform_set_voltage(dev, 1000000);
-	} else if (sysfs_streq("1050000", buf)) {
-	    kbase_platform_set_voltage(dev, 1050000);
-	} else if (sysfs_streq("1100000", buf)) {
-	    kbase_platform_set_voltage(dev, 1100000);
-	} else if (sysfs_streq("1150000", buf)) {
-	    kbase_platform_set_voltage(dev, 1150000);
-	} else if (sysfs_streq("1200000", buf)) {
-	    kbase_platform_set_voltage(dev, 1200000);
-	} else {
-	    printk("invalid voltage\n");
-	}
-
-	return count;
-}
-
 static int get_clkout_cmu_top(int *val)
 {
-    *val = __raw_readl(EXYNOS5_CLKOUT_CMU_TOP);
-    if((*val & 0x1f) == 0xB) /* CLKOUT is ACLK_400 in CLKOUT_CMU_TOP */
-	return 1;
-    else
-	return 0;
+	*val = __raw_readl(EXYNOS5_CLKOUT_CMU_TOP);
+	if((*val & 0x1f) == 0xB) /* CLKOUT is ACLK_400 in CLKOUT_CMU_TOP */
+		return 1;
+	else
+		return 0;
 }
 
 static void set_clkout_for_3d(void)
@@ -694,9 +693,9 @@ static ssize_t show_clkout(struct device *dev, struct device_attribute *attr, ch
 		return -ENODEV;
 
 	if(get_clkout_cmu_top(&val))
-	   ret += snprintf(buf+ret, PAGE_SIZE-ret, "Current CLKOUT is g3d divided by 10, CLKOUT_CMU_TOP=0x%x", val);
+		ret += snprintf(buf+ret, PAGE_SIZE-ret, "Current CLKOUT is g3d divided by 10, CLKOUT_CMU_TOP=0x%x", val);
 	else
-	   ret += snprintf(buf+ret, PAGE_SIZE-ret, "Current CLKOUT is not g3d, CLKOUT_CMU_TOP=0x%x", val);
+		ret += snprintf(buf+ret, PAGE_SIZE-ret, "Current CLKOUT is not g3d, CLKOUT_CMU_TOP=0x%x", val);
 
 	if (ret < PAGE_SIZE - 1)
 		ret += snprintf(buf+ret, PAGE_SIZE-ret, "\n");
@@ -719,9 +718,9 @@ static ssize_t set_clkout(struct device *dev, struct device_attribute *attr, con
 		return -ENODEV;
 
 	if (sysfs_streq("3d", buf)) {
-	    set_clkout_for_3d();
+		set_clkout_for_3d();
 	} else {
-	    printk("invalid val (only 3d is accepted\n");
+		printk("invalid val (only 3d is accepted\n");
 	}
 
 	return count;
@@ -738,10 +737,10 @@ static ssize_t show_dvfs(struct device *dev, struct device_attribute *attr, char
 		return -ENODEV;
 
 #ifdef CONFIG_VITHAR_DVFS
-	if(kbdev->pm.metrics.timer.active == MALI_FALSE )
+	if(kbase_platform_dvfs_get_control_status()==0)
 		ret += snprintf(buf+ret, PAGE_SIZE-ret, "G3D DVFS is off");
 	else
-		ret += snprintf(buf+ret, PAGE_SIZE-ret, "G3D DVFS is on");
+		ret += snprintf(buf+ret, PAGE_SIZE-ret, "G3D DVFS is on\nutilisation:%d",kbase_platform_dvfs_get_utilisation());
 #else
 	ret += snprintf(buf+ret, PAGE_SIZE-ret, "G3D DVFS is disabled");
 #endif
@@ -760,10 +759,6 @@ static ssize_t show_dvfs(struct device *dev, struct device_attribute *attr, char
 
 static ssize_t set_dvfs(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
 {
-#ifdef CONFIG_VITHAR_DVFS
-	osk_error ret;
-	int vol;
-#endif
 	struct kbase_device *kbdev;
 	kbdev = dev_get_drvdata(dev);
 
@@ -772,21 +767,11 @@ static ssize_t set_dvfs(struct device *dev, struct device_attribute *attr, const
 
 #ifdef CONFIG_VITHAR_DVFS
 	if (sysfs_streq("off", buf)) {
-		if(kbdev->pm.metrics.timer.active == MALI_FALSE )
-			return count;
-		osk_timer_stop(&kbdev->pm.metrics.timer);
-		kbase_platform_get_default_voltage(dev, &vol);
-		if(vol != 0)
-			kbase_platform_set_voltage(dev, vol);
-		clk_set_rate(kbdev->sclk_g3d, VITHAR_DEFAULT_CLOCK);
+
+		kbase_platform_dvfs_set_control_status(0);
+		kbase_platform_dvfs_set_level(kbdev, kbase_platform_dvfs_get_level(VITHAR_DEFAULT_CLOCK / 1000000));
 	} else if (sysfs_streq("on", buf)) {
-		if(kbdev->pm.metrics.timer.active == MALI_TRUE )
-			return count;
-		ret = osk_timer_start(&kbdev->pm.metrics.timer, KBASE_PM_DVFS_FREQUENCY);
-		if (ret != OSK_ERR_NONE)
-		{
-			printk("osk_timer_start failed\n");
-		}
+		kbase_platform_dvfs_set_control_status(1);
 	} else {
 		printk("invalid val -only [on, off] is accepted\n");
 	}
@@ -797,6 +782,230 @@ static ssize_t set_dvfs(struct device *dev, struct device_attribute *attr, const
 	return count;
 }
 
+static ssize_t show_upper_lock_dvfs(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct kbase_device *kbdev;
+	ssize_t ret = 0;
+#ifdef CONFIG_VITHAR_DVFS
+	unsigned int locked_level = -1;
+#endif
+
+	kbdev = dev_get_drvdata(dev);
+
+	if (!kbdev)
+		return -ENODEV;
+
+#ifdef CONFIG_VITHAR_DVFS
+	locked_level = mali_get_dvfs_upper_locked_freq();
+	if( locked_level > 0 )
+		ret += snprintf(buf+ret, PAGE_SIZE-ret, "Current Upper Lock Level = %dMhz", locked_level );
+	else
+		ret += snprintf(buf+ret, PAGE_SIZE-ret, "Unset the Upper Lock Level");
+	ret += snprintf(buf+ret, PAGE_SIZE-ret, "\nPossible settings : 450, 400, 266, 160, 100, If you want to unlock : 533 or off");
+
+#else
+	ret += snprintf(buf+ret, PAGE_SIZE-ret, "G3D DVFS is disabled. You can not set");
+#endif
+
+	if (ret < PAGE_SIZE - 1)
+		ret += snprintf(buf+ret, PAGE_SIZE-ret, "\n");
+	else
+	{
+		buf[PAGE_SIZE-2] = '\n';
+		buf[PAGE_SIZE-1] = '\0';
+		ret = PAGE_SIZE-1;
+	}
+
+	return ret;
+}
+
+static ssize_t set_upper_lock_dvfs(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
+{
+	struct kbase_device *kbdev;
+	kbdev = dev_get_drvdata(dev);
+
+	if (!kbdev)
+		return -ENODEV;
+
+#ifdef CONFIG_VITHAR_DVFS
+	if (sysfs_streq("off", buf)) {
+		mali_dvfs_freq_unlock();
+	} else if (sysfs_streq("533", buf)) {
+		mali_dvfs_freq_unlock();
+	} else if (sysfs_streq("450", buf)) {
+		mali_dvfs_freq_lock(5);
+	} else if (sysfs_streq("400", buf)) {
+		mali_dvfs_freq_lock(4);
+	} else if (sysfs_streq("350", buf)) {
+		mali_dvfs_freq_lock(3);
+	} else if (sysfs_streq("266", buf)) {
+		mali_dvfs_freq_lock(2);
+	} else if (sysfs_streq("160", buf)) {
+		mali_dvfs_freq_lock(1);
+	} else if (sysfs_streq("100", buf)) {
+		mali_dvfs_freq_lock(0);
+	} else {
+		dev_err(dev, "set_clock: invalid value\n");
+		dev_err(dev, "Possible settings : 450, 400, 266, 160, 100, If you want to unlock : 533\n");
+		return -ENOENT;
+	}
+#else // CONFIG_VITHAR_DVFS
+	printk("G3D DVFS is disabled. You can not set\n");
+#endif
+
+	return count;
+}
+
+static ssize_t show_under_lock_dvfs(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct kbase_device *kbdev;
+	ssize_t ret = 0;
+#ifdef CONFIG_VITHAR_DVFS
+	unsigned int locked_level = -1;
+#endif
+
+	kbdev = dev_get_drvdata(dev);
+
+	if (!kbdev)
+		return -ENODEV;
+
+#ifdef CONFIG_VITHAR_DVFS
+	locked_level = mali_get_dvfs_under_locked_freq();
+	if( locked_level > 0 )
+		ret += snprintf(buf+ret, PAGE_SIZE-ret, "Current Under Lock Level = %dMhz", locked_level );
+	else
+		ret += snprintf(buf+ret, PAGE_SIZE-ret, "Unset the Under Lock Level");
+	ret += snprintf(buf+ret, PAGE_SIZE-ret, "\nPossible settings : 533, 450, 400, 266, 160, If you want to unlock : 100 or off");
+
+#else
+	ret += snprintf(buf+ret, PAGE_SIZE-ret, "G3D DVFS is disabled. You can not set");
+#endif
+
+	if (ret < PAGE_SIZE - 1)
+		ret += snprintf(buf+ret, PAGE_SIZE-ret, "\n");
+	else
+	{
+		buf[PAGE_SIZE-2] = '\n';
+		buf[PAGE_SIZE-1] = '\0';
+		ret = PAGE_SIZE-1;
+	}
+
+	return ret;
+}
+
+static ssize_t set_under_lock_dvfs(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
+{
+	struct kbase_device *kbdev;
+	kbdev = dev_get_drvdata(dev);
+
+	if (!kbdev)
+		return -ENODEV;
+
+#ifdef CONFIG_VITHAR_DVFS
+	if (sysfs_streq("off", buf)) {
+		mali_dvfs_freq_under_unlock();
+	} else if (sysfs_streq("533", buf)) {
+		mali_dvfs_freq_under_lock(6);
+	} else if (sysfs_streq("450", buf)) {
+		mali_dvfs_freq_under_lock(5);
+	} else if (sysfs_streq("400", buf)) {
+		mali_dvfs_freq_under_lock(4);
+	} else if (sysfs_streq("350", buf)) {
+		mali_dvfs_freq_under_lock(3);
+	} else if (sysfs_streq("266", buf)) {
+		mali_dvfs_freq_under_lock(2);
+	} else if (sysfs_streq("160", buf)) {
+		mali_dvfs_freq_under_lock(1);
+	} else if (sysfs_streq("100", buf)) {
+		mali_dvfs_freq_under_unlock();
+	} else {
+		dev_err(dev, "set_clock: invalid value\n");
+		dev_err(dev, "Possible settings : 533, 450, 400, 266, 160, If you want to unlock : 100 or off\n");
+		return -ENOENT;
+	}
+#else // CONFIG_VITHAR_DVFS
+	printk("G3D DVFS is disabled. You can not set\n");
+#endif
+
+	return count;
+}
+
+static ssize_t show_asv(struct device *dev, struct device_attribute *attr, char *buf)
+{
+
+	struct kbase_device *kbdev;
+	ssize_t ret = 0;
+
+	kbdev = dev_get_drvdata(dev);
+
+	if (!kbdev)
+		return -ENODEV;
+
+	ret=kbase_platform_dvfs_sprint_avs_table(buf);
+
+	return ret;
+}
+static ssize_t set_asv(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
+{
+	if (sysfs_streq("off", buf)) {
+		kbase_platform_dvfs_set(0);
+	} else if (sysfs_streq("on", buf)) {
+		kbase_platform_dvfs_set(1);
+	} else {
+		printk("invalid val -only [on, off] is accepted\n");
+	}
+	return count;
+}
+
+extern int prev_level;
+extern long long prev_time;
+extern mali_time_in_state time_in_state[MALI_DVFS_STEP];
+static ssize_t show_time_in_state(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct kbase_device *kbdev;
+	ssize_t ret = 0;
+	int i;
+	unsigned long long current_time;
+
+	kbdev = dev_get_drvdata(dev);
+
+
+	if (!kbdev)
+		return -ENODEV;
+
+	current_time = get_jiffies_64();
+#ifdef cputime64_add
+	time_in_state[prev_level].time = cputime64_add(time_in_state[prev_level].time, cputime_sub(current_time, prev_time));
+#endif
+	prev_time = current_time;
+
+	for(i = 0 ; i < MALI_DVFS_STEP ; i++) {
+		ret += snprintf(buf+ret, PAGE_SIZE-ret, "%d %llu\n", time_in_state[i].freq, time_in_state[i].time);
+	}
+
+	if (ret < PAGE_SIZE - 1)
+		ret += snprintf(buf+ret, PAGE_SIZE-ret, "\n");
+	else
+	{
+		buf[PAGE_SIZE-2] = '\n';
+		buf[PAGE_SIZE-1] = '\0';
+		ret = PAGE_SIZE-1;
+	}
+
+	return ret;
+}
+
+static ssize_t set_time_in_state(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
+{
+	int i;
+
+	for(i = 0 ; i < MALI_DVFS_STEP ; i++) {
+		time_in_state[i].time = 0;
+	}
+
+	printk("time_in_state value is reset complete.\n");
+	return count;
+}
 /** The sysfs file @c clock, fbdev.
  *
  * This is used for obtaining information about the vithar operating clock & framebuffer address,
@@ -804,11 +1013,15 @@ static ssize_t set_dvfs(struct device *dev, struct device_attribute *attr, const
 DEVICE_ATTR(clock, S_IRUGO|S_IWUSR, show_clock, set_clock);
 DEVICE_ATTR(fbdev, S_IRUGO, show_fbdev, NULL);
 DEVICE_ATTR(dtlb, S_IRUGO|S_IWUSR, show_dtlb, set_dtlb);
-DEVICE_ATTR(vol, S_IRUGO|S_IWUSR, show_vol, set_vol);
+DEVICE_ATTR(vol, S_IRUGO|S_IWUSR, show_vol, NULL);
 DEVICE_ATTR(clkout, S_IRUGO|S_IWUSR, show_clkout, set_clkout);
 DEVICE_ATTR(dvfs, S_IRUGO|S_IWUSR, show_dvfs, set_dvfs);
+DEVICE_ATTR(dvfs_upper_lock, S_IRUGO|S_IWUSR, show_upper_lock_dvfs, set_upper_lock_dvfs);
+DEVICE_ATTR(dvfs_under_lock, S_IRUGO|S_IWUSR, show_under_lock_dvfs, set_under_lock_dvfs);
+DEVICE_ATTR(asv, S_IRUGO|S_IWUSR, show_asv, set_asv);
+DEVICE_ATTR(time_in_state, S_IRUGO|S_IWUSR, show_time_in_state, set_time_in_state);
 
-static int kbase_platform_create_sysfs_file(struct device *dev)
+int kbase_platform_create_sysfs_file(struct device *dev)
 {
 	if (device_create_file(dev, &dev_attr_clock))
 	{
@@ -846,6 +1059,29 @@ static int kbase_platform_create_sysfs_file(struct device *dev)
 		goto out;
 	}
 
+	if (device_create_file(dev, &dev_attr_dvfs_upper_lock))
+	{
+		dev_err(dev, "Couldn't create sysfs file [dvfs_upper_lock]\n");
+		goto out;
+	}
+
+	if (device_create_file(dev, &dev_attr_dvfs_under_lock))
+	{
+		dev_err(dev, "Couldn't create sysfs file [dvfs_under_lock]\n");
+		goto out;
+	}
+
+	if (device_create_file(dev, &dev_attr_asv))
+	{
+		dev_err(dev, "Couldn't create sysfs file [asv]\n");
+		goto out;
+	}
+
+	if (device_create_file(dev, &dev_attr_time_in_state))
+	{
+		dev_err(dev, "Couldn't create sysfs file [time_in_state]\n");
+		goto out;
+	}
 	return 0;
 out:
 	return -ENOENT;
@@ -859,47 +1095,77 @@ void kbase_platform_remove_sysfs_file(struct device *dev)
 	device_remove_file(dev, &dev_attr_vol);
 	device_remove_file(dev, &dev_attr_clkout);
 	device_remove_file(dev, &dev_attr_dvfs);
+	device_remove_file(dev, &dev_attr_dvfs_upper_lock);
+	device_remove_file(dev, &dev_attr_dvfs_under_lock);
+	device_remove_file(dev, &dev_attr_asv);
+	device_remove_file(dev, &dev_attr_time_in_state);
 }
+#endif /* CONFIG_VITHAR_DEBUG_SYS */
 
-int kbase_platform_init(struct device *dev)
+mali_error kbase_platform_init(struct kbase_device *kbdev)
 {
-	if(kbase_platform_power_clock_init(dev)){
-		return -ENOENT;
+	struct exynos_context *platform;
+
+	platform = osk_malloc(sizeof(struct exynos_context));
+
+	if(NULL == platform)
+	{
+		return MALI_ERROR_OUT_OF_MEMORY;
 	}
+
+	kbdev->platform_context = (void *) platform;
+
+	platform->cmu_pmu_status = 0;
+	spin_lock_init(&platform->cmu_pmu_lock);
+
+	if(kbase_platform_power_clock_init(kbdev))
+	{
+		goto clock_init_fail;
+	}
+
 #ifdef CONFIG_REGULATOR
-	if(kbase_platform_regulator_init(dev)){
-		return -ENOENT;
+	if(kbase_platform_regulator_init())
+	{
+		goto regulator_init_fail;
 	}
-#endif
+#endif /* CONFIG_REGULATOR */
 
-#ifdef CONFIG_VITHAR_RT_PM
-	kbase_device_runtime_init_workqueue(dev);
-#endif
-
-	if(kbase_platform_create_sysfs_file(dev)){
-		return -ENOENT;
-	}
 
 #ifdef CONFIG_VITHAR_DVFS
-	kbase_platform_dvfs_init(dev, 3);
-#endif
+	kbase_platform_dvfs_init(kbdev);
+#endif /* CONFIG_VITHAR_DVFS */
 
-	return 0;
+	/* Enable power */
+	kbase_platform_cmu_pmu_control(kbdev, 1);
+	return MALI_ERROR_NONE;
+
+#ifdef CONFIG_REGULATOR
+	kbase_platform_regulator_disable();
+#endif /* CONFIG_REGULATOR */
+regulator_init_fail:
+clock_init_fail:
+	osk_free(platform);
+
+	return MALI_ERROR_FUNCTION_FAILED;
 }
 
-void kbase_platform_term(struct device *dev)
+void kbase_platform_term(kbase_device *kbdev)
 {
-#ifdef CONFIG_VITHAR_RT_PM
-	kbase_device_runtime_disable(dev);
-#endif
+	struct exynos_context *platform;
+
+	platform = (struct exynos_context *) kbdev->platform_context;
 
 #ifdef CONFIG_VITHAR_DVFS
 	kbase_platform_dvfs_term();
-#endif
+#endif /* CONFIG_VITHAR_DVFS */
 
+	/* Disable power */
+	kbase_platform_cmu_pmu_control(kbdev, 0);
 #ifdef CONFIG_REGULATOR
-	kbase_platform_regulator_disable(dev);
-#endif
-
+	kbase_platform_regulator_disable();
+#endif /* CONFIG_REGULATOR */
+	osk_free(kbdev->platform_context);
+	kbdev->platform_context = 0;
 	return;
 }
+

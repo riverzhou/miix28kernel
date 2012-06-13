@@ -91,9 +91,6 @@ mali_error kbasep_pm_metrics_init(kbase_device *kbdev)
 	kbdev->pm.metrics.time_idle = 0;
 	kbdev->pm.metrics.gpu_active = MALI_TRUE;
 	kbdev->pm.metrics.timer_active = MALI_TRUE;
-#ifdef CONFIG_VITHAR_RT_PM
-	kbdev->pm.cmu_pmu_status = 0;
-#endif
 
 	osk_err = osk_spinlock_irq_init(&kbdev->pm.metrics.lock, OSK_LOCK_ORDER_PM_METRICS);
 	if (OSK_ERR_NONE != osk_err)

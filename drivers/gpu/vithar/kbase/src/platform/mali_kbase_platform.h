@@ -18,10 +18,24 @@
 #ifndef _KBASE_PLATFORM_H_
 #define _KBASE_PLATFORM_H_
 
+struct exynos_context
+{
+	/** Indicator if system clock to mail-t604 is active */
+	int cmu_pmu_status;
+	/** cmd & pmu lock */
+	spinlock_t cmu_pmu_lock;
+	struct clk *sclk_g3d;
+};
+
 /* All things that are needed for the Linux port. */
-int kbase_platform_cmu_pmu_control(struct device *dev, int control);
+int kbase_platform_cmu_pmu_control(struct kbase_device *kbdev, int control);
+int kbase_platform_create_sysfs_file(struct device *dev);
 void kbase_platform_remove_sysfs_file(struct device *dev);
-int kbase_platform_init(struct device *dev);
 int kbase_platform_is_power_on(void);
-void kbase_platform_term(struct device *dev);
+mali_error kbase_platform_init(struct kbase_device *kbdev);
+void kbase_platform_term(kbase_device *kbdev);
+
+int kbase_platform_clock_on(struct kbase_device *kbdev);
+int kbase_platform_clock_off(struct kbase_device *kbdev);
+
 #endif /* _KBASE_PLATFORM_H_ */
