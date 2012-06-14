@@ -86,8 +86,8 @@ static struct exynos5_fimc_is_sensor_info s5k6a3 = {
 #endif
 
 static struct exynos5_fimc_is_regulator_info regulator_manta = {
-	.cam_core = "cam_core_1.8v",
-	.cam_io = "cam_io_from_1.8v",
+	.cam_core = "5m_core_1.5v",
+	.cam_io = "cam_io_1.8v",
 	.cam_af = "cam_af_2.8v",
 	.cam_vt = "vt_cam_1.8v",
 };

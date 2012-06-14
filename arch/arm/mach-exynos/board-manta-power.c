@@ -39,10 +39,6 @@ static struct regulator_consumer_supply ldo3_supply[] = {
 	REGULATOR_SUPPLY("DBVDD3", NULL)
 };
 
-static struct regulator_consumer_supply ldo4_supply[] = {
-	REGULATOR_SUPPLY("vcc_2.8v", NULL),
-};
-
 static struct regulator_consumer_supply ldo8_supply[] = {
 	REGULATOR_SUPPLY("vmipi_1.0v", NULL),
 };
@@ -55,16 +51,8 @@ static struct regulator_consumer_supply ldo10_supply[] = {
 	REGULATOR_SUPPLY("vmipi_1.8v", NULL),
 };
 
-static struct regulator_consumer_supply ldo11_supply[] = {
-	REGULATOR_SUPPLY("vabb1_1.9v", NULL),
-};
-
 static struct regulator_consumer_supply ldo12_supply[] = {
 	REGULATOR_SUPPLY("votg_3.0v", NULL),
-};
-
-static struct regulator_consumer_supply ldo14_supply[] = {
-	REGULATOR_SUPPLY("vabb02_1.8v", NULL),
 };
 
 static struct regulator_consumer_supply ldo15_supply[] = {
@@ -76,23 +64,15 @@ static struct regulator_consumer_supply ldo16_supply[] = {
 };
 
 static struct regulator_consumer_supply ldo17_supply[] = {
-	REGULATOR_SUPPLY("cam_core_1.8v", NULL),
+	REGULATOR_SUPPLY("5m_core_1.5v", NULL),
 };
 
 static struct regulator_consumer_supply ldo18_supply[] = {
-	REGULATOR_SUPPLY("cam_io_from_1.8v", NULL),
+	REGULATOR_SUPPLY("cam_io_1.8v", NULL),
 };
 
 static struct regulator_consumer_supply ldo19_supply[] = {
 	REGULATOR_SUPPLY("vt_cam_1.8v", NULL),
-};
-
-static struct regulator_consumer_supply ldo20_supply[] = {
-	REGULATOR_SUPPLY("vmem_vdd_1.8v", NULL),
-};
-
-static struct regulator_consumer_supply ldo21_supply[] = {
-	REGULATOR_SUPPLY("vtf_2.8v", NULL),
 };
 
 static struct regulator_consumer_supply ldo23_supply[] = {
@@ -107,10 +87,6 @@ static struct regulator_consumer_supply ldo25_supply[] = {
 	REGULATOR_SUPPLY("vadc_3.3v", NULL),
 };
 
-static struct regulator_consumer_supply ldo26_supply[] = {
-	REGULATOR_SUPPLY("irda_3.3v", NULL),
-};
-
 static struct regulator_consumer_supply max77686_buck1 =
 REGULATOR_SUPPLY("vdd_mif", NULL);
 
@@ -122,9 +98,6 @@ REGULATOR_SUPPLY("vdd_int", NULL);
 
 static struct regulator_consumer_supply max77686_buck4 =
 REGULATOR_SUPPLY("vdd_g3d", NULL);
-
-static struct regulator_consumer_supply max77686_buck9 =
-REGULATOR_SUPPLY("cam_isp_core", NULL);
 
 static struct regulator_consumer_supply max77686_enp32khz[] = {
 	REGULATOR_SUPPLY("lpo_in", "bcm47511"),
@@ -154,32 +127,23 @@ static struct regulator_consumer_supply max77686_enp32khz[] = {
 	};
 
 REGULATOR_INIT(ldo3, "VCC_1.8V_AP", 1800000, 1800000, 1, 0, 0);
-REGULATOR_INIT(ldo4, "VCC_2.8V_AP", 2800000, 2800000, 1, 0, 0);
 REGULATOR_INIT(ldo8, "VMIPI_1.0V", 1000000, 1000000, 1,
 	       REGULATOR_CHANGE_STATUS, 1);
 REGULATOR_INIT(ldo9, "TOUCH_VDD_1.8V", 1800000, 1800000, 0,
 	       REGULATOR_CHANGE_STATUS, 1);
 REGULATOR_INIT(ldo10, "VMIPI_1.8V", 1800000, 1800000, 1,
 	       REGULATOR_CHANGE_STATUS, 1);
-REGULATOR_INIT(ldo11, "VABB1_1.8V", 1800000, 1800000, 1,
-	       REGULATOR_CHANGE_STATUS, 1);
 REGULATOR_INIT(ldo12, "VUOTG_3.0V", 3000000, 3000000, 1,
-	       REGULATOR_CHANGE_STATUS, 1);
-REGULATOR_INIT(ldo14, "VABB02_1.8V", 1800000, 1800000, 0,
 	       REGULATOR_CHANGE_STATUS, 1);
 REGULATOR_INIT(ldo15, "VHSIC_1.0V", 1000000, 1000000, 1,
 	       REGULATOR_CHANGE_STATUS, 1);
 REGULATOR_INIT(ldo16, "VHSIC_1.8V", 1800000, 1800000, 0,
 	       REGULATOR_CHANGE_STATUS, 1);
-REGULATOR_INIT(ldo17, "CAM_CORE_1.8v", 1800000, 1800000, 0,
+REGULATOR_INIT(ldo17, "5M_CORE_1.5V", 1500000, 1500000, 0,
 	       REGULATOR_CHANGE_STATUS, 1);
-REGULATOR_INIT(ldo18, "CAM_IO_FROM_1.8V", 1800000, 1800000, 0,
+REGULATOR_INIT(ldo18, "CAM_IO_1.8V", 1800000, 1800000, 0,
 	       REGULATOR_CHANGE_STATUS, 1);
 REGULATOR_INIT(ldo19, "VT_CAM_1.8V", 1800000, 1800000, 0,
-	       REGULATOR_CHANGE_STATUS, 1);
-REGULATOR_INIT(ldo20, "VMEM_VDD_1.8V", 1800000, 1800000, 0,
-	       REGULATOR_CHANGE_STATUS, 1);
-REGULATOR_INIT(ldo21, "VTF_2.8V", 2800000, 2800000, 0,
 	       REGULATOR_CHANGE_STATUS, 1);
 REGULATOR_INIT(ldo23, "TSP_AVDD_2.8V", 2800000, 2800000, 0,
 	       REGULATOR_CHANGE_STATUS, 1);
@@ -187,14 +151,12 @@ REGULATOR_INIT(ldo24, "CAM_AF_2.8V", 2800000, 2800000, 0,
 	       REGULATOR_CHANGE_STATUS, 1);
 REGULATOR_INIT(ldo25, "VADC_3.3V", 3300000, 3300000, 1,
 	       REGULATOR_CHANGE_STATUS, 1);
-REGULATOR_INIT(ldo26, "IRDA_3.3V", 3300000, 3300000, 0,
-	       REGULATOR_CHANGE_STATUS, 1);
 
 static struct regulator_init_data max77686_buck1_data = {
 	.constraints = {
 			.name = "vdd_mif range",
 			.min_uV = 850000,
-			.max_uV = 1100000,
+			.max_uV = 1200000,
 			.always_on = 1,
 			.boot_on = 1,
 			.valid_ops_mask = REGULATOR_CHANGE_VOLTAGE,
@@ -242,22 +204,6 @@ static struct regulator_init_data max77686_buck4_data = {
 	.consumer_supplies = &max77686_buck4,
 };
 
-static struct regulator_init_data max77686_buck9_data = {
-	.constraints = {
-			.name = "cam_isp_core",
-			.min_uV = 1000000,
-			.max_uV = 1200000,
-			.apply_uV = 1,
-			.valid_ops_mask = REGULATOR_CHANGE_VOLTAGE |
-			REGULATOR_CHANGE_STATUS,
-			.state_mem = {
-				      .disabled = 1,
-				      },
-			},
-	.num_consumer_supplies = 1,
-	.consumer_supplies = &max77686_buck9,
-};
-
 static struct regulator_init_data max77686_enp32khz_data = {
 	.constraints = {
 			.name = "32KHZ_PMIC",
@@ -277,26 +223,19 @@ static struct max77686_regulator_data max77686_regulators[] = {
 	{MAX77686_BUCK2, &max77686_buck2_data,},
 	{MAX77686_BUCK3, &max77686_buck3_data,},
 	{MAX77686_BUCK4, &max77686_buck4_data,},
-	{MAX77686_BUCK9, &max77686_buck9_data,},
 	{MAX77686_LDO3, &ldo3_init_data,},
-	{MAX77686_LDO4, &ldo4_init_data,},
 	{MAX77686_LDO8, &ldo8_init_data,},
 	{MAX77686_LDO9, &ldo9_init_data,},
 	{MAX77686_LDO10, &ldo10_init_data,},
-	{MAX77686_LDO11, &ldo11_init_data,},
 	{MAX77686_LDO12, &ldo12_init_data,},
-	{MAX77686_LDO14, &ldo14_init_data,},
 	{MAX77686_LDO15, &ldo15_init_data,},
 	{MAX77686_LDO16, &ldo16_init_data,},
 	{MAX77686_LDO17, &ldo17_init_data,},
 	{MAX77686_LDO18, &ldo18_init_data,},
 	{MAX77686_LDO19, &ldo19_init_data,},
-	{MAX77686_LDO20, &ldo20_init_data,},
-	{MAX77686_LDO21, &ldo21_init_data,},
 	{MAX77686_LDO23, &ldo23_init_data,},
 	{MAX77686_LDO24, &ldo24_init_data,},
 	{MAX77686_LDO25, &ldo25_init_data,},
-	{MAX77686_LDO26, &ldo26_init_data,},
 	{MAX77686_P32KH, &max77686_enp32khz_data,},
 };
 
@@ -304,9 +243,7 @@ struct max77686_opmode_data max77686_opmode_data[MAX77686_REG_MAX] = {
 	[MAX77686_LDO3] = {MAX77686_LDO3, MAX77686_OPMODE_NORMAL},
 	[MAX77686_LDO8] = {MAX77686_LDO8, MAX77686_OPMODE_STANDBY},
 	[MAX77686_LDO10] = {MAX77686_LDO10, MAX77686_OPMODE_STANDBY},
-	[MAX77686_LDO11] = {MAX77686_LDO11, MAX77686_OPMODE_STANDBY},
 	[MAX77686_LDO12] = {MAX77686_LDO12, MAX77686_OPMODE_STANDBY},
-	[MAX77686_LDO14] = {MAX77686_LDO14, MAX77686_OPMODE_STANDBY},
 	[MAX77686_LDO15] = {MAX77686_LDO15, MAX77686_OPMODE_STANDBY},
 	[MAX77686_LDO16] = {MAX77686_LDO16, MAX77686_OPMODE_STANDBY},
 	[MAX77686_BUCK1] = {MAX77686_BUCK1, MAX77686_OPMODE_STANDBY},
