@@ -276,6 +276,7 @@ static struct platform_device *manta_devices[] __initdata = {
 	&s3c_device_i2c4,
 	&s3c_device_i2c5,
 	&s3c_device_i2c7,
+	&s3c_device_wdt,
 	&manta_keypad_device,
 	&exynos5_device_dwmci0,
 	&exynos_device_ion,
