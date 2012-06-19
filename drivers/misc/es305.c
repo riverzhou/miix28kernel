@@ -21,6 +21,7 @@
 #include <linux/platform_data/es305.h>
 #include <linux/miscdevice.h>
 #include <linux/module.h>
+#include <linux/mutex.h>
 #include <linux/slab.h>
 #include <linux/workqueue.h>
 
@@ -36,10 +37,25 @@
 
 #define ES305_RESET_IMMEDIATE		0x80020000
 
-#define ES305_GET_DEVICE_PARAM		0x800B0000
-#define ES305_PORT_A_WORD_LENGTH	0x0A00
-
 #define ES305_SET_POWER_STATE_SLEEP	0x80100001
+
+#define ES305_GET_ALGORITHM_PARM	0x80160000
+#define ES305_SET_ALGORITHM_PARM_ID	0x80170000
+#define ES305_SET_ALGORITHM_PARM	0x80180000
+#define ES305_AEC_MODE			0x0003
+#define ES305_TX_AGC			0x0004
+#define ES305_RX_AGC			0x0028
+#define ES305_TX_NS_LEVEL		0x004B
+#define ES305_RX_NS_LEVEL		0x004C
+#define ES305_ALGORITHM_RESET		0x001C
+
+#define ES305_GET_VOICE_PROCESSING	0x80430000
+#define ES305_SET_VOICE_PROCESSING	0x801C0000
+
+#define ES305_GET_AUDIO_ROUTING		0x80270000
+#define ES305_SET_AUDIO_ROUTING		0x80260000
+
+#define ES305_SET_PRESET		0x80310000
 
 #define ES305_GET_MIC_SAMPLE_RATE	0x80500000
 #define ES305_SET_MIC_SAMPLE_RATE	0x80510000
@@ -53,9 +69,10 @@ struct es305_data {
 	struct es305_platform_data	*pdata;
 	struct device			*dev;
 	struct i2c_client		*client;
-	struct clk			*clk;
 	const struct firmware		*fw;
+	struct mutex			lock;
 	u32				passthrough;
+	bool				asleep;
 };
 
 static int es305_send_cmd(struct es305_data *es305, u32 command, u16 *response)
@@ -199,6 +216,9 @@ static int es305_sleep(struct es305_data *es305)
 	int ret = 0;
 	struct es305_platform_data *pdata = es305->pdata;
 
+	if (es305->asleep)
+		return ret;
+
 	ret = es305_send_cmd(es305, ES305_SET_POWER_STATE_SLEEP, NULL);
 	if (ret < 0) {
 		dev_err(es305->dev, "set power state error\n");
@@ -209,6 +229,35 @@ static int es305_sleep(struct es305_data *es305)
 	msleep(20);
 	pdata->clk_enable(false);
 	gpio_set_value(pdata->gpio_wakeup, 1);
+
+	es305->asleep = true;
+
+	return ret;
+}
+
+static int es305_wake(struct es305_data *es305)
+{
+	int ret = 0;
+	struct es305_platform_data *pdata = es305->pdata;
+
+	if (!es305->asleep)
+		return ret;
+
+	pdata->clk_enable(true);
+	gpio_set_value(pdata->gpio_wakeup, 0);
+	msleep(30);
+
+	ret = es305_send_cmd(es305, ES305_SYNC_POLLING, NULL);
+	if (ret < 0) {
+		dev_err(es305->dev, "sync error\n");
+
+		/* Go back to sleep */
+		pdata->clk_enable(false);
+		gpio_set_value(pdata->gpio_wakeup, 1);
+		return ret;
+	}
+
+	es305->asleep = false;
 
 	return ret;
 }
@@ -232,6 +281,323 @@ static int es305_set_passthrough(struct es305_data *es305, u32 path)
 
 	return ret;
 }
+
+static ssize_t es305_audio_routing_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct es305_data *es305 = dev_get_drvdata(dev);
+	int ret;
+	u16 val;
+
+	mutex_lock(&es305->lock);
+	ret = es305_wake(es305);
+	if (ret < 0) {
+		dev_err(es305->dev, "unable to wake\n");
+		mutex_unlock(&es305->lock);
+		return ret;
+	}
+
+	ret = es305_send_cmd(es305, ES305_GET_AUDIO_ROUTING, &val);
+	if (ret < 0) {
+		dev_err(es305->dev, "get audio routing error\n");
+		mutex_unlock(&es305->lock);
+		return ret;
+	}
+
+	mutex_unlock(&es305->lock);
+	return sprintf(buf, "%u\n", val);
+}
+
+static ssize_t es305_audio_routing_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t size)
+{
+	struct es305_data *es305 = dev_get_drvdata(dev);
+	unsigned long val;
+	int ret;
+
+	ret = kstrtoul(buf, 0, &val);
+	if (ret)
+		return -EINVAL;
+
+	mutex_lock(&es305->lock);
+	ret = es305_wake(es305);
+	if (ret < 0) {
+		dev_err(es305->dev, "unable to wake\n");
+		mutex_unlock(&es305->lock);
+		return ret;
+	}
+
+	ret = es305_send_cmd(es305, ES305_SET_AUDIO_ROUTING | (u32)val, NULL);
+	if (ret < 0) {
+		dev_err(es305->dev, "set audio routing error\n");
+		mutex_unlock(&es305->lock);
+		return ret;
+	}
+
+	mutex_unlock(&es305->lock);
+	return size;
+}
+
+static ssize_t es305_preset_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t size)
+{
+	struct es305_data *es305 = dev_get_drvdata(dev);
+	unsigned long val;
+	int ret;
+
+	ret = kstrtoul(buf, 0, &val);
+	if (ret)
+		return -EINVAL;
+
+	mutex_lock(&es305->lock);
+	ret = es305_wake(es305);
+	if (ret < 0) {
+		dev_err(es305->dev, "unable to wake\n");
+		mutex_unlock(&es305->lock);
+		return ret;
+	}
+
+	ret = es305_send_cmd(es305, ES305_SET_PRESET | (u32)val, NULL);
+	if (ret < 0) {
+		dev_err(es305->dev, "set preset error\n");
+		mutex_unlock(&es305->lock);
+		return ret;
+	}
+
+	mutex_unlock(&es305->lock);
+	return size;
+}
+
+static ssize_t es305_voice_processing_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct es305_data *es305 = dev_get_drvdata(dev);
+	int ret;
+	u16 val;
+
+	mutex_lock(&es305->lock);
+	ret = es305_wake(es305);
+	if (ret < 0) {
+		dev_err(es305->dev, "unable to wake\n");
+		mutex_unlock(&es305->lock);
+		return ret;
+	}
+
+	ret = es305_send_cmd(es305, ES305_GET_VOICE_PROCESSING, &val);
+	if (ret < 0) {
+		dev_err(es305->dev, "get voice processing error\n");
+		mutex_unlock(&es305->lock);
+		return ret;
+	}
+
+	mutex_unlock(&es305->lock);
+	return sprintf(buf, "%u\n", val);
+}
+
+static ssize_t es305_voice_processing_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t size)
+{
+	struct es305_data *es305 = dev_get_drvdata(dev);
+	unsigned long val;
+	int ret;
+
+	ret = kstrtoul(buf, 0, &val);
+	if (ret)
+		return -EINVAL;
+
+	mutex_lock(&es305->lock);
+	ret = es305_wake(es305);
+	if (ret < 0) {
+		dev_err(es305->dev, "unable to wake\n");
+		mutex_unlock(&es305->lock);
+		return ret;
+	}
+
+	ret = es305_send_cmd(es305, ES305_SET_VOICE_PROCESSING | (u32)val,
+									NULL);
+	if (ret < 0) {
+		dev_err(es305->dev, "set voice processing error\n");
+		mutex_unlock(&es305->lock);
+		return ret;
+	}
+
+	mutex_unlock(&es305->lock);
+	return size;
+}
+
+static ssize_t es305_sleep_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct es305_data *es305 = dev_get_drvdata(dev);
+
+	return sprintf(buf, "%u\n", es305->asleep ? 1 : 0);
+}
+
+static ssize_t es305_sleep_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t size)
+{
+	struct es305_data *es305 = dev_get_drvdata(dev);
+	unsigned long state;
+	int ret;
+
+	ret = kstrtoul(buf, 0, &state);
+	if (ret)
+		return -EINVAL;
+
+	if (!!state ^ es305->asleep) {
+		/* requested sleep state is different to current state */
+		mutex_lock(&es305->lock);
+		if (state)
+			ret = es305_sleep(es305);
+		else
+			ret = es305_wake(es305);
+		if (ret < 0) {
+			dev_err(es305->dev, "unable to change sleep state\n");
+			mutex_unlock(&es305->lock);
+			return ret;
+		}
+		mutex_unlock(&es305->lock);
+	}
+
+	return size;
+}
+
+static ssize_t es305_algorithm_parm_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct es305_data *es305 = dev_get_drvdata(dev);
+	int ret;
+	u16 val;
+	u32 parm;
+
+	if (strcmp(attr->attr.name, "aec_enable") == 0)
+		parm = ES305_AEC_MODE;
+	else if (strcmp(attr->attr.name, "tx_agc_enable") == 0)
+		parm = ES305_TX_AGC;
+	else if (strcmp(attr->attr.name, "rx_agc_enable") == 0)
+		parm = ES305_RX_AGC;
+	else if (strcmp(attr->attr.name, "tx_ns_level") == 0)
+		parm = ES305_TX_NS_LEVEL;
+	else if (strcmp(attr->attr.name, "rx_ns_level") == 0)
+		parm = ES305_RX_NS_LEVEL;
+	else
+		return -EINVAL;
+
+	mutex_lock(&es305->lock);
+	ret = es305_wake(es305);
+	if (ret < 0) {
+		dev_err(es305->dev, "unable to wake\n");
+		mutex_unlock(&es305->lock);
+		return ret;
+	}
+
+	ret = es305_send_cmd(es305, ES305_GET_ALGORITHM_PARM | parm, &val);
+	if (ret < 0) {
+		dev_err(es305->dev, "get algorithm parm error\n");
+		mutex_unlock(&es305->lock);
+		return ret;
+	}
+
+	mutex_unlock(&es305->lock);
+	return sprintf(buf, "%u\n", val);
+}
+
+static ssize_t es305_algorithm_parm_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t size)
+{
+	struct es305_data *es305 = dev_get_drvdata(dev);
+	unsigned long val;
+	unsigned long val_max = 1;
+	int ret;
+	u32 parm;
+
+	if (strcmp(attr->attr.name, "aec_enable") == 0) {
+		parm = ES305_AEC_MODE;
+	} else if (strcmp(attr->attr.name, "tx_agc_enable") == 0) {
+		parm = ES305_TX_AGC;
+	} else if (strcmp(attr->attr.name, "rx_agc_enable") == 0) {
+		parm = ES305_RX_AGC;
+	} else if (strcmp(attr->attr.name, "tx_ns_level") == 0) {
+		parm = ES305_TX_NS_LEVEL;
+		val_max = 10;
+	} else if (strcmp(attr->attr.name, "rx_ns_level") == 0) {
+		parm = ES305_RX_NS_LEVEL;
+		val_max = 10;
+	} else if (strcmp(attr->attr.name, "algorithm_reset") == 0) {
+		parm = ES305_ALGORITHM_RESET;
+		val_max = 0xffff;
+	} else {
+		return -EINVAL;
+	}
+
+	/* Check that a valid value was obtained */
+	ret = kstrtoul(buf, 0, &val);
+	if (ret || (val > val_max))
+		return -EINVAL;
+
+	mutex_lock(&es305->lock);
+	ret = es305_wake(es305);
+	if (ret < 0) {
+		dev_err(es305->dev, "unable to wake\n");
+		mutex_unlock(&es305->lock);
+		return ret;
+	}
+
+	ret = es305_send_cmd(es305, ES305_SET_ALGORITHM_PARM_ID | parm, NULL);
+	if (ret < 0) {
+		dev_err(es305->dev, "set algorithm parm id error\n");
+		mutex_unlock(&es305->lock);
+		return ret;
+	}
+	ret = es305_send_cmd(es305, ES305_SET_ALGORITHM_PARM | (u32)val, NULL);
+	if (ret < 0) {
+		dev_err(es305->dev, "set algorithm parm error\n");
+		mutex_unlock(&es305->lock);
+		return ret;
+	}
+
+	mutex_unlock(&es305->lock);
+	return size;
+}
+
+static DEVICE_ATTR(audio_routing, S_IRUGO | S_IWUSR,
+		es305_audio_routing_show, es305_audio_routing_store);
+static DEVICE_ATTR(preset, S_IWUSR,
+		NULL, es305_preset_store);
+static DEVICE_ATTR(voice_processing, S_IRUGO | S_IWUSR,
+		es305_voice_processing_show, es305_voice_processing_store);
+static DEVICE_ATTR(sleep, S_IRUGO | S_IWUSR,
+		es305_sleep_show, es305_sleep_store);
+static DEVICE_ATTR(aec_enable, S_IRUGO | S_IWUSR,
+		es305_algorithm_parm_show, es305_algorithm_parm_store);
+static DEVICE_ATTR(tx_agc_enable, S_IRUGO | S_IWUSR,
+		es305_algorithm_parm_show, es305_algorithm_parm_store);
+static DEVICE_ATTR(rx_agc_enable, S_IRUGO | S_IWUSR,
+		es305_algorithm_parm_show, es305_algorithm_parm_store);
+static DEVICE_ATTR(tx_ns_level, S_IRUGO | S_IWUSR,
+		es305_algorithm_parm_show, es305_algorithm_parm_store);
+static DEVICE_ATTR(rx_ns_level, S_IRUGO | S_IWUSR,
+		es305_algorithm_parm_show, es305_algorithm_parm_store);
+static DEVICE_ATTR(algorithm_reset, S_IWUSR,
+		NULL, es305_algorithm_parm_store);
+
+static struct attribute *es305_attributes[] = {
+	&dev_attr_audio_routing.attr,
+	&dev_attr_preset.attr,
+	&dev_attr_voice_processing.attr,
+	&dev_attr_sleep.attr,
+	&dev_attr_aec_enable.attr,
+	&dev_attr_tx_agc_enable.attr,
+	&dev_attr_rx_agc_enable.attr,
+	&dev_attr_tx_ns_level.attr,
+	&dev_attr_rx_ns_level.attr,
+	&dev_attr_algorithm_reset.attr,
+	NULL,
+};
+
+static const struct attribute_group es305_attribute_group = {
+	.attrs = es305_attributes,
+};
 
 /*
  * This is the callback function passed to request_firmware_nowait(),
@@ -266,6 +632,11 @@ static void es305_firmware_ready(const struct firmware *fw, void *context)
 			goto err;
 		}
 	}
+
+	/* Create the sysfs file after the device is ready */
+	ret = sysfs_create_group(&es305->dev->kobj, &es305_attribute_group);
+	if (ret)
+		dev_err(es305->dev, "failed to create sysfs group\n");
 
 err:
 	release_firmware(es305->fw);
@@ -320,6 +691,8 @@ static int __devinit es305_probe(struct i2c_client *client,
 	}
 	gpio_direction_output(pdata->gpio_reset, 0);
 
+	mutex_init(&es305->lock);
+
 	request_firmware_nowait(THIS_MODULE, FW_ACTION_HOTPLUG,
 				ES305_FIRMWARE_NAME, es305->dev, GFP_KERNEL,
 				es305, es305_firmware_ready);
@@ -338,6 +711,8 @@ err_kzalloc:
 static int __devexit es305_remove(struct i2c_client *client)
 {
 	struct es305_data *es305 = i2c_get_clientdata(client);
+
+	sysfs_remove_group(&es305->dev->kobj, &es305_attribute_group);
 
 	i2c_set_clientdata(client, NULL);
 
