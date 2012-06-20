@@ -47,6 +47,39 @@
 #include "common.h"
 #include "resetreason.h"
 
+static int manta_hw_rev;
+
+static struct gpio manta_hw_rev_gpios[] = {
+	{EXYNOS5_GPV1(4), GPIOF_IN, "hw_rev0"},
+	{EXYNOS5_GPV1(3), GPIOF_IN, "hw_rev1"},
+	{EXYNOS5_GPV1(2), GPIOF_IN, "hw_rev2"},
+	{EXYNOS5_GPV1(1), GPIOF_IN, "hw_rev3"},
+};
+
+int exynos5_manta_get_revision(void)
+{
+	return manta_hw_rev;
+}
+
+static void manta_init_hw_rev(void)
+{
+	int ret;
+	int i;
+
+	ret = gpio_request_array(manta_hw_rev_gpios,
+		ARRAY_SIZE(manta_hw_rev_gpios));
+
+	BUG_ON(ret);
+
+	for (i = 0; i < ARRAY_SIZE(manta_hw_rev_gpios); i++)
+		manta_hw_rev |= gpio_get_value(manta_hw_rev_gpios[i].gpio) << i;
+
+	pr_info("Manta HW revision: %d, CPU EXYNOS5250 Rev%d.%d\n",
+		manta_hw_rev,
+		samsung_rev() >> 4,
+		samsung_rev() & 0xf);
+}
+
 static struct ram_console_platform_data ramconsole_pdata;
 
 static struct platform_device ramconsole_device = {
@@ -347,6 +380,7 @@ static void __init manta_init_early(void)
 
 static void __init manta_machine_init(void)
 {
+	manta_init_hw_rev();
 	exynos_serial_debug_init(2, 0);
 
 	manta_sysmmu_init();

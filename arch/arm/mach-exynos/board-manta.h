@@ -18,6 +18,9 @@
 
 #include <mach/irqs.h>
 
+#define MANTA_REV_LUNCHBOX	0x1
+#define MANTA_REV_PRE_APLHA	0x2
+
 /* board IRQ allocations */
 #define MANTA_IRQ_BOARD_PMIC_START	IRQ_BOARD_START
 #define MANTA_IRQ_BOARD_PMIC_NR		16
@@ -37,6 +40,7 @@ void exynos5_manta_sensors_init(void);
 void exynos5_manta_gps_init(void);
 void exynos5_manta_jack_init(void);
 
+int exynos5_manta_get_revision(void);
 int manta_stmpe811_read_adc_data(u8 channel);
 
 #endif
