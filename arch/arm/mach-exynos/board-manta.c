@@ -27,6 +27,7 @@
 #include <asm/hardware/gic.h>
 #include <asm/mach-types.h>
 
+#include <plat/adc.h>
 #include <plat/clock.h>
 #include <plat/cpu.h>
 #include <plat/regs-serial.h>
@@ -212,6 +213,12 @@ struct stmpe811_platform_data stmpe811_pdata = {
 	.register_cb = stmpe811_register_callback,
 };
 
+/* ADC */
+static struct s3c_adc_platdata manta_adc_data __initdata = {
+	.phy_init       = s3c_adc_phy_init,
+	.phy_exit       = s3c_adc_phy_exit,
+};
+
 /* I2C2 */
 static struct i2c_board_info i2c_devs2[] __initdata = {
 	{
@@ -309,6 +316,7 @@ static struct platform_device *manta_devices[] __initdata = {
 	&s3c_device_i2c4,
 	&s3c_device_i2c5,
 	&s3c_device_i2c7,
+	&s3c_device_adc,
 	&s3c_device_wdt,
 	&manta_keypad_device,
 	&exynos5_device_dwmci0,
@@ -394,7 +402,10 @@ static void __init manta_machine_init(void)
 	s3c_i2c5_set_platdata(NULL);
 	s3c_i2c7_set_platdata(NULL);
 
-	i2c_register_board_info(2, i2c_devs2, ARRAY_SIZE(i2c_devs2));
+	if (exynos5_manta_get_revision() <= MANTA_REV_LUNCHBOX)
+		i2c_register_board_info(2, i2c_devs2, ARRAY_SIZE(i2c_devs2));
+	else
+		s3c_adc_set_platdata(&manta_adc_data);
 
 	manta_gpio_power_init();
 
