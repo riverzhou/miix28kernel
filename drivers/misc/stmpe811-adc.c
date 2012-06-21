@@ -232,6 +232,9 @@ reg_init_error:
 	mutex_destroy(&adc_data->adc_lock);
 	misc_deregister(&stmpe811_adc_device);
 misc_register_fail:
+	if (pdata->register_cb)
+		pdata->register_cb(NULL);
+
 	dev_err(&client->dev, "stmpe811 probe fail: %d\n", ret);
 	kfree(adc_data);
 	return ret;
