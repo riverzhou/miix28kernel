@@ -204,7 +204,7 @@ static const struct hdmi_preset_conf hdmi_conf_1080i60 = {
 		.width = 1920,
 		.height = 1080,
 		.code = V4L2_MBUS_FMT_FIXED, /* means RGB888 */
-		.field = V4L2_FIELD_NONE,
+		.field = V4L2_FIELD_INTERLACED,
 	},
 };
 
@@ -444,7 +444,7 @@ static const struct hdmi_preset_conf hdmi_conf_1080i50 = {
 		.width = 1920,
 		.height = 1080,
 		.code = V4L2_MBUS_FMT_FIXED, /* means RGB888 */
-		.field = V4L2_FIELD_NONE,
+		.field = V4L2_FIELD_INTERLACED,
 	},
 };
 
@@ -885,7 +885,7 @@ static const struct hdmi_preset_conf hdmi_conf_1080i59_94 = {
 		.width = 1920,
 		.height = 1080,
 		.code = V4L2_MBUS_FMT_FIXED, /* means RGB888 */
-		.field = V4L2_FIELD_NONE,
+		.field = V4L2_FIELD_INTERLACED,
 	},
 };
 
@@ -1767,7 +1767,7 @@ static const struct hdmi_preset_conf hdmi_conf_1080i60_sb_half = {
 		.width = 1920,
 		.height = 1080,
 		.code = V4L2_MBUS_FMT_FIXED, /* means RGB888 */
-		.field = V4L2_FIELD_NONE,
+		.field = V4L2_FIELD_INTERLACED,
 	},
 };
 
@@ -1830,7 +1830,7 @@ static const struct hdmi_preset_conf hdmi_conf_1080i59_94_sb_half = {
 		.width = 1920,
 		.height = 1080,
 		.code = V4L2_MBUS_FMT_FIXED, /* means RGB888 */
-		.field = V4L2_FIELD_NONE,
+		.field = V4L2_FIELD_INTERLACED,
 	},
 };
 
@@ -1893,7 +1893,7 @@ static const struct hdmi_preset_conf hdmi_conf_1080i50_sb_half = {
 		.width = 1920,
 		.height = 1080,
 		.code = V4L2_MBUS_FMT_FIXED, /* means RGB888 */
-		.field = V4L2_FIELD_NONE,
+		.field = V4L2_FIELD_INTERLACED,
 	},
 };
 
@@ -2219,33 +2219,24 @@ irqreturn_t hdmi_irq_handler(int irq, void *dev_data)
 		intc_flag = hdmi_read(hdev, HDMI_INTC_FLAG_0);
 		/* clearing flags for HPD plug/unplug */
 		if (intc_flag & HDMI_INTC_FLAG_HPD_UNPLUG) {
-			printk(KERN_INFO "unplugged\n");
 			if (hdev->hdcp_info.hdcp_enable)
 				hdcp_stop(hdev);
 			hdmi_write_mask(hdev, HDMI_INTC_FLAG_0, ~0,
 					HDMI_INTC_FLAG_HPD_UNPLUG);
-			atomic_set(&hdev->hpd_state, HPD_LOW);
 		}
 		if (intc_flag & HDMI_INTC_FLAG_HPD_PLUG) {
-			printk(KERN_INFO "plugged\n");
 			hdmi_write_mask(hdev, HDMI_INTC_FLAG_0, ~0,
 					HDMI_INTC_FLAG_HPD_PLUG);
-			atomic_set(&hdev->hpd_state, HPD_HIGH);
 		}
 		if (intc_flag & HDMI_INTC_FLAG_HDCP) {
-			printk(KERN_INFO "hdcp interrupt occur\n");
+			pr_info("hdcp interrupt occur\n");
 			hdcp_irq_handler(hdev);
 			hdmi_write_mask(hdev, HDMI_INTC_FLAG_0, ~0,
 					HDMI_INTC_FLAG_HDCP);
 		}
-	} else{
-		if (s5p_v4l2_hpd_read_gpio())
-			atomic_set(&hdev->hpd_state, HPD_HIGH);
-		else
-			atomic_set(&hdev->hpd_state, HPD_LOW);
 	}
 
-	queue_work(hdev->hpd_wq, &hdev->hpd_work);
+	queue_work(system_nrt_wq, &hdev->hpd_work);
 
 	return IRQ_HANDLED;
 }
@@ -2266,6 +2257,21 @@ void hdmi_reg_init(struct hdmi_device *hdev)
 	 * look to CEA-861-D, table 7 for more detail */
 	hdmi_writeb(hdev, HDMI_AVI_BYTE(1), 0 << 5);
 	hdmi_write_mask(hdev, HDMI_CON_1, 2, 3 << 5);
+
+}
+
+void hdmi_set_dvi_mode(struct hdmi_device *hdev)
+{
+	u32 val;
+
+	hdmi_write_mask(hdev, HDMI_MODE_SEL, hdev->dvi_mode ? HDMI_MODE_DVI_EN :
+		HDMI_MODE_HDMI_EN, HDMI_MODE_MASK);
+
+	if (hdev->dvi_mode)
+		val = HDMI_VID_PREAMBLE_DIS | HDMI_GUARD_BAND_DIS;
+	else
+		val = HDMI_VID_PREAMBLE_EN | HDMI_GUARD_BAND_EN;
+	hdmi_write(hdev, HDMI_CON_2, val);
 }
 
 void hdmi_timing_apply(struct hdmi_device *hdev,
@@ -2920,6 +2926,7 @@ void hdmi_dumpregs(struct hdmi_device *hdev, char *prefix)
 	DUMPREG(HDMI_AVI_HEADER2);
 	DUMPREG(HDMI_AVI_CHECK_SUM);
 	DUMPREG(HDMI_AVI_BYTE(1));
+
 	DUMPREG(HDMI_VSI_CON);
 	DUMPREG(HDMI_VSI_HEADER0);
 	DUMPREG(HDMI_VSI_HEADER1);

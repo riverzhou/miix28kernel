@@ -34,6 +34,8 @@
 #define HDMI_GPX(_nr)	EXYNOS5_GPX3(_nr)
 #endif
 
+#define HDMI_PHY_CONTROL_OFFSET		0
+
 struct platform_device; /* don't need the contents */
 
 void s5p_int_src_hdmi_hpd(struct platform_device *pdev)
@@ -76,3 +78,35 @@ void s5p_cec_cfg_gpio(struct platform_device *pdev)
 	s3c_gpio_setpull(HDMI_GPX(6), S3C_GPIO_PULL_NONE);
 }
 
+void s5p_hdmiphy_enable(struct platform_device *pdev, int en)
+{
+	unsigned long val = readl(EXYNOS_HDMI_PHY_CONTROL);
+	if (en)
+		set_bit(HDMI_PHY_CONTROL_OFFSET, &val);
+	else
+		clear_bit(HDMI_PHY_CONTROL_OFFSET, &val);
+	writel(val, EXYNOS_HDMI_PHY_CONTROL);
+}
+
+#ifdef CONFIG_VIDEO_EXYNOS_TV
+void s5p_tv_setup(void)
+{
+	int ret;
+
+	/* direct HPD to HDMI chip */
+	ret = gpio_request(HDMI_GPX(7), "hpd-plug");
+	if (ret)
+		printk(KERN_ERR "failed to request HPD-plug\n");
+	gpio_direction_input(HDMI_GPX(7));
+	s3c_gpio_cfgpin(HDMI_GPX(7), S3C_GPIO_SFN(0xf));
+	s3c_gpio_setpull(HDMI_GPX(7), S3C_GPIO_PULL_NONE);
+
+	/* HDMI CEC */
+	ret = gpio_request(HDMI_GPX(6), "hdmi-cec");
+	if (ret)
+		printk(KERN_ERR "failed to request HDMI-CEC\n");
+	gpio_direction_input(HDMI_GPX(6));
+	s3c_gpio_cfgpin(HDMI_GPX(6), S3C_GPIO_SFN(0x3));
+	s3c_gpio_setpull(HDMI_GPX(6), S3C_GPIO_PULL_NONE);
+}
+#endif
