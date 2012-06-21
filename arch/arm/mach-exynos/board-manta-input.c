@@ -25,12 +25,24 @@
 #include <plat/iic.h>
 #include <plat/gpio-cfg.h>
 
+#include "board-manta.h"
+
 #define GPIO_TOUCH_CHG		EXYNOS5_GPG1(2)
 #define GPIO_TOUCH_RESET	EXYNOS5_GPG1(3)
 #define GPIO_TOUCH_EN_BOOSTER	EXYNOS5_GPD1(1)
 #define GPIO_TOUCH_EN_XVDD	EXYNOS5_GPG0(1)
 
+/*
+ * From H/W revision 0.2 manta use the 12V for XVDD to improve SNR.
+ * So we need to use different configuration data according to voltage level.
+ *
+ * H/W   : XVDD  : firmware name
+ *
+ * ~ 0.1 : 2.8V  : maxtouch_nv.bin
+ * 0.2 ~ : 10.2V : maxtouch_hv.bin
+ */
 #define MXT_FIRMWARE_FOR_NV	"maxtouch_nv.fw"
+#define MXT_FIRMWARE_FOR_HV	"maxtouch_hv.fw"
 
 static struct regulator *touch_dvdd;
 static struct regulator *touch_avdd;
@@ -55,6 +67,8 @@ static struct i2c_board_info i2c_devs3[] __initdata = {
 
 void __init exynos5_manta_input_init(void)
 {
+	int hw_rev;
+
 	gpio_request(GPIO_TOUCH_CHG, "TSP_INT");
 	s3c_gpio_cfgpin(GPIO_TOUCH_CHG, S3C_GPIO_SFN(0xf));
 	s3c_gpio_setpull(GPIO_TOUCH_CHG, S3C_GPIO_PULL_NONE);
@@ -73,6 +87,13 @@ void __init exynos5_manta_input_init(void)
 	s3c_gpio_cfgpin(GPIO_TOUCH_EN_BOOSTER, S3C_GPIO_OUTPUT);
 	s3c_gpio_setpull(GPIO_TOUCH_EN_BOOSTER, S3C_GPIO_PULL_NONE);
 	gpio_set_value(GPIO_TOUCH_EN_BOOSTER, 1);
+
+	/* get hardware revison */
+	hw_rev = exynos5_manta_get_revision();
+	if (hw_rev >= MANTA_REV_PRE_APLHA)
+		atmel_mxt_ts_pdata.firmware_name = MXT_FIRMWARE_FOR_HV;
+	else
+		atmel_mxt_ts_pdata.firmware_name = MXT_FIRMWARE_FOR_NV;
 }
 
 /*
