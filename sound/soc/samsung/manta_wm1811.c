@@ -306,6 +306,7 @@ static struct platform_driver snd_manta_driver = {
 	.driver = {
 		.owner = THIS_MODULE,
 		.name = "manta-i2s",
+		.pm = &snd_soc_pm_ops,
 	},
 	.probe = snd_manta_probe,
 	.remove = __devexit_p(snd_manta_remove),
