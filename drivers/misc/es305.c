@@ -14,7 +14,6 @@
  * GNU General Public License for more details.
  */
 
-#include <linux/clk.h>
 #include <linux/delay.h>
 #include <linux/firmware.h>
 #include <linux/gpio.h>
@@ -208,7 +207,7 @@ static int es305_sleep(struct es305_data *es305)
 
 	/* The clock can be disabled after the device has had time to sleep */
 	msleep(20);
-	clk_disable(es305->clk);
+	pdata->clk_enable(false);
 	gpio_set_value(pdata->gpio_wakeup, 1);
 
 	return ret;
@@ -241,6 +240,7 @@ static int es305_set_passthrough(struct es305_data *es305, u32 path)
 static void es305_firmware_ready(const struct firmware *fw, void *context)
 {
 	struct es305_data *es305 = (struct es305_data *)context;
+	struct es305_platform_data *pdata = es305->pdata;
 	int ret;
 
 	if (!fw) {
@@ -249,7 +249,7 @@ static void es305_firmware_ready(const struct firmware *fw, void *context)
 	}
 	es305->fw = fw;
 
-	clk_enable(es305->clk);
+	pdata->clk_enable(true);
 
 	ret = es305_reset(es305);
 	if (ret < 0) {
@@ -295,7 +295,8 @@ static int __devinit es305_probe(struct i2c_client *client,
 
 	if ((pdata->passthrough_src < 0) || (pdata->passthrough_src > 4) ||
 					(pdata->passthrough_dst < 0) ||
-					(pdata->passthrough_dst > 4)) {
+					(pdata->passthrough_dst > 4) ||
+					!pdata->clk_enable) {
 		dev_err(es305->dev, "invalid pdata\n");
 		ret = -EINVAL;
 		goto err_pdata;
@@ -303,13 +304,6 @@ static int __devinit es305_probe(struct i2c_client *client,
 					(pdata->passthrough_dst != 0)) {
 		es305->passthrough = ((pdata->passthrough_src + 3) << 4) |
 					((pdata->passthrough_dst - 1) << 2);
-	}
-
-	es305->clk = clk_get(es305->dev, "system_clk");
-	if (IS_ERR(es305->clk)) {
-		dev_err(es305->dev, "error getting system clock\n");
-		ret = PTR_ERR(es305->clk);
-		goto err_clk_get;
 	}
 
 	ret = gpio_request(pdata->gpio_wakeup, "ES305 wakeup");
@@ -335,8 +329,6 @@ static int __devinit es305_probe(struct i2c_client *client,
 err_gpio_reset:
 	gpio_free(pdata->gpio_wakeup);
 err_gpio_wakeup:
-	clk_put(es305->clk);
-err_clk_get:
 err_pdata:
 	kfree(es305);
 err_kzalloc:
