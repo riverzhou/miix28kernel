@@ -31,11 +31,32 @@
 
 #define GPIO_ES305_WAKEUP	EXYNOS5_GPG0(3)
 #define GPIO_ES305_RESET	EXYNOS5_GPG0(4)
+#define GPIO_ES305_CLK_EN	EXYNOS5_GPG0(6)
 #define GPIO_CODEC_LDO_EN	EXYNOS5_GPH1(1)
+
+static struct clk *clkout;
+
+static void manta_es305_clk_enable(bool enable)
+{
+	int hw_rev = exynos5_manta_get_revision();
+
+	if (enable) {
+		if (hw_rev >= MANTA_REV_PRE_APLHA)
+			gpio_set_value(GPIO_ES305_CLK_EN, 1);
+		else
+			clk_enable(clkout);
+	} else {
+		if (hw_rev >= MANTA_REV_PRE_APLHA)
+			gpio_set_value(GPIO_ES305_CLK_EN, 0);
+		else
+			clk_disable(clkout);
+	}
+}
 
 static struct es305_platform_data es305_pdata = {
 	.gpio_wakeup = GPIO_ES305_WAKEUP,
 	.gpio_reset = GPIO_ES305_RESET,
+	.clk_enable = manta_es305_clk_enable,
 	.passthrough_src = 1, /* port A */
 	.passthrough_dst = 4, /* port D */
 };
@@ -161,7 +182,7 @@ static struct platform_device *manta_audio_devices[] __initdata = {
 static void manta_audio_setup_clocks(void)
 {
 	struct clk *xxti;
-	struct clk *clkout;
+	int ret;
 
 	xxti = clk_get(NULL, "xxti");
 	if (IS_ERR(xxti)) {
@@ -177,10 +198,13 @@ static void manta_audio_setup_clocks(void)
 	}
 
 	clk_set_parent(clkout, xxti);
-	clk_add_alias("system_clk", "4-003e", "clkout", NULL);
 	clk_add_alias("system_clk", "manta-i2s", "clkout", NULL);
-	clk_put(clkout);
 	clk_put(xxti);
+
+	ret = gpio_request(GPIO_ES305_CLK_EN, "ES305 clk_en");
+	if (ret < 0)
+		pr_err("%s: error requesting ES305 clk_en gpio\n", __func__);
+	gpio_direction_output(GPIO_ES305_CLK_EN, 0);
 }
 
 void __init exynos5_manta_audio_init(void)
