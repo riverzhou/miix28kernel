@@ -27,6 +27,7 @@
 #include <sound/soc.h>
 
 #include "../codecs/wm8994.h"
+#include "../../../arch/arm/mach-exynos/board-manta.h"
 
 #define MCLK1_FREQ	24000000
 #define MCLK2_FREQ	32768
@@ -42,7 +43,7 @@ static const struct snd_kcontrol_new manta_controls[] = {
 	SOC_DAPM_PIN_SWITCH("SPK"),
 };
 
-const struct snd_soc_dapm_widget manta_widgets[] = {
+const struct snd_soc_dapm_widget manta_widgets_lunchbox[] = {
 	SND_SOC_DAPM_HP("HP", NULL),
 	SND_SOC_DAPM_SPK("SPK", NULL),
 
@@ -53,7 +54,19 @@ const struct snd_soc_dapm_widget manta_widgets[] = {
 	SND_SOC_DAPM_INPUT("S5P RP"),
 };
 
-const struct snd_soc_dapm_route manta_paths[] = {
+const struct snd_soc_dapm_widget manta_widgets[] = {
+	SND_SOC_DAPM_HP("HP", NULL),
+	SND_SOC_DAPM_SPK("SPK", NULL),
+
+	SND_SOC_DAPM_MIC("Headset Mic", NULL),
+	SND_SOC_DAPM_MIC("Main Mic", NULL),
+	SND_SOC_DAPM_MIC("2nd Mic", NULL),
+	SND_SOC_DAPM_MIC("3rd Mic", NULL),
+
+	SND_SOC_DAPM_INPUT("S5P RP"),
+};
+
+const struct snd_soc_dapm_route manta_paths_lunchbox[] = {
 	{ "HP", NULL, "HPOUT1L" },
 	{ "HP", NULL, "HPOUT1R" },
 
@@ -72,6 +85,33 @@ const struct snd_soc_dapm_route manta_paths[] = {
 
 	{ "IN2RP:VXRP", NULL, "MICBIAS2" },
 	{ "MICBIAS2", NULL, "Headset Mic" },
+
+	{ "AIF1DAC1L", NULL, "S5P RP" },
+	{ "AIF1DAC1R", NULL, "S5P RP" },
+};
+
+const struct snd_soc_dapm_route manta_paths[] = {
+	{ "HP", NULL, "HPOUT1L" },
+	{ "HP", NULL, "HPOUT1R" },
+
+	{ "SPK", NULL, "SPKOUTLN" },
+	{ "SPK", NULL, "SPKOUTLP" },
+	{ "SPK", NULL, "SPKOUTRN" },
+	{ "SPK", NULL, "SPKOUTRP" },
+
+	{ "IN1LP", NULL, "MICBIAS1" },
+	{ "IN1LN", NULL, "MICBIAS1" },
+	{ "MICBIAS1", NULL, "3rd Mic" },
+
+	{ "IN1RP", NULL, "MICBIAS2" },
+	{ "IN1RN", NULL, "MICBIAS2" },
+	{ "MICBIAS1", NULL, "Headset Mic" },
+
+	{ "IN2LP:VXRN", NULL, "MICBIAS1" },
+	{ "MICBIAS2", NULL, "2nd Mic" },
+
+	{ "IN2RP:VXRP", NULL, "MICBIAS1" },
+	{ "MICBIAS2", NULL, "Main Mic" },
 
 	{ "AIF1DAC1L", NULL, "S5P RP" },
 	{ "AIF1DAC1R", NULL, "S5P RP" },
@@ -257,6 +297,7 @@ static int __devinit snd_manta_probe(struct platform_device *pdev)
 {
 	struct manta_wm1811 *machine;
 	int ret;
+	int hwrev = exynos5_manta_get_revision();
 
 	machine = kzalloc(sizeof(*machine), GFP_KERNEL);
 	if (!machine) {
@@ -273,6 +314,13 @@ static int __devinit snd_manta_probe(struct platform_device *pdev)
 	}
 
 	snd_soc_card_set_drvdata(&manta, machine);
+
+	if (hwrev < MANTA_REV_PRE_ALPHA) {
+		manta.dapm_widgets = manta_widgets_lunchbox,
+		manta.num_dapm_widgets = ARRAY_SIZE(manta_widgets_lunchbox),
+		manta.dapm_routes = manta_paths_lunchbox;
+		manta.num_dapm_routes = ARRAY_SIZE(manta_paths_lunchbox);
+	}
 
 	manta.dev = &pdev->dev;
 	ret = snd_soc_register_card(&manta);
