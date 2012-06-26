@@ -96,6 +96,18 @@ static struct platform_device persistent_trace_device = {
 	.id             = -1,
 };
 
+static struct resource persistent_clock_resource[] = {
+	[0] = DEFINE_RES_MEM(S3C_PA_RTC, SZ_256),
+};
+
+
+static struct platform_device persistent_clock = {
+	.name           = "persistent_clock",
+	.id             = -1,
+	.num_resources	= ARRAY_SIZE(persistent_clock_resource),
+	.resource	= persistent_clock_resource,
+};
+
 /* Following are default values for UCON, ULCON and UFCON UART registers */
 #define MANTA_UCON_DEFAULT	(S3C2410_UCON_TXILEVEL |	\
 				 S3C2410_UCON_RXILEVEL |	\
@@ -309,7 +321,7 @@ static struct dw_mci_board exynos_dwmci0_pdata __initdata = {
 static struct platform_device *manta_devices[] __initdata = {
 	&ramconsole_device,
 	&persistent_trace_device,
-	&s3c_device_rtc,
+	&persistent_clock,
 	&s3c_device_i2c1,
 	&s3c_device_i2c2,
 	&s3c_device_i2c3,
