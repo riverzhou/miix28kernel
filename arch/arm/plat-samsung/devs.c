@@ -94,9 +94,10 @@ struct platform_device s3c_device_ac97 = {
 
 #ifdef CONFIG_PLAT_S3C24XX
 static struct resource s3c_adc_resource[] = {
-	[0] = DEFINE_RES_MEM(S3C24XX_PA_ADC, S3C24XX_SZ_ADC),
-	[1] = DEFINE_RES_IRQ(IRQ_TC),
-	[2] = DEFINE_RES_IRQ(IRQ_ADC),
+	[0] = DEFINE_RES_MEM_NAMED(S3C24XX_PA_ADC,
+				   S3C24XX_SZ_ADC, "samsung-adc"),
+	[1] = DEFINE_RES_IRQ_NAMED(IRQ_TC, "samsung-tc"),
+	[2] = DEFINE_RES_IRQ_NAMED(IRQ_ADC, "samsung-adc"),
 };
 
 struct platform_device s3c_device_adc = {
@@ -109,9 +110,11 @@ struct platform_device s3c_device_adc = {
 
 #if defined(CONFIG_SAMSUNG_DEV_ADC)
 static struct resource s3c_adc_resource[] = {
-	[0] = DEFINE_RES_MEM(SAMSUNG_PA_ADC, SZ_256),
-	[1] = DEFINE_RES_IRQ(IRQ_TC),
-	[2] = DEFINE_RES_IRQ(IRQ_ADC),
+	[0] = DEFINE_RES_MEM_NAMED(SAMSUNG_PA_ADC, SZ_256, "samsung-adc"),
+#ifdef IRQ_TC
+	[1] = DEFINE_RES_IRQ_NAMED(IRQ_TC, "samsung-tc"),
+#endif
+	[2] = DEFINE_RES_IRQ_NAMED(IRQ_ADC, "samsung-adc"),
 };
 
 struct platform_device s3c_device_adc = {
@@ -120,6 +123,12 @@ struct platform_device s3c_device_adc = {
 	.num_resources	= ARRAY_SIZE(s3c_adc_resource),
 	.resource	= s3c_adc_resource,
 };
+
+void __init s3c_adc_set_platdata(struct s3c_adc_platdata *pd)
+{
+	s3c_set_platdata(pd, sizeof(struct s3c_adc_platdata),
+			 &s3c_device_adc);
+}
 #endif /* CONFIG_SAMSUNG_DEV_ADC */
 
 /* Camif Controller */
