@@ -90,7 +90,7 @@ void __init exynos5_manta_input_init(void)
 
 	/* get hardware revison */
 	hw_rev = exynos5_manta_get_revision();
-	if (hw_rev >= MANTA_REV_PRE_APLHA)
+	if (hw_rev >= MANTA_REV_PRE_ALPHA)
 		atmel_mxt_ts_pdata.firmware_name = MXT_FIRMWARE_FOR_HV;
 	else
 		atmel_mxt_ts_pdata.firmware_name = MXT_FIRMWARE_FOR_NV;

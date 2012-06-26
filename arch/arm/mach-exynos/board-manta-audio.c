@@ -41,12 +41,12 @@ static void manta_es305_clk_enable(bool enable)
 	int hw_rev = exynos5_manta_get_revision();
 
 	if (enable) {
-		if (hw_rev >= MANTA_REV_PRE_APLHA)
+		if (hw_rev >= MANTA_REV_PRE_ALPHA)
 			gpio_set_value(GPIO_ES305_CLK_EN, 1);
 		else
 			clk_enable(clkout);
 	} else {
-		if (hw_rev >= MANTA_REV_PRE_APLHA)
+		if (hw_rev >= MANTA_REV_PRE_ALPHA)
 			gpio_set_value(GPIO_ES305_CLK_EN, 0);
 		else
 			clk_disable(clkout);

@@ -19,7 +19,7 @@
 #include <mach/irqs.h>
 
 #define MANTA_REV_LUNCHBOX	0x1
-#define MANTA_REV_PRE_APLHA	0x2
+#define MANTA_REV_PRE_ALPHA	0x2
 
 /* board IRQ allocations */
 #define MANTA_IRQ_BOARD_PMIC_START	IRQ_BOARD_START
