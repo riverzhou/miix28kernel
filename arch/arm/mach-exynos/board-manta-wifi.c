@@ -45,9 +45,31 @@ static struct resource manta_wifi_resources[] = {
 	},
 };
 
+static void (*wifi_status_cb)(struct platform_device *, int state);
+
+static int exynos5_manta_wlan_ext_cd_init(
+			void (*notify_func)(struct platform_device *, int))
+{
+	wifi_status_cb = notify_func;
+	return 0;
+}
+
+static int exynos5_manta_wlan_ext_cd_cleanup(
+			void (*notify_func)(struct platform_device *, int))
+{
+	wifi_status_cb = NULL;
+	return 0;
+}
+
 static int manta_wifi_set_carddetect(int val)
 {
 	pr_debug("%s: %d\n", __func__, val);
+
+	if (wifi_status_cb)
+		wifi_status_cb(&exynos5_device_dwmci1, val);
+	else
+		pr_warning("%s: Nobody to notify\n", __func__);
+
 	return 0;
 }
 
@@ -59,9 +81,9 @@ static int manta_wifi_power(int on)
 
 	pr_debug("%s: %d\n", __func__, on);
 
-	msleep(300);
-	gpio_set_value(GPIO_WLAN_PMENA, on);
 	msleep(200);
+	gpio_set_value(GPIO_WLAN_PMENA, on);
+	msleep(500);
 
 	manta_wifi_power_state = on;
 	return ret;
@@ -238,8 +260,8 @@ static void exynos5_setup_wlan_cfg_gpio(int width)
 
 static struct dw_mci_board exynos_wlan_pdata __initdata = {
 	.num_slots		= 1,
-	.quirks			= DW_MCI_QUIRK_BROKEN_CARD_DETECTION |
-				  DW_MCI_QUIRK_HIGHSPEED |
+	.cd_type                = DW_MCI_CD_EXTERNAL,
+	.quirks			= DW_MCI_QUIRK_HIGHSPEED |
 				  DW_MCI_QUIRK_IDMAC_DTO,
 	.bus_hz			= 50 * 1000 * 1000,
 	.max_bus_hz		= 50 * 1000 * 1000,
@@ -247,10 +269,12 @@ static struct dw_mci_board exynos_wlan_pdata __initdata = {
 				  MMC_CAP_4_BIT_DATA | MMC_CAP_SD_HIGHSPEED,
 	.pm_caps		= MMC_PM_KEEP_POWER | MMC_PM_IGNORE_PM_NOTIFY,
 	.fifo_depth		= 0x80,
-	.detect_delay_ms	= 200,
+	.detect_delay_ms	= 0,
 	.hclk_name		= "dwmci",
 	.cclk_name		= "sclk_dwmci",
 	.cfg_gpio		= exynos5_setup_wlan_cfg_gpio,
+	.ext_cd_init		= exynos5_manta_wlan_ext_cd_init,
+	.ext_cd_cleanup		= exynos5_manta_wlan_ext_cd_cleanup,
 	.sdr_timing		= 0x03040002,
 	.ddr_timing		= 0x03030002,
 };
@@ -273,8 +297,6 @@ static void __init manta_wlan_gpio(void)
 	s5p_gpio_set_drvstr(gpio, S5P_GPIO_DRVSTR_LV3);
 	/* Keep power state during suspend */
 	s5p_gpio_set_pd_cfg(gpio, S5P_GPIO_PD_PREV_STATE);
-	/* Turn ON power so wlan chip will be found */
-	gpio_set_value(gpio, 1);
 
 	/* Setup wlan IRQ */
 	gpio = GPIO_WLAN_IRQ;
