@@ -22,7 +22,6 @@
 #include <plat/gpio-cfg.h>
 
 #define GPIO_DET_35		EXYNOS5_GPX0(1)
-#define GPIO_EAR_SEND_END	EXYNOS5_GPX3(5)
 
 static void sec_jack_set_micbias_state(bool on)
 {
@@ -112,7 +111,6 @@ struct sec_jack_platform_data sec_jack_pdata = {
 	.num_buttons_zones = ARRAY_SIZE(sec_jack_buttons_zones),
 	.det_gpio = GPIO_DET_35,
 	.det_active_high = true,
-	.send_end_gpio = GPIO_EAR_SEND_END,
 };
 
 static struct platform_device sec_device_jack = {
@@ -125,9 +123,6 @@ void __init exynos5_manta_jack_init(void)
 {
 	s3c_gpio_cfgpin(GPIO_DET_35, S3C_GPIO_INPUT);
 	s3c_gpio_setpull(GPIO_DET_35, S3C_GPIO_PULL_NONE);
-
-	s3c_gpio_cfgpin(GPIO_EAR_SEND_END, S3C_GPIO_INPUT);
-	s3c_gpio_setpull(GPIO_EAR_SEND_END, S3C_GPIO_PULL_NONE);
 
 	platform_device_register(&sec_device_jack);
 }
