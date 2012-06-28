@@ -69,6 +69,7 @@ config SOC_EXYNOS5250
 	select SAMSUNG_DMADEV
 	select S5P_PM if PM
 	select S5P_SLEEP if PM
+	select PM_GENERIC_DOMAINS
 	help
 	  Enable EXYNOS5250 SoC support
 
@@ -242,6 +243,13 @@ config EXYNOS5_CORESIGHT
 	select OC_ETM
 	help
 	  Enable embedded trace support
+
+config EXYNOS_PERSISTENT_CLOCK
+	bool
+	depends on !RTC_DRV_S3C
+	default n
+	help
+	  Persistent-clock-only driver for EXYNOS RTC.
 
 # machine support
 

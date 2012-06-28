@@ -1,6 +1,6 @@
 /* linux/drivers/iommu/exynos_iommu.c
  *
- * Copyright (c) 2011 Samsung Electronics Co., Ltd.
+ * Copyright (c) 2011-2012 Samsung Electronics Co., Ltd.
  *		http://www.samsung.com
  *
  * This program is free software; you can redistribute it and/or modify
@@ -14,24 +14,21 @@
 
 #include <linux/io.h>
 #include <linux/interrupt.h>
-#include <linux/platform_device.h>
 #include <linux/slab.h>
 #include <linux/pm_runtime.h>
 #include <linux/clk.h>
 #include <linux/err.h>
 #include <linux/mm.h>
-#include <linux/iommu.h>
 #include <linux/errno.h>
-#include <linux/list.h>
 #include <linux/memblock.h>
 #include <linux/export.h>
 
 #include <asm/cacheflush.h>
 #include <asm/pgtable.h>
 
-#include <plat/sysmmu.h>
-
 #include <mach/sysmmu.h>
+
+#include "exynos-iommu.h"
 
 /* We does not consider super section mapping (16MB) */
 #define SECT_ORDER 20
@@ -144,21 +141,6 @@ struct exynos_iommu_domain {
 	spinlock_t pgtablelock; /* lock for modifying page table @ pgtable */
 };
 
-struct sysmmu_drvdata {
-	struct list_head node; /* entry of exynos_iommu_domain.clients */
-	struct device *sysmmu;	/* System MMU's device descriptor */
-	struct device *dev;	/* Owner of system MMU */
-	char *dbgname;
-	int nsfrs;
-	void __iomem **sfrbases;
-	struct clk *clk[2];
-	int activations;
-	rwlock_t lock;
-	struct iommu_domain *domain;
-	sysmmu_fault_handler_t fault_handler;
-	unsigned long pgtable;
-};
-
 static bool set_sysmmu_active(struct sysmmu_drvdata *data)
 {
 	/* return true if the System MMU was not active previously
@@ -202,12 +184,6 @@ static bool sysmmu_block(void __iomem *sfrbase)
 static void __sysmmu_tlb_invalidate(void __iomem *sfrbase)
 {
 	__raw_writel(0x1, sfrbase + REG_MMU_FLUSH);
-}
-
-static void __sysmmu_tlb_invalidate_entry(void __iomem *sfrbase,
-						unsigned long iova)
-{
-	__raw_writel((iova & SPAGE_MASK) | 1, sfrbase + REG_MMU_FLUSH_ENTRY);
 }
 
 static void __sysmmu_set_ptbase(void __iomem *sfrbase,
@@ -506,31 +482,6 @@ bool exynos_sysmmu_disable(struct device *dev)
 	return disabled;
 }
 
-static void sysmmu_tlb_invalidate_entry(struct device *dev, unsigned long iova)
-{
-	unsigned long flags;
-	struct sysmmu_drvdata *data = dev_get_drvdata(dev->archdata.iommu);
-
-	read_lock_irqsave(&data->lock, flags);
-
-	if (is_sysmmu_active(data)) {
-		int i;
-		for (i = 0; i < data->nsfrs; i++) {
-			if (sysmmu_block(data->sfrbases[i])) {
-				__sysmmu_tlb_invalidate_entry(
-						data->sfrbases[i], iova);
-				sysmmu_unblock(data->sfrbases[i]);
-			}
-		}
-	} else {
-		dev_dbg(data->sysmmu,
-			"(%s) Disabled. Skipping invalidating TLB.\n",
-			data->dbgname);
-	}
-
-	read_unlock_irqrestore(&data->lock, flags);
-}
-
 void exynos_sysmmu_tlb_invalidate(struct device *dev)
 {
 	unsigned long flags;
@@ -648,6 +599,10 @@ static int exynos_sysmmu_probe(struct platform_device *pdev)
 		data->dbgname = platdata->dbgname;
 	}
 
+	ret = exynos_init_iovmm(dev, &data->vmm);
+	if (ret)
+		goto err_iovmm;
+
 	data->sysmmu = dev;
 	rwlock_init(&data->lock);
 	INIT_LIST_HEAD(&data->node);
@@ -659,6 +614,15 @@ static int exynos_sysmmu_probe(struct platform_device *pdev)
 
 	dev_dbg(dev, "(%s) Initialized\n", data->dbgname);
 	return 0;
+err_iovmm:
+	if (data->clk[0]) {
+		clk_put(data->clk[0]);
+		if (data->clk[1]) {
+			clk_put(data->clk[1]);
+			if (data->clk[2])
+				clk_put(data->clk[2]);
+		}
+	}
 err_irq:
 	while (i-- > 0) {
 		int irq;
@@ -947,7 +911,6 @@ static size_t exynos_iommu_unmap(struct iommu_domain *domain,
 					       unsigned long iova, size_t size)
 {
 	struct exynos_iommu_domain *priv = domain->priv;
-	struct sysmmu_drvdata *data;
 	unsigned long flags;
 	unsigned long *ent;
 
@@ -998,12 +961,6 @@ static size_t exynos_iommu_unmap(struct iommu_domain *domain,
 done:
 	spin_unlock_irqrestore(&priv->pgtablelock, flags);
 
-	spin_lock_irqsave(&priv->lock, flags);
-	list_for_each_entry(data, &priv->clients, node)
-		sysmmu_tlb_invalidate_entry(data->dev, iova);
-	spin_unlock_irqrestore(&priv->lock, flags);
-
-
 	return size;
 }
 
@@ -1050,10 +1007,11 @@ static int __init exynos_iommu_init(void)
 {
 	int ret;
 
-	ret = platform_driver_register(&exynos_sysmmu_driver);
+	ret = bus_set_iommu(&platform_bus_type, &exynos_iommu_ops);
+	if (!ret)
+		ret = platform_driver_register(&exynos_sysmmu_driver);
 
-	if (ret == 0)
-		bus_set_iommu(&platform_bus_type, &exynos_iommu_ops);
+	/* Nothing to do although platform_driver_register() fails */
 
 	return ret;
 }
