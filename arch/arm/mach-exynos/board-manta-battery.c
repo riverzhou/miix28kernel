@@ -31,8 +31,10 @@
 
 #define	GPIO_TA_EN		EXYNOS5_GPG1(5)
 #define	GPIO_TA_INT		EXYNOS5_GPX0(0)
-#define	GPIO_TA_nCHG		EXYNOS5_GPG1(4)
+#define	GPIO_TA_nCHG_LUNCHBOX	EXYNOS5_GPG1(4)
+#define	GPIO_TA_nCHG_ALPHA	EXYNOS5_GPX0(4)
 
+static int gpio_TA_nCHG = GPIO_TA_nCHG_ALPHA;
 static int cable_type;
 
 static struct max17047_fg_callbacks *fg_callbacks;
@@ -66,11 +68,17 @@ static void bq24191_chg_unregister_callbacks(void)
 
 static void charger_gpio_init(void)
 {
+	int hw_rev = exynos5_manta_get_revision();
+
+	gpio_TA_nCHG = hw_rev >= MANTA_REV_PRE_ALPHA ? GPIO_TA_nCHG_ALPHA
+		: GPIO_TA_nCHG_LUNCHBOX;
+
 	s3c_gpio_cfgpin(GPIO_TA_INT, S3C_GPIO_INPUT);
 	s3c_gpio_setpull(GPIO_TA_INT, S3C_GPIO_PULL_NONE);
 
-	s3c_gpio_cfgpin(GPIO_TA_nCHG, S3C_GPIO_INPUT);
-	s3c_gpio_setpull(GPIO_TA_nCHG, S3C_GPIO_PULL_UP);
+	s3c_gpio_cfgpin(gpio_TA_nCHG, S3C_GPIO_INPUT);
+	s3c_gpio_setpull(gpio_TA_nCHG, hw_rev >= MANTA_REV_PRE_ALPHA ?
+			 S3C_GPIO_PULL_NONE : S3C_GPIO_PULL_UP);
 
 	s3c_gpio_cfgpin(GPIO_TA_EN, S3C_GPIO_OUTPUT);
 	s3c_gpio_setpull(GPIO_TA_EN, S3C_GPIO_PULL_NONE);
@@ -147,7 +155,7 @@ static struct bq24191_platform_data bq24191_chg_pdata = {
 	.chg_enable = 0x1d,
 	.chg_disable = 0x0d,
 	.gpio_ta_int = GPIO_TA_INT,
-	.gpio_ta_nchg = GPIO_TA_nCHG,
+	.gpio_ta_nchg = GPIO_TA_nCHG_LUNCHBOX,
 	.gpio_ta_en = GPIO_TA_EN,
 };
 
