@@ -21,6 +21,7 @@
 
 #include <linux/platform_data/max17047_fuelgauge.h>
 #include <linux/platform_data/bq24191_charger.h>
+#include <linux/power/smb347-charger.h>
 #include <linux/platform_data/manta_battery.h>
 
 #include "board-manta.h"
@@ -148,6 +149,20 @@ static void change_cable_status(void)
 		bat_callbacks->change_cable_status(bat_callbacks, cable_type);
 }
 
+static struct smb347_charger_platform_data smb347_chg_pdata = {
+	.use_mains = true,
+	.use_usb = true,
+	.enable_control = SMB347_CHG_ENABLE_PIN_ACTIVE_LOW,
+	.max_charge_current = 2000000,
+	.max_charge_voltage = 4200000,
+	.pre_charge_current = 200000,
+	.termination_current = 150000,
+	.pre_to_fast_voltage = 2600000,
+	.mains_current_limit = 1800000,
+	.usb_hc_current_limit = 1500000,
+	.irq_gpio = GPIO_TA_nCHG_ALPHA,
+};
+
 static struct bq24191_platform_data bq24191_chg_pdata = {
 	.register_callbacks = bq24191_chg_register_callbacks,
 	.unregister_callbacks = bq24191_chg_unregister_callbacks,
@@ -273,25 +288,45 @@ static const struct file_operations manta_power_debug_fops = {
 	.release = single_release,
 };
 
-static struct i2c_board_info i2c_devs2[] __initdata = {
+static struct i2c_board_info i2c_devs2_common[] __initdata = {
 	{
 		I2C_BOARD_INFO("max17047-fuelgauge", 0x36),
 		.platform_data	= &max17047_fg_pdata,
 	},
+};
+
+static struct i2c_board_info i2c_devs2_lunchbox[] __initdata = {
 	{
 		I2C_BOARD_INFO("bq24191-charger", 0x6a),
 		.platform_data	= &bq24191_chg_pdata,
 	},
 };
 
+static struct i2c_board_info i2c_devs2_prealpha[] __initdata = {
+	{
+		I2C_BOARD_INFO("smb347", 0x0c >> 1),
+		.platform_data  = &smb347_chg_pdata,
+	},
+};
+
 void __init exynos5_manta_battery_init(void)
 {
+	int hw_rev = exynos5_manta_get_revision();
+
 	charger_gpio_init();
 
 	platform_add_devices(manta_battery_devices,
 		ARRAY_SIZE(manta_battery_devices));
 
-	i2c_register_board_info(2, i2c_devs2, ARRAY_SIZE(i2c_devs2));
+	i2c_register_board_info(2, i2c_devs2_common,
+				ARRAY_SIZE(i2c_devs2_common));
+
+	if (hw_rev  >= MANTA_REV_PRE_ALPHA)
+		i2c_register_board_info(2, i2c_devs2_prealpha,
+					ARRAY_SIZE(i2c_devs2_prealpha));
+	else
+		i2c_register_board_info(2, i2c_devs2_lunchbox,
+					ARRAY_SIZE(i2c_devs2_lunchbox));
 
 	if (IS_ERR_OR_NULL(debugfs_create_file("manta-power", S_IRUGO, NULL,
 					       NULL, &manta_power_debug_fops)))
