@@ -155,7 +155,6 @@ static struct bq24191_platform_data bq24191_chg_pdata = {
 	.low_current_charging = 0x32,	/* input current linit 500mA */
 	.chg_enable = 0x1d,
 	.chg_disable = 0x0d,
-	.gpio_ta_int = GPIO_TA_INT,
 	.gpio_ta_nchg = GPIO_TA_nCHG_LUNCHBOX,
 	.gpio_ta_en = GPIO_TA_EN,
 };

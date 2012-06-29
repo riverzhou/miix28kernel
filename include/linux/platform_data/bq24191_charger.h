@@ -33,12 +33,10 @@ struct bq24191_chg_callbacks {
 struct bq24191_platform_data {
 	void (*register_callbacks)(struct bq24191_chg_callbacks *);
 	void (*unregister_callbacks)(void);
-	void (*change_cable_status)(int);
 	u8 high_current_charging;
 	u8 low_current_charging;
 	u8 chg_enable;
 	u8 chg_disable;
-	int gpio_ta_int;
 	int gpio_ta_nchg;
 	int gpio_ta_en;
 };

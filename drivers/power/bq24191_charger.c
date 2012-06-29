@@ -16,8 +16,6 @@
 #include <linux/err.h>
 #include <linux/delay.h>
 #include <linux/gpio.h>
-#include <linux/irq.h>
-#include <linux/interrupt.h>
 #include <linux/i2c.h>
 #include <linux/slab.h>
 #include <linux/platform_data/bq24191_charger.h>
@@ -160,20 +158,6 @@ static void __devinit bq24191_init_register(struct i2c_client *client)
 			__func__, BQ24191_TERMINATION_TIMER_CTRL);
 }
 
-static irqreturn_t bq24191_pg_int_intr_handler(int irq, void *arg)
-{
-	struct bq24191_chg_data *chg = (struct bq24191_chg_data *)arg;
-	struct i2c_client *client = chg->client;
-	int gpio_ta_int = gpio_get_value(chg->pdata->gpio_ta_int);
-
-	dev_dbg(&client->dev, "%s: (%d)\n", __func__, gpio_ta_int);
-
-	if (chg->pdata->change_cable_status)
-		chg->pdata->change_cable_status(gpio_ta_int);
-
-	return IRQ_HANDLED;
-}
-
 static int bq24191_debug_dump(struct seq_file *s, void *unused)
 {
 	struct bq24191_chg_data *chg = s->private;
@@ -192,11 +176,10 @@ static int bq24191_debug_dump(struct seq_file *s, void *unused)
 			   !!(v & 0x80), !!(v & 0x40), (v & 0x30) >> 4,
 			   !!(v & 0x8), v & 0x7);
 	if (bq24191_i2c_read(client, BQ24191_POWERON_CONFIG, &v) >= 0)
-		seq_printf(s, "cfg=%x ce=%d stat=%d npg=%d sysmin=%x\n",
+		seq_printf(s, "cfg=%x ce=%d stat=%d sysmin=%x\n",
 			   (v & 0x30) >> 4,
 			   gpio_get_value(chg->pdata->gpio_ta_en),
 			   gpio_get_value(chg->pdata->gpio_ta_nchg),
-			   gpio_get_value(chg->pdata->gpio_ta_int),
 			   (v & 0xe) >> 1);
 	if (bq24191_i2c_read(client, BQ24191_INPUT_SOURCE_CTRL, &v) >= 0 &&
 	    bq24191_i2c_read(client, BQ24191_CHARGE_CURRENT_CTRL, &v2) >= 0 &&
@@ -251,24 +234,6 @@ static int __devinit bq24191_charger_i2c_probe(struct i2c_client *client,
 	if (chg->pdata && chg->pdata->register_callbacks)
 		chg->pdata->register_callbacks(&chg->callbacks);
 
-	ret = request_threaded_irq(client->irq, NULL,
-		bq24191_pg_int_intr_handler,
-		IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING | IRQF_ONESHOT,
-		"bq24191 pg", chg);
-	if (ret) {
-		dev_err(&client->dev, "%s: pg irq register failed(%d)!\n",
-			__func__, client->irq);
-		goto err_charger_irq;
-	}
-	ret = enable_irq_wake(client->irq);
-	if (ret)
-		dev_warn(&client->dev, "%s: failed to enable irq_wake on %d\n",
-			 __func__, client->irq);
-
-	if (chg->pdata->change_cable_status)
-		chg->pdata->change_cable_status
-		    (gpio_get_value(chg->pdata->gpio_ta_int));
-
 	chg->debugfs_dentry = debugfs_create_file("bq24191", S_IRUGO, NULL,
 						  chg, &bq24191_debug_fops);
 	if (IS_ERR_OR_NULL(chg->debugfs_dentry))
@@ -277,9 +242,6 @@ static int __devinit bq24191_charger_i2c_probe(struct i2c_client *client,
 
 	return 0;
 
-err_charger_irq:
-	if (chg->pdata->unregister_callbacks)
-		chg->pdata->unregister_callbacks();
 err_pdata:
 	kfree(chg);
 	i2c_set_clientdata(client, NULL);
@@ -289,9 +251,6 @@ err_pdata:
 static int __devexit bq24191_charger_remove(struct i2c_client *client)
 {
 	struct bq24191_chg_data *chg = i2c_get_clientdata(client);
-
-	disable_irq_wake(client->irq);
-	free_irq(client->irq, chg);
 
 	if (chg->pdata && chg->pdata->unregister_callbacks)
 		chg->pdata->unregister_callbacks();
