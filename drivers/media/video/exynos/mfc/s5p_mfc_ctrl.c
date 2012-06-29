@@ -89,14 +89,14 @@ int s5p_mfc_alloc_firmware(struct s5p_mfc_dev *dev)
 	alloc_ctx = dev->alloc_ctx_fw;
 #endif
 
-	s5p_mfc_bitproc_buf = s5p_mfc_mem_allocate(alloc_ctx, firmware_size);
+	s5p_mfc_bitproc_buf = s5p_mfc_mem_alloc(alloc_ctx, firmware_size);
 	if (IS_ERR(s5p_mfc_bitproc_buf)) {
 		s5p_mfc_bitproc_buf = 0;
 		printk(KERN_ERR "Allocating bitprocessor buffer failed\n");
 		return -ENOMEM;
 	}
 
-	s5p_mfc_bitproc_phys = s5p_mfc_mem_dma_addr(s5p_mfc_bitproc_buf);
+	s5p_mfc_bitproc_phys = s5p_mfc_mem_daddr(s5p_mfc_bitproc_buf);
 	if (s5p_mfc_bitproc_phys & ((1 << base_align) - 1)) {
 		mfc_err("The base memory is not aligned to %dBytes.\n",
 				(1 << base_align));
@@ -206,7 +206,7 @@ int s5p_mfc_load_firmware(struct s5p_mfc_dev *dev)
 					     FIRMWARE_CODE_SIZE,
 					     DMA_TO_DEVICE);
 	*/
-	s5p_mfc_cache_clean_fw(s5p_mfc_bitproc_buf);
+	s5p_mfc_cache_clean_priv(s5p_mfc_bitproc_buf);
 	release_firmware(fw_blob);
 	mfc_debug_leave();
 	return 0;
@@ -340,7 +340,7 @@ static inline void s5p_mfc_clear_cmds(struct s5p_mfc_dev *dev)
 /* Initialize hardware */
 int s5p_mfc_init_hw(struct s5p_mfc_dev *dev)
 {
-	char dvx_info;
+	char fimv_info;
 	int mfc_info;
 	int ret = 0;
 
@@ -393,8 +393,6 @@ int s5p_mfc_init_hw(struct s5p_mfc_dev *dev)
 	if (s5p_mfc_wait_for_done_dev(dev, S5P_FIMV_R2H_CMD_SYS_INIT_RET)) {
 		mfc_err("Failed to load firmware\n");
 		ret = -EIO;
-		/* Disable the clock that enabled in s5p_mfc_sys_init_cmd() */
-		s5p_mfc_clock_off();
 		goto err_init_hw;
 	}
 
@@ -408,14 +406,14 @@ int s5p_mfc_init_hw(struct s5p_mfc_dev *dev)
 		goto err_init_hw;
 	}
 
-	dvx_info = MFC_GET_REG(SYS_FW_DVX_INFO);
-	if (dvx_info != 'D' && dvx_info != 'E')
-		dvx_info = 'N';
+	fimv_info = MFC_GET_REG(SYS_FW_FIMV_INFO);
+	if (fimv_info != 'D' && fimv_info != 'E')
+		fimv_info = 'N';
 
 	mfc_info("MFC v%x.%x, F/W : (%c) %02xyy, %02xmm, %02xdd\n",
 		 MFC_VER_MAJOR(dev->fw.ver),
 		 MFC_VER_MINOR(dev->fw.ver),
-		 dvx_info,
+		 fimv_info,
 		 MFC_GET_REG(SYS_FW_VER_YEAR),
 		 MFC_GET_REG(SYS_FW_VER_MONTH),
 		 MFC_GET_REG(SYS_FW_VER_DATE));

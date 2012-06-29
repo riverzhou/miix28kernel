@@ -136,11 +136,11 @@ struct s5p_mfc_buf {
 	struct list_head list;
 	union {
 		struct {
-			size_t luma;
-			size_t chroma;
+			dma_addr_t luma;
+			dma_addr_t chroma;
 		} raw;
-		size_t stream;
-	} cookie;
+		dma_addr_t stream;
+	} planes;
 	int used;
 };
 
@@ -151,6 +151,7 @@ struct s5p_mfc_pm {
 	struct clk	*clock;
 	atomic_t	power;
 	struct device	*device;
+	spinlock_t	clklock;
 };
 
 struct s5p_mfc_fw {
@@ -398,9 +399,6 @@ enum s5p_mfc_ctrl_mode {
 struct s5p_mfc_ctrl_cfg {
 	enum s5p_mfc_ctrl_type type;
 	unsigned int id;
-	/*
-	unsigned int is_dynamic;
-	*/
 	unsigned int is_volatile;	/* only for MFC_CTRL_TYPE_SET */
 	unsigned int mode;
 	unsigned int addr;
@@ -416,9 +414,6 @@ struct s5p_mfc_ctx_ctrl {
 	enum s5p_mfc_ctrl_type type;
 	unsigned int id;
 	unsigned int addr;
-	/*
-	unsigned int is_dynamic;
-	*/
 	int has_new;
 	int val;
 };
@@ -458,18 +453,27 @@ struct s5p_mfc_codec_ops {
 	int (*multi_data_frame) (struct s5p_mfc_ctx *ctx);
 	int (*set_exe_arg) (struct s5p_mfc_ctx *ctx, void *arg);
 	/* configuration routines */
-	int (*get_codec_cfg) (struct s5p_mfc_ctx *ctx, unsigned int type, int *value);
-	int (*set_codec_cfg) (struct s5p_mfc_ctx *ctx, unsigned int type, int *value);
+	int (*get_codec_cfg) (struct s5p_mfc_ctx *ctx, unsigned int type,
+			int *value);
+	int (*set_codec_cfg) (struct s5p_mfc_ctx *ctx, unsigned int type,
+			int *value);
 	/* controls per buffer */
 	int (*init_ctx_ctrls) (struct s5p_mfc_ctx *ctx);
 	int (*cleanup_ctx_ctrls) (struct s5p_mfc_ctx *ctx);
-	int (*init_buf_ctrls) (struct s5p_mfc_ctx *ctx, enum s5p_mfc_ctrl_type type, unsigned int index);
-	int (*cleanup_buf_ctrls) (struct s5p_mfc_ctx *ctx, struct list_head *head);
+	int (*init_buf_ctrls) (struct s5p_mfc_ctx *ctx,
+			enum s5p_mfc_ctrl_type type, unsigned int index);
+	int (*cleanup_buf_ctrls) (struct s5p_mfc_ctx *ctx,
+			enum s5p_mfc_ctrl_type type, unsigned int index);
 	int (*to_buf_ctrls) (struct s5p_mfc_ctx *ctx, struct list_head *head);
 	int (*to_ctx_ctrls) (struct s5p_mfc_ctx *ctx, struct list_head *head);
-	int (*set_buf_ctrls_val) (struct s5p_mfc_ctx *ctx, struct list_head *head);
-	int (*get_buf_ctrls_val) (struct s5p_mfc_ctx *ctx, struct list_head *head);
-	int (*recover_buf_ctrls_val) (struct s5p_mfc_ctx *ctx, struct list_head *head);
+	int (*set_buf_ctrls_val) (struct s5p_mfc_ctx *ctx,
+			struct list_head *head);
+	int (*get_buf_ctrls_val) (struct s5p_mfc_ctx *ctx,
+			struct list_head *head);
+	int (*recover_buf_ctrls_val) (struct s5p_mfc_ctx *ctx,
+			struct list_head *head);
+	int (*get_buf_update_val) (struct s5p_mfc_ctx *ctx,
+			struct list_head *head, unsigned int id, int value);
 };
 
 #define call_cop(c, op, args...)				\
@@ -503,6 +507,7 @@ struct s5p_mfc_dec {
 
 	enum v4l2_memory dst_memtype;
 	int sei_parse;
+	int eos_tag;
 
 	/* For 6.x */
 	int remained;
@@ -589,8 +594,8 @@ struct s5p_mfc_ctx {
 	struct list_head src_ctrls[MFC_MAX_BUFFERS];
 	struct list_head dst_ctrls[MFC_MAX_BUFFERS];
 
-	int src_ctrls_flag[MFC_MAX_BUFFERS];
-	int dst_ctrls_flag[MFC_MAX_BUFFERS];
+	unsigned long src_ctrls_avail;
+	unsigned long dst_ctrls_avail;
 
 	unsigned int sequence;
 
