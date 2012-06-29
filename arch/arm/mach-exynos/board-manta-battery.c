@@ -14,6 +14,7 @@
 #include <linux/i2c.h>
 #include <linux/delay.h>
 #include <linux/platform_device.h>
+#include <linux/interrupt.h>
 #include <linux/debugfs.h>
 
 #include <plat/gpio-cfg.h>
@@ -125,11 +126,12 @@ static int check_samsung_charger(void)
 	return result;
 }
 
-static void bq24191_change_cable_status(int gpio_ta_int)
+static void change_cable_status(void)
 {
+	int ta_int = gpio_get_value(GPIO_TA_INT);
 	int is_ta;
 
-	if (gpio_ta_int == 1) {
+	if (ta_int) {
 		is_ta = check_samsung_charger();
 		if (is_ta == true)
 			cable_type = CABLE_TYPE_AC;
@@ -140,7 +142,7 @@ static void bq24191_change_cable_status(int gpio_ta_int)
 	}
 
 	pr_debug("%s: ta_int(%d), cable_type(%d)", __func__,
-		gpio_ta_int, cable_type);
+		 ta_int, cable_type);
 
 	if (bat_callbacks && bat_callbacks->change_cable_status)
 		bat_callbacks->change_cable_status(bat_callbacks, cable_type);
@@ -149,7 +151,6 @@ static void bq24191_change_cable_status(int gpio_ta_int)
 static struct bq24191_platform_data bq24191_chg_pdata = {
 	.register_callbacks = bq24191_chg_register_callbacks,
 	.unregister_callbacks = bq24191_chg_unregister_callbacks,
-	.change_cable_status = bq24191_change_cable_status,
 	.high_current_charging = 0x06,	/* input current limit 2A */
 	.low_current_charging = 0x32,	/* input current linit 500mA */
 	.chg_enable = 0x1d,
@@ -217,6 +218,12 @@ static int manta_bat_get_current_now(int *i_current)
 	return ret;
 }
 
+static irqreturn_t ta_int_intr(int irq, void *arg)
+{
+	change_cable_status();
+	return IRQ_HANDLED;
+}
+
 static struct manta_bat_platform_data manta_battery_pdata = {
 	.register_callbacks = manta_bat_register_callbacks,
 	.unregister_callbacks = manta_bat_unregister_callbacks,
@@ -281,7 +288,6 @@ static struct i2c_board_info i2c_devs2[] __initdata = {
 void __init exynos5_manta_battery_init(void)
 {
 	charger_gpio_init();
-	i2c_devs2[1].irq = gpio_to_irq(GPIO_TA_INT);
 
 	platform_add_devices(manta_battery_devices,
 		ARRAY_SIZE(manta_battery_devices));
@@ -293,3 +299,27 @@ void __init exynos5_manta_battery_init(void)
 		pr_err("failed to create manta-power debugfs entry\n");
 }
 
+static int __init exynos5_manta_battery_late_init(void)
+{
+	int ret;
+
+	ret = request_threaded_irq(gpio_to_irq(GPIO_TA_INT), NULL,
+				   ta_int_intr,
+				   IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING |
+				   IRQF_ONESHOT, "ta_int", NULL);
+	if (ret) {
+		pr_err("%s: ta_int register failed, ret=%d\n",
+		       __func__, ret);
+	} else {
+		ret = enable_irq_wake(gpio_to_irq(GPIO_TA_INT));
+		if (ret)
+			pr_warn("%s: failed to enable irq_wake for ta_int\n",
+				__func__);
+	}
+
+	/* Poll initial cable state */
+	change_cable_status();
+	return 0;
+}
+
+device_initcall(exynos5_manta_battery_late_init);
