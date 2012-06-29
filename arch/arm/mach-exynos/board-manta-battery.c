@@ -249,7 +249,9 @@ static struct platform_device *manta_battery_devices[] __initdata = {
 
 static int manta_power_debug_dump(struct seq_file *s, void *unused)
 {
-	seq_printf(s, "ta_adc=%d cable=%d\n", read_ta_adc(), cable_type);
+	seq_printf(s, "ta_en=%d ta_nchg=%d ta_int=%d ta_adc=%d cable=%d\n",
+		   gpio_get_value(GPIO_TA_EN), gpio_get_value(gpio_TA_nCHG),
+		   gpio_get_value(GPIO_TA_INT), read_ta_adc(), cable_type);
 	return 0;
 }
 
