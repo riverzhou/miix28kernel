@@ -79,6 +79,7 @@ obj-$(CONFIG_MACH_MANTA)		+= board-manta-gps.o
 obj-$(CONFIG_MACH_MANTA)		+= board-manta-jack.o
 obj-$(CONFIG_MACH_MANTA)		+= board-manta-vibrator.o
 obj-$(CONFIG_MACH_MANTA)		+= board-manta-nfc.o
+obj-$(CONFIG_MACH_MANTA)		+= board-manta-bluetooth.o
 
 # device support
 
