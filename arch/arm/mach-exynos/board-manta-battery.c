@@ -17,6 +17,7 @@
 #include <linux/interrupt.h>
 #include <linux/debugfs.h>
 
+#include <plat/adc.h>
 #include <plat/gpio-cfg.h>
 
 #include <linux/platform_data/max17047_fuelgauge.h>
@@ -26,7 +27,7 @@
 
 #include "board-manta.h"
 
-#define TA_ADC_LOW		800
+#define TA_ADC_LOW		700
 #define TA_ADC_HIGH		1750
 
 #define	GPIO_USB_SEL1		EXYNOS5_GPH0(1)
@@ -42,6 +43,8 @@ static int cable_type;
 static struct max17047_fg_callbacks *fg_callbacks;
 static struct bq24191_chg_callbacks *chg_callbacks;
 static struct manta_bat_callbacks *bat_callbacks;
+
+static struct s3c_adc_client *ta_adc_client;
 
 static void max17047_fg_register_callbacks(struct max17047_fg_callbacks *ptr)
 {
@@ -99,8 +102,13 @@ static int read_ta_adc(void)
 
 	msleep(100);
 
-	vol1 = manta_stmpe811_read_adc_data(6);
-	vol2 = manta_stmpe811_read_adc_data(6);
+	if (exynos5_manta_get_revision() <= MANTA_REV_LUNCHBOX) {
+		vol1 = manta_stmpe811_read_adc_data(6);
+		vol2 = manta_stmpe811_read_adc_data(6);
+	} else {
+		vol1 = s3c_adc_read(ta_adc_client, 0);
+		vol2 = s3c_adc_read(ta_adc_client, 0);
+	}
 
 	if (vol1 >= 0 && vol2 >= 0)
 		result = (vol1 + vol2) / 2;
@@ -327,6 +335,10 @@ void __init exynos5_manta_battery_init(void)
 	else
 		i2c_register_board_info(2, i2c_devs2_lunchbox,
 					ARRAY_SIZE(i2c_devs2_lunchbox));
+
+	if (exynos5_manta_get_revision() >= MANTA_REV_PRE_ALPHA)
+		ta_adc_client = s3c_adc_register(&manta_device_battery,
+						 NULL, NULL, 0);
 
 	if (IS_ERR_OR_NULL(debugfs_create_file("manta-power", S_IRUGO, NULL,
 					       NULL, &manta_power_debug_fops)))
