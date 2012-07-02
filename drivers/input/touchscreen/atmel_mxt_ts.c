@@ -404,17 +404,44 @@ static bool mxt_object_writable(unsigned int type)
 }
 
 static void mxt_dump_message(struct device *dev,
-				  struct mxt_message *message)
+				  struct mxt_message *message, u8 object_type)
 {
-	dev_dbg(dev, "reportid:\t0x%x\n", message->reportid);
-	dev_dbg(dev, "message1:\t0x%x\n", message->message[0]);
-	dev_dbg(dev, "message2:\t0x%x\n", message->message[1]);
-	dev_dbg(dev, "message3:\t0x%x\n", message->message[2]);
-	dev_dbg(dev, "message4:\t0x%x\n", message->message[3]);
-	dev_dbg(dev, "message5:\t0x%x\n", message->message[4]);
-	dev_dbg(dev, "message6:\t0x%x\n", message->message[5]);
-	dev_dbg(dev, "message7:\t0x%x\n", message->message[6]);
-	dev_dbg(dev, "checksum:\t0x%x\n", message->checksum);
+	switch (object_type) {
+	case MXT_GEN_COMMAND_T6:
+		/* Normal mode */
+		if (message->message[0] == 0x00)
+			dev_dbg(dev, "Normal mode\n");
+		/* Config error */
+		if (message->message[0] & 0x08)
+			dev_err(dev, "Configuration error\n");
+		/* Calibration */
+		if (message->message[0] & 0x10)
+			dev_dbg(dev, "Calibration is on going !!\n");
+		/* Signal error */
+		if (message->message[0] & 0x20)
+			dev_err(dev, "Signal error\n");
+		/* Overflow */
+		if (message->message[0] & 0x40)
+			dev_err(dev, "Overflow detected\n");
+		/* Reset */
+		if (message->message[0] & 0x80)
+			dev_dbg(dev, "Reset is ongoing\n");
+		break;
+	case MXT_PROCI_TOUCHSUPPRESSION_T42:
+		if (message->message[0] & 0x01)
+			dev_dbg(dev, "Start touch suppression\n");
+		else
+			dev_dbg(dev, "Stop touch suppression\n");
+		break;
+	default:
+		dev_dbg(dev, "T%d:\t[0x%x][0x%x][0x%x][0x%x][0x%x][0x%x][0x%x][0x%x][0x%x]\n",
+			object_type, message->reportid,
+			message->message[0], message->message[1],
+			message->message[2], message->message[3],
+			message->message[4], message->message[5],
+			message->message[6], message->checksum);
+		break;
+	}
 }
 
 static int mxt_check_bootloader(struct i2c_client *client,
@@ -765,7 +792,7 @@ static irqreturn_t mxt_interrupt(int irq, void *dev_id)
 			id = data->reportid_table[reportid].index;
 			mxt_input_touchevent(data, &message, id);
 		} else {
-			mxt_dump_message(dev, &message);
+			mxt_dump_message(dev, &message, object_type);
 		}
 	} while (reportid != 0xff);
 
