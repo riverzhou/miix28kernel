@@ -110,6 +110,20 @@
 
 #define VIDCON2					(0x08)
 #define VIDCON2_EN601				(1 << 23)
+#define VIDCON2_RGB_ORDER_E_MASK	(0x7 << 19)
+#define VIDCON2_RGB_ORDER_E_RGB		(0x0 << 19)
+#define VIDCON2_RGB_ORDER_E_GBR		(0x1 << 19)
+#define VIDCON2_RGB_ORDER_E_BRG		(0x2 << 19)
+#define VIDCON2_RGB_ORDER_E_BGR		(0x4 << 19)
+#define VIDCON2_RGB_ORDER_E_RBG		(0x5 << 19)
+#define VIDCON2_RGB_ORDER_E_GRB		(0x6 << 19)
+#define VIDCON2_RGB_ORDER_O_MASK	(0x7 << 16)
+#define VIDCON2_RGB_ORDER_O_RGB		(0x0 << 16)
+#define VIDCON2_RGB_ORDER_O_GBR		(0x1 << 16)
+#define VIDCON2_RGB_ORDER_O_BRG		(0x2 << 16)
+#define VIDCON2_RGB_ORDER_O_BGR		(0x4 << 16)
+#define VIDCON2_RGB_ORDER_O_RBG		(0x5 << 16)
+#define VIDCON2_RGB_ORDER_O_GRB		(0x6 << 16)
 #define VIDCON2_WB_DISABLE		(0 << 15)
 #define VIDCON2_WB_ENABLE		(1 << 15)
 #define VIDCON2_WB_MASK			(1 << 15)
@@ -236,6 +250,8 @@
 #define WINCON1_BPPMODE_24BPP_A1887		(0xc << 2)
 #define WINCON1_BPPMODE_25BPP_A1888		(0xd << 2)
 #define WINCON1_BPPMODE_28BPP_A4888		(0xd << 2)
+#define WINCON1_BPPMODE_13BPP_A1444		(0xe << 2)
+#define WINCON1_BPPMODE_16BPP_A4444		(0xe << 2)
 
 /* S5PV210 */
 #define SHADOWCON				(0x34)
@@ -269,28 +285,21 @@
 #define VIDOSDxB_BOTRIGHT_Y_LIMIT		(0x7ff)
 #define VIDOSDxB_BOTRIGHT_Y(_x)			(((_x) & 0x7ff) << 0)
 
-/* For VIDOSD[1..4]C */
-#define VIDISD14C_ALPHA0_R(_x)			((_x) << 20)
-#define VIDISD14C_ALPHA0_G_MASK			(0xf << 16)
-#define VIDISD14C_ALPHA0_G_SHIFT		(16)
-#define VIDISD14C_ALPHA0_G_LIMIT		(0xf)
-#define VIDISD14C_ALPHA0_G(_x)			((_x) << 16)
-#define VIDISD14C_ALPHA0_B_MASK			(0xf << 12)
-#define VIDISD14C_ALPHA0_B_SHIFT		(12)
-#define VIDISD14C_ALPHA0_B_LIMIT		(0xf)
-#define VIDISD14C_ALPHA0_B(_x)			((_x) << 12)
-#define VIDISD14C_ALPHA1_R_MASK			(0xf << 8)
-#define VIDISD14C_ALPHA1_R_SHIFT		(8)
-#define VIDISD14C_ALPHA1_R_LIMIT		(0xf)
-#define VIDISD14C_ALPHA1_R(_x)			((_x) << 8)
-#define VIDISD14C_ALPHA1_G_MASK			(0xf << 4)
-#define VIDISD14C_ALPHA1_G_SHIFT		(4)
-#define VIDISD14C_ALPHA1_G_LIMIT		(0xf)
-#define VIDISD14C_ALPHA1_G(_x)			((_x) << 4)
-#define VIDISD14C_ALPHA1_B_MASK			(0xf << 0)
-#define VIDISD14C_ALPHA1_B_SHIFT		(0)
-#define VIDISD14C_ALPHA1_B_LIMIT		(0xf)
-#define VIDISD14C_ALPHA1_B(_x)			((_x) << 0)
+/* alpha when !win->variant.has_osd_alpha */
+#define VIDWxALPHAx_R(_x)			(((_x) & 0xFF) << 16)
+#define VIDWxALPHAx_G(_x)			(((_x) & 0xFF) << 8)
+#define VIDWxALPHAx_B(_x)			(((_x) & 0xFF) << 0)
+
+/* alpha when win->variant.has_osd_alpha */
+#define VIDOSDxC_ALPHA0_R_H(_x)			(((_x) & 0xF0) << 16)
+#define VIDOSDxC_ALPHA0_G_H(_x)			(((_x) & 0xF0) << 12)
+#define VIDOSDxC_ALPHA0_B_H(_x)			(((_x) & 0xF0) << 8)
+#define VIDOSDxC_ALPHA1_R_H(_x)			(((_x) & 0xF0) << 4)
+#define VIDOSDxC_ALPHA1_G_H(_x)			(((_x) & 0xF0) << 0)
+#define VIDOSDxC_ALPHA1_B_H(_x)			(((_x) & 0xF0) >> 4)
+#define VIDWxALPHAx_R_L(_x)			(((_x) & 0x0F) << 16)
+#define VIDWxALPHAx_G_L(_x)			(((_x) & 0x0F) << 8)
+#define VIDWxALPHAx_B_L(_x)			(((_x) & 0x0F) << 0)
 
 /* Video buffer addresses */
 #define VIDW_BUF_START(_buff)			(0xA0 + ((_buff) * 8))
@@ -422,5 +431,5 @@
 #define DPCLKCON_ENABLE				(1 << 1)
 
 /* Window alpha control */
-#define VIDW0ALPHA0				(0x200)
-#define VIDW0ALPHA1				(0x204)
+#define VIDW_ALPHA0(_x)				(0x21C + ((_x) * 8))
+#define VIDW_ALPHA1(_x)				(0x220 + ((_x) * 8))

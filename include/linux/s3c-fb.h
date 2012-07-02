@@ -41,12 +41,10 @@ struct s3c_fb_user_ion_client {
 
 enum s3c_fb_pixel_format {
 	S3C_FB_PIXEL_FORMAT_RGBA_8888 = 0,
-	S3C_FB_PIXEL_FORMAT_RGB_888 = 1,
-	S3C_FB_PIXEL_FORMAT_RGB_565 = 2,
-	S3C_FB_PIXEL_FORMAT_BGRA_8888 = 3,
-	S3C_FB_PIXEL_FORMAT_RGBA_5551 = 4,
-	S3C_FB_PIXEL_FORMAT_RGBA_4444 = 5,
-	S3C_FB_PIXEL_FORMAT_MAX = 6,
+	S3C_FB_PIXEL_FORMAT_RGBX_8888 = 1,
+	S3C_FB_PIXEL_FORMAT_RGBA_5551 = 2,
+	S3C_FB_PIXEL_FORMAT_RGBA_4444 = 3,
+	S3C_FB_PIXEL_FORMAT_MAX = 4,
 };
 
 struct s3c_fb_win_config {
@@ -62,13 +60,14 @@ struct s3c_fb_win_config {
 			int	fd;
 			__u32	offset;
 			__u32	stride;
-			int	x;
-			int	y;
-			__u32	w;
-			__u32	h;
 			enum s3c_fb_pixel_format format;
 		};
 	};
+
+	int	x;
+	int	y;
+	__u32	w;
+	__u32	h;
 };
 
 /* S3C_FB_MAX_WIN

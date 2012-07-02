@@ -221,6 +221,7 @@ struct s3c_reg_data {
 	u32			vidosd_b[S3C_FB_MAX_WIN];
 	u32			vidosd_c[S3C_FB_MAX_WIN];
 	u32			vidosd_d[S3C_FB_MAX_WIN];
+	u32			vidw_alpha0[S3C_FB_MAX_WIN];
 	u32			vidw_buf_start[S3C_FB_MAX_WIN];
 	u32			vidw_buf_end[S3C_FB_MAX_WIN];
 	u32			vidw_buf_size[S3C_FB_MAX_WIN];
@@ -382,6 +383,25 @@ static int s3cfb_ump_wrapper(struct fb_fix_screeninfo *fix)
 }
 #endif
 
+static bool s3c_fb_validate_x_alignment(struct s3c_fb *sfb, int x, u32 w,
+		u32 bits_per_pixel)
+{
+	uint8_t pixel_alignment = 32 / bits_per_pixel;
+
+	if (x % pixel_alignment) {
+		dev_err(sfb->dev, "left X coordinate not properly aligned to %u-pixel boundary (bpp = %u, x = %u)\n",
+				pixel_alignment, bits_per_pixel, x);
+		return 0;
+	}
+	if ((x + w) % pixel_alignment) {
+		dev_err(sfb->dev, "right X coordinate not properly aligned to %u-pixel boundary (bpp = %u, x = %u, w = %u)\n",
+				pixel_alignment, bits_per_pixel, x, w);
+		return 0;
+	}
+
+	return 1;
+}
+
 /**
  * s3c_fb_validate_win_bpp - validate the bits-per-pixel for this mode.
  * @win: The device window.
@@ -416,6 +436,10 @@ static int s3c_fb_check_var(struct fb_var_screeninfo *var,
 			win->index, var->bits_per_pixel);
 		return -EINVAL;
 	}
+
+	if (!s3c_fb_validate_x_alignment(sfb, 0, var->xres,
+			var->bits_per_pixel))
+		return -EINVAL;
 
 	/* always ensure these are zero, for drop through cases below */
 	var->transp.offset = 0;
@@ -524,25 +548,6 @@ static int s3c_fb_calc_pixclk(struct s3c_fb *sfb, unsigned int pixclk)
 }
 
 /**
- * s3c_fb_align_word() - align pixel count to word boundary
- * @bpp: The number of bits per pixel
- * @pix: The value to be aligned.
- *
- * Align the given pixel count so that it will start on an 32bit word
- * boundary.
- */
-static int s3c_fb_align_word(unsigned int bpp, unsigned int pix)
-{
-	int pix_per_word;
-
-	if (bpp > 16)
-		return pix;
-
-	pix_per_word = (8 * 32) / bpp;
-	return ALIGN(pix, pix_per_word);
-}
-
-/**
  * vidosd_set_size() - set OSD size for a window
  *
  * @win: the window to set OSD size for
@@ -556,20 +561,6 @@ static void vidosd_set_size(struct s3c_fb_win *win, u32 size)
 	if (win->variant.osd_size_off)
 		writel(size, sfb->regs + OSD_BASE(win->index, sfb->variant)
 				+ win->variant.osd_size_off);
-}
-
-/**
- * vidosd_set_alpha() - set alpha transparency for a window
- *
- * @win: the window to set OSD size for
- * @alpha: alpha register value
- */
-static void vidosd_set_alpha(struct s3c_fb_win *win, u32 alpha)
-{
-	struct s3c_fb *sfb = win->parent;
-
-	if (win->variant.has_osd_alpha)
-		writel(alpha, sfb->regs + VIDOSD_C(win->index, sfb->variant));
 }
 
 /**
@@ -674,7 +665,7 @@ static inline u32 vidw_buf_size(u32 xres, u32 line_length, u32 bits_per_pixel)
 	       VIDW_BUF_SIZE_PAGEWIDTH_E(pagewidth);
 }
 
-inline u32 vidosd_a(int x, int y)
+static inline u32 vidosd_a(int x, int y)
 {
 	return VIDOSDxA_TOPLEFT_X(x) |
 			VIDOSDxA_TOPLEFT_Y(y) |
@@ -682,14 +673,31 @@ inline u32 vidosd_a(int x, int y)
 			VIDOSDxA_TOPLEFT_Y_E(y);
 }
 
-inline u32 vidosd_b(int x, int y, u32 xres, u32 yres, u32 bits_per_pixel)
+static inline u32 vidosd_b(int x, int y, u32 xres, u32 yres)
 {
-	return VIDOSDxB_BOTRIGHT_X(s3c_fb_align_word(bits_per_pixel,
-			x + xres - 1)) |
+	return VIDOSDxB_BOTRIGHT_X(x + xres - 1) |
 		VIDOSDxB_BOTRIGHT_Y(y + yres - 1) |
-		VIDOSDxB_BOTRIGHT_X_E(s3c_fb_align_word(bits_per_pixel,
-			x + xres - 1)) |
+		VIDOSDxB_BOTRIGHT_X_E(x + xres - 1) |
 		VIDOSDxB_BOTRIGHT_Y_E(y + yres - 1);
+}
+
+static inline u32 vidosd_c(u8 r, u8 g, u8 b)
+{
+	return VIDOSDxC_ALPHA0_R_H(r) |
+		VIDOSDxC_ALPHA0_G_H(g) |
+		VIDOSDxC_ALPHA0_B_H(b);
+}
+
+static inline u32 vidw_alpha0(bool has_osd_alpha, u8 r, u8 g, u8 b)
+{
+	if (has_osd_alpha)
+		return VIDWxALPHAx_R_L(r) |
+			VIDWxALPHAx_G_L(g) |
+			VIDWxALPHAx_B_L(b);
+	else
+		return VIDWxALPHAx_R(r) |
+			VIDWxALPHAx_G(g) |
+			VIDWxALPHAx_B(b);
 }
 
 static inline u32 wincon(u32 bits_per_pixel, u32 transp_length, u32 red_length)
@@ -721,8 +729,11 @@ static inline u32 wincon(u32 bits_per_pixel, u32 transp_length, u32 red_length)
 		data |= WINCONx_BYTSWP;
 		break;
 	case 16:
-		if (transp_length != 0)
+		if (transp_length == 1)
 			data |= WINCON1_BPPMODE_16BPP_A1555;
+		else if (transp_length == 4)
+			data |= WINCON1_BPPMODE_16BPP_A4444
+				| WINCON1_BLD_PIX | WINCON1_ALPHA_SEL;
 		else
 			data |= WINCON0_BPPMODE_16BPP_565;
 		data |= WINCONx_HAWSWP;
@@ -768,7 +779,6 @@ static int s3c_fb_set_par(struct fb_info *info)
 	void __iomem *regs = sfb->regs;
 	void __iomem *buf = regs;
 	int win_no = win->index;
-	u32 alpha = 0;
 	u32 data;
 	int clkdiv;
 	int old_wincon;
@@ -813,6 +823,11 @@ static int s3c_fb_set_par(struct fb_info *info)
 		data |= VIDCON0_ENVID | VIDCON0_ENVID_F;
 		writel(data, regs + VIDCON0);
 
+		data = readl(regs + VIDCON2);
+		data &= ~(VIDCON2_RGB_ORDER_E_MASK | VIDCON2_RGB_ORDER_O_MASK);
+		data |= VIDCON2_RGB_ORDER_E_BGR | VIDCON2_RGB_ORDER_O_BGR;
+		writel(data, regs + VIDCON2);
+
 		data = VIDTCON0_VBPD(var->upper_margin - 1) |
 		       VIDTCON0_VFPD(var->lower_margin - 1) |
 		       VIDTCON0_VSPW(var->vsync_len - 1);
@@ -854,17 +869,17 @@ static int s3c_fb_set_par(struct fb_info *info)
 	data = vidosd_a(0, 0);
 	writel(data, regs + VIDOSD_A(win_no, sfb->variant));
 
-	data = vidosd_b(0, 0, var->xres, var->yres, var->bits_per_pixel);
+	data = vidosd_b(0, 0, var->xres, var->yres);
 	writel(data, regs + VIDOSD_B(win_no, sfb->variant));
 
 	data = var->xres * var->yres;
 
-	alpha = VIDISD14C_ALPHA1_R(0xf) |
-		VIDISD14C_ALPHA1_G(0xf) |
-		VIDISD14C_ALPHA1_B(0xf);
-
-	vidosd_set_alpha(win, alpha);
-	vidosd_set_size(win, data);
+	if (win->variant.has_osd_alpha) {
+		data = vidosd_c(0xff, 0xff, 0xff);
+		writel(data, regs + VIDOSD_C(win_no, sfb->variant));
+	}
+	data = vidw_alpha0(win->variant.has_osd_alpha, 0xff, 0xff, 0xff);
+	writel(data, regs + VIDW_ALPHA0(win_no));
 
 	/* preserve whether window was enabled */
 	data = old_wincon & WINCONx_ENWIN;
@@ -1269,12 +1284,15 @@ int s3c_fb_set_window_position(struct fb_info *info,
 
 	shadow_protect_win(win, 1);
 
+	if (!s3c_fb_validate_x_alignment(sfb, user_window.x, var->xres,
+			var->bits_per_pixel))
+		return -EINVAL;
+
 	/* write 'OSD' registers to control position of framebuffer */
 	data = vidosd_a(user_window.x, user_window.y);
 	writel(data, regs + VIDOSD_A(win_no, sfb->variant));
 
-	data = vidosd_b(user_window.x, user_window.y, var->xres, var->yres,
-			var->bits_per_pixel);
+	data = vidosd_b(user_window.x, user_window.y, var->xres, var->yres);
 	writel(data, regs + VIDOSD_B(win_no, sfb->variant));
 
 	shadow_protect_win(win, 0);
@@ -1319,9 +1337,9 @@ int s3c_fb_set_plane_alpha_blending(struct fb_info *info,
 
 	if (sfb->variant.has_alphacon) {
 		if (user_alpha.channel == 0)
-			writel(alpha_low, regs + VIDW0ALPHA0 + (win_no * 8));
+			writel(alpha_low, regs + VIDW_ALPHA0(win_no));
 		else
-			writel(alpha_low, regs + VIDW0ALPHA1 + (win_no * 8));
+			writel(alpha_low, regs + VIDW_ALPHA1(win_no));
 	}
 
 	shadow_protect_win(win, 0);
@@ -1439,11 +1457,9 @@ static u32 s3c_fb_red_length(int format)
 {
 	switch (format) {
 	case S3C_FB_PIXEL_FORMAT_RGBA_8888:
-	case S3C_FB_PIXEL_FORMAT_RGB_888:
-	case S3C_FB_PIXEL_FORMAT_BGRA_8888:
+	case S3C_FB_PIXEL_FORMAT_RGBX_8888:
 		return 8;
 
-	case S3C_FB_PIXEL_FORMAT_RGB_565:
 	case S3C_FB_PIXEL_FORMAT_RGBA_5551:
 		return 5;
 
@@ -1460,14 +1476,10 @@ static u32 s3c_fb_red_offset(int format)
 {
 	switch (format) {
 	case S3C_FB_PIXEL_FORMAT_RGBA_8888:
-	case S3C_FB_PIXEL_FORMAT_RGB_888:
-	case S3C_FB_PIXEL_FORMAT_RGB_565:
+	case S3C_FB_PIXEL_FORMAT_RGBX_8888:
 	case S3C_FB_PIXEL_FORMAT_RGBA_5551:
 	case S3C_FB_PIXEL_FORMAT_RGBA_4444:
 		return 0;
-
-	case S3C_FB_PIXEL_FORMAT_BGRA_8888:
-		return 16;
 
 	default:
 		pr_warn("s3c-fb: unrecognized pixel format %u\n", format);
@@ -1477,9 +1489,6 @@ static u32 s3c_fb_red_offset(int format)
 
 static u32 s3c_fb_green_length(int format)
 {
-	if (format == S3C_FB_PIXEL_FORMAT_RGB_565)
-		return 6;
-
 	return s3c_fb_red_length(format);
 }
 
@@ -1487,11 +1496,9 @@ static u32 s3c_fb_green_offset(int format)
 {
 	switch (format) {
 	case S3C_FB_PIXEL_FORMAT_RGBA_8888:
-	case S3C_FB_PIXEL_FORMAT_RGB_888:
-	case S3C_FB_PIXEL_FORMAT_BGRA_8888:
+	case S3C_FB_PIXEL_FORMAT_RGBX_8888:
 		return 8;
 
-	case S3C_FB_PIXEL_FORMAT_RGB_565:
 	case S3C_FB_PIXEL_FORMAT_RGBA_5551:
 		return 5;
 
@@ -1513,20 +1520,14 @@ static u32 s3c_fb_blue_offset(int format)
 {
 	switch (format) {
 	case S3C_FB_PIXEL_FORMAT_RGBA_8888:
-	case S3C_FB_PIXEL_FORMAT_RGB_888:
+	case S3C_FB_PIXEL_FORMAT_RGBX_8888:
 		return 16;
-
-	case S3C_FB_PIXEL_FORMAT_RGB_565:
-		return 11;
 
 	case S3C_FB_PIXEL_FORMAT_RGBA_5551:
 		return 10;
 
 	case S3C_FB_PIXEL_FORMAT_RGBA_4444:
 		return 8;
-
-	case S3C_FB_PIXEL_FORMAT_BGRA_8888:
-		return 0;
 
 	default:
 		pr_warn("s3c-fb: unrecognized pixel format %u\n", format);
@@ -1538,7 +1539,6 @@ static u32 s3c_fb_transp_length(int format)
 {
 	switch (format) {
 	case S3C_FB_PIXEL_FORMAT_RGBA_8888:
-	case S3C_FB_PIXEL_FORMAT_BGRA_8888:
 		return 8;
 
 	case S3C_FB_PIXEL_FORMAT_RGBA_5551:
@@ -1547,8 +1547,7 @@ static u32 s3c_fb_transp_length(int format)
 	case S3C_FB_PIXEL_FORMAT_RGBA_4444:
 		return 4;
 
-	case S3C_FB_PIXEL_FORMAT_RGB_888:
-	case S3C_FB_PIXEL_FORMAT_RGB_565:
+	case S3C_FB_PIXEL_FORMAT_RGBX_8888:
 		return 0;
 
 	default:
@@ -1561,7 +1560,6 @@ static u32 s3c_fb_transp_offset(int format)
 {
 	switch (format) {
 	case S3C_FB_PIXEL_FORMAT_RGBA_8888:
-	case S3C_FB_PIXEL_FORMAT_BGRA_8888:
 		return 24;
 
 	case S3C_FB_PIXEL_FORMAT_RGBA_5551:
@@ -1570,14 +1568,31 @@ static u32 s3c_fb_transp_offset(int format)
 	case S3C_FB_PIXEL_FORMAT_RGBA_4444:
 		return 12;
 
-	case S3C_FB_PIXEL_FORMAT_RGB_888:
-	case S3C_FB_PIXEL_FORMAT_RGB_565:
+	case S3C_FB_PIXEL_FORMAT_RGBX_8888:
 		return s3c_fb_blue_offset(format);
 
 	default:
 		pr_warn("s3c-fb: unrecognized pixel format %u\n", format);
 		return 0;
 	}
+}
+
+static u32 s3c_fb_padding(int format)
+{
+	switch (format) {
+	case S3C_FB_PIXEL_FORMAT_RGBX_8888:
+		return 8;
+
+	case S3C_FB_PIXEL_FORMAT_RGBA_8888:
+	case S3C_FB_PIXEL_FORMAT_RGBA_5551:
+	case S3C_FB_PIXEL_FORMAT_RGBA_4444:
+		return 0;
+
+	default:
+		pr_warn("s3c-fb: unrecognized pixel format %u\n", format);
+		return 0;
+	}
+
 }
 
 static int s3c_fb_set_win_buffer(struct s3c_fb *sfb, struct s3c_fb_win *win,
@@ -1609,7 +1624,20 @@ static int s3c_fb_set_win_buffer(struct s3c_fb *sfb, struct s3c_fb_win *win,
 	win->fbinfo->var.bits_per_pixel = win->fbinfo->var.red.length +
 			win->fbinfo->var.green.length +
 			win->fbinfo->var.blue.length +
-			win->fbinfo->var.transp.length;
+			win->fbinfo->var.transp.length +
+			s3c_fb_padding(win_config->format);
+
+	if (win_config->stride <
+			win_config->w * win->fbinfo->var.bits_per_pixel / 8) {
+		dev_err(sfb->dev, "stride shorter than buffer width (stride = %u, width = %u, bpp = %u)\n",
+				win_config->stride, win_config->w,
+				win->fbinfo->var.bits_per_pixel);
+		return -EINVAL;
+	}
+
+	if (!s3c_fb_validate_x_alignment(sfb, win_config->x, win_config->w,
+			win->fbinfo->var.bits_per_pixel))
+		return -EINVAL;
 
 	handle = ion_import_dma_buf(sfb->fb_ion_client, win_config->fd);
 	if (IS_ERR(handle)) {
@@ -1659,15 +1687,13 @@ static int s3c_fb_set_win_buffer(struct s3c_fb *sfb, struct s3c_fb_win *win,
 
 	regs->vidosd_a[win_no] = vidosd_a(win_config->x, win_config->y);
 	regs->vidosd_b[win_no] = vidosd_b(win_config->x, win_config->y,
-			win_config->w, win_config->h,
-			win->fbinfo->var.bits_per_pixel);
+			win_config->w, win_config->h);
 
-	if (win->variant.has_osd_alpha) {
-		u32 alpha = VIDISD14C_ALPHA1_R(0xf) |
-				VIDISD14C_ALPHA1_G(0xf) |
-				VIDISD14C_ALPHA1_B(0xf);
-		regs->vidosd_c[win_no] = alpha;
-	}
+	if (win->variant.has_osd_alpha)
+		regs->vidosd_c[win_no] = vidosd_c(0xff, 0xff, 0xff);
+	regs->vidw_alpha0[win_no] = vidw_alpha0(win->variant.has_osd_alpha,
+			0xff, 0xff, 0xff);
+
 	if (win->variant.osd_size_off) {
 		u32 size = win_config->w * win_config->h;
 		if (win->variant.has_osd_alpha)
@@ -1724,6 +1750,9 @@ static int s3c_fb_set_win_config(struct s3c_fb *sfb,
 		case S3C_FB_WIN_STATE_COLOR:
 			enabled = 1;
 			color_map |= WINxMAP_MAP_COLOUR(config->color);
+			regs->vidosd_a[i] = vidosd_a(config->x, config->y);
+			regs->vidosd_b[i] = vidosd_b(config->x, config->y,
+					config->w, config->h);
 			break;
 		case S3C_FB_WIN_STATE_BUFFER:
 			ret = s3c_fb_set_win_buffer(sfb, win, config, regs);
@@ -1776,6 +1805,7 @@ static void s3c_fb_update_regs(struct s3c_fb *sfb, struct s3c_reg_data *regs)
 
 	for (i = 0; i < sfb->variant.nr_windows; i++) {
 		writel(regs->wincon[i], sfb->regs + WINCON(i));
+		writel(regs->winmap[i], sfb->regs + WINxMAP(i));
 		writel(regs->vidosd_a[i],
 				sfb->regs + VIDOSD_A(i, sfb->variant));
 		writel(regs->vidosd_b[i],
@@ -1786,6 +1816,8 @@ static void s3c_fb_update_regs(struct s3c_fb *sfb, struct s3c_reg_data *regs)
 		if (sfb->windows[i]->variant.has_osd_d)
 			writel(regs->vidosd_d[i],
 					sfb->regs + VIDOSD_D(i, sfb->variant));
+		writel(regs->vidw_alpha0[i],
+				sfb->regs + VIDW_ALPHA0(i));
 		writel(regs->vidw_buf_start[i],
 				sfb->regs + VIDW_BUF_START(i));
 		writel(regs->vidw_buf_end[i],
