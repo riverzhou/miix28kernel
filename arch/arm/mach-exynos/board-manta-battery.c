@@ -289,10 +289,68 @@ static int manta_bat_get_init_cable_state(void)
 	return cable_type;
 }
 
+static void exynos5_manta_set_mains_current(void)
+{
+	int ret;
+	union power_supply_propval value;
+
+	if (!manta_bat_smb347_mains)
+		manta_bat_smb347_mains =
+			power_supply_get_by_name("smb347-mains");
+
+	if (!manta_bat_smb347_mains) {
+		pr_err("%s: failed to get smb347-mains power supply\n",
+		       __func__);
+		return;
+	}
+
+	value.intval =
+		manta_bat_charge_type[CHARGE_SOURCE_POGO] == CHARGER_USB ?
+		500000 : 1800000;
+
+	ret = manta_bat_smb347_mains->set_property(manta_bat_smb347_mains,
+					 POWER_SUPPLY_PROP_CURRENT_MAX,
+					 &value);
+	if (ret)
+		pr_err("%s: failed to set smb347-mains current limit\n",
+		       __func__);
+}
+
+static void exynos5_manta_set_usb_hc(void)
+{
+	int ret;
+	union power_supply_propval value;
+
+	if (!manta_bat_smb347_usb)
+		manta_bat_smb347_usb = power_supply_get_by_name("smb347-usb");
+
+	if (!manta_bat_smb347_usb) {
+		pr_err("%s: failed to get smb347-usb power supply\n",
+		       __func__);
+		return;
+	}
+
+	value.intval =
+		manta_bat_charge_type[CHARGE_SOURCE_USB] == CHARGER_USB ?
+		0 : 1;
+	ret = manta_bat_smb347_usb->set_property(manta_bat_smb347_usb,
+						 POWER_SUPPLY_PROP_USB_HC,
+						 &value);
+	if (ret)
+		pr_err("%s: failed to set smb347-usb USB/HC mode\n",
+		       __func__);
+}
+
 static void manta_bat_set_charging_current(int cable_type)
 {
-	if (chg_callbacks && chg_callbacks->set_charging_current)
-		chg_callbacks->set_charging_current(chg_callbacks, cable_type);
+	if (exynos5_manta_get_revision() >= MANTA_REV_PRE_ALPHA) {
+		exynos5_manta_set_mains_current();
+		exynos5_manta_set_usb_hc();
+	} else {
+		if (chg_callbacks && chg_callbacks->set_charging_current)
+			chg_callbacks->set_charging_current(chg_callbacks,
+							    cable_type);
+	}
 }
 
 static void manta_bat_set_charging_enable(int en)
