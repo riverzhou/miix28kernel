@@ -22,6 +22,7 @@
 #include <linux/regulator/fixed.h>
 #include <linux/serial_core.h>
 #include <linux/platform_data/stmpe811-adc.h>
+#include <linux/leds-as3668.h>
 
 #include <asm/mach/arch.h>
 #include <asm/hardware/gic.h>
@@ -228,6 +229,29 @@ static void __init manta_gpio_power_init(void)
 
 	gpio_free(EXYNOS5_GPX2(7));
 }
+
+static struct as3668_platform_data as3668_pdata = {
+	.led_array = {AS3668_RED, AS3668_GREEN, AS3668_BLUE, AS3668_WHITE},
+	.vbat_monitor_voltage_index = AS3668_VMON_VBAT_3_0V,
+	.pattern_start_source = AS3668_PATTERN_START_SOURCE_SW,
+	.pwm_source = AS3668_PWM_SOURCE_INTERNAL,
+	.gpio_input_invert = AS3668_GPIO_INPUT_NONINVERT,
+	.gpio_input_mode = AS3668_GPIO_INPUT_MODE_ANALOG,
+	.gpio_mode = AS3668_GPIO_MODE_INPUT_ONLY,
+	.audio_input_pin = AS3668_AUDIO_CTRL_INPUT_CURR4,
+	.audio_pulldown_off = AS3668_AUDIO_CTRL_PLDN_ENABLE,
+	.audio_adc_characteristic = AS3668_AUDIO_CTRL_ADC_CHAR_250,
+	.audio_dis_start = AS3668_AUDIO_INPUT_CAP_PRECHARGE,
+	.audio_man_start = AS3668_AUDIO_INPUT_AUTO_PRECHARGE,
+};
+
+/* I2C1 */
+static struct i2c_board_info i2c_devs1[] __initdata = {
+	{
+		I2C_BOARD_INFO("as3668", 0x42),
+		.platform_data = &as3668_pdata,
+	},
+};
 
 static struct stmpe811_callbacks *stmpe811_cbs;
 static void stmpe811_register_callback(struct stmpe811_callbacks *cb)
@@ -436,6 +460,7 @@ static void __init manta_machine_init(void)
 	s3c_i2c5_set_platdata(NULL);
 	s3c_i2c7_set_platdata(NULL);
 
+	i2c_register_board_info(1, i2c_devs1, ARRAY_SIZE(i2c_devs1));
 	if (exynos5_manta_get_revision() <= MANTA_REV_LUNCHBOX)
 		i2c_register_board_info(2, i2c_devs2, ARRAY_SIZE(i2c_devs2));
 	else
