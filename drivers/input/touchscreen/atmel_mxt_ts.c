@@ -256,6 +256,11 @@ struct mxt_finger {
 	int pressure;
 };
 
+struct mxt_reportid {
+	u8 type;
+	u8 index;
+};
+
 /* Each client has this additional data */
 struct mxt_data {
 	struct i2c_client *client;
@@ -270,6 +275,7 @@ struct mxt_data {
 	unsigned int max_y;
 	struct completion init_done;
 	unsigned int max_reportid;
+	struct mxt_reportid *reportid_table;
 };
 
 /**
@@ -737,12 +743,10 @@ static irqreturn_t mxt_interrupt(int irq, void *dev_id)
 {
 	struct mxt_data *data = dev_id;
 	struct mxt_message message;
-	struct mxt_object *object;
 	struct device *dev = &data->client->dev;
 	int id;
 	u8 reportid;
-	u8 max_reportid;
-	u8 min_reportid;
+	u8 object_type = 0;
 
 	do {
 		if (mxt_read_message(data, &message)) {
@@ -752,20 +756,17 @@ static irqreturn_t mxt_interrupt(int irq, void *dev_id)
 
 		reportid = message.reportid;
 
-		/* whether reportid is thing of MXT_TOUCH_MULTI_T9 */
-		object = mxt_get_object(data, MXT_TOUCH_MULTI_T9);
-		if (!object)
+		if (reportid > data->max_reportid)
 			goto end;
 
-		max_reportid = object->max_reportid;
-		min_reportid = max_reportid -
-			object->instances * object->num_report_ids + 1;
-		id = reportid - min_reportid;
+		object_type = data->reportid_table[reportid].type;
 
-		if (reportid >= min_reportid && reportid <= max_reportid)
+		if (object_type == MXT_TOUCH_MULTI_T9) {
+			id = data->reportid_table[reportid].index;
 			mxt_input_touchevent(data, &message, id);
-		else
+		} else {
 			mxt_dump_message(dev, &message);
+		}
 	} while (reportid != 0xff);
 
 end:
@@ -1105,6 +1106,30 @@ static int mxt_get_object_table(struct mxt_data *data)
 	return 0;
 }
 
+static void mxt_make_reportid_table(struct mxt_data *data)
+{
+	struct mxt_object *objects = data->object_table;
+	struct mxt_reportid *reportids = data->reportid_table;
+	struct device *dev = &data->client->dev;
+	int i, j;
+	int id = 0;
+
+	for (i = 0; i < data->info.object_num; i++) {
+		for (j = 0; j < objects[i].num_report_ids *
+				 objects[i].instances; j++) {
+			id++;
+			reportids[id].type = objects[i].type;
+			reportids[id].index = j;
+			dev_dbg(dev, "Report_id[%d]:\tT%d\tindex%d\n",
+				id, reportids[id].type,
+				reportids[id].index);
+		}
+	}
+
+	dev_dbg(&data->client->dev, "maXTouch: %d report ID\n",
+			data->max_reportid);
+}
+
 static int mxt_initialize(struct mxt_fw_info *fw_info)
 {
 	struct mxt_data *data = fw_info->data;
@@ -1129,6 +1154,17 @@ static int mxt_initialize(struct mxt_fw_info *fw_info)
 	error = mxt_get_object_table(data);
 	if (error)
 		return error;
+
+	data->reportid_table = kcalloc(data->max_reportid + 1,
+				     sizeof(struct mxt_reportid),
+				     GFP_KERNEL);
+	if (!data->reportid_table) {
+		dev_err(&client->dev, "Failed to allocate memory\n");
+		return -ENOMEM;
+	}
+
+	/* Make the report id table infomation */
+	mxt_make_reportid_table(data);
 
 	/* Check register init values */
 	if (fw_info->cfg_raw_data) {
@@ -1424,6 +1460,8 @@ static ssize_t mxt_update_fw_store(struct device *dev,
 		dev_info(dev, "The firmware update succeeded\n");
 		kfree(data->object_table);
 		data->object_table = NULL;
+		kfree(data->reportid_table);
+		data->reportid_table = NULL;
 
 		error = mxt_initialize(&fw_info);
 		if (error) {
@@ -1583,6 +1621,8 @@ static int mxt_ts_rest_init(struct mxt_fw_info *fw_info)
 err_free_mem:
 	kfree(data->object_table);
 	data->object_table = NULL;
+	kfree(data->reportid_table);
+	data->reportid_table = NULL;
 	return error;
 }
 
@@ -1816,6 +1856,7 @@ static int __devexit mxt_remove(struct i2c_client *client)
 	input_unregister_device(data->input_dev);
 	i2c_unregister_device(data->client_boot);
 	kfree(data->object_table);
+	kfree(data->reportid_table);
 	kfree(data);
 
 	return 0;
