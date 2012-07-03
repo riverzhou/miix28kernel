@@ -205,7 +205,9 @@ static void manta_bat_set_charging_current(int cable_type)
 
 static void manta_bat_set_charging_enable(int en)
 {
-	if (chg_callbacks && chg_callbacks->set_charging_enable)
+	if (exynos5_manta_get_revision() >= MANTA_REV_PRE_ALPHA)
+		gpio_set_value(GPIO_TA_EN, !en);
+	else if (chg_callbacks && chg_callbacks->set_charging_enable)
 		chg_callbacks->set_charging_enable(chg_callbacks, en);
 }
 
