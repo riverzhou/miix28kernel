@@ -108,6 +108,7 @@ void setup_mm_for_reboot(void)
 
 	/* Switch to the identity mapping. */
 	cpu_switch_mm(idmap_pgd, &init_mm);
+	local_flush_bp_all();
 
 	/* Flush the TLB. */
 	local_flush_tlb_all();
