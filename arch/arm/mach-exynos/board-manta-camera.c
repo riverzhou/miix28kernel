@@ -54,6 +54,74 @@ static struct exynos5_fimc_is_sensor_info s5k4e5 = {
 	.mipi_lanes = 2,
 	.mipi_settle = 12,
 	.mipi_align = 24,
+	.sensor_power = {
+		.cam_core = "5m_core_1.5v",
+		.cam_io_myself = "cam_io_1.8v",
+		.cam_io_peer = "vt_cam_1.8v",
+		.cam_af = "cam_af_2.8v",
+	},
+	.sensor_gpio = {
+		.cfg[0] = { /* ISP_TXD */
+			.pin = EXYNOS5_GPE0(7),
+			.name = "GPE0",
+			.value = (3<<28),
+			.act = GPIO_PULL_NONE,
+		},
+		.cfg[1] = { /* ISP_RXD */
+			.pin = EXYNOS5_GPE1(1),
+			.name = "GPE1",
+			.value = (3<<4),
+			.act = GPIO_PULL_NONE,
+		},
+		.cfg[2] = { /* 5M_CAM_SDA_18V */
+			.pin = EXYNOS5_GPF0(0),
+			.name = "GPF0",
+			.value = (2<<0),
+			.act = GPIO_PULL_NONE,
+		},
+		.cfg[3] = { /* 5M_CAM_SCL_18V */
+			.pin = EXYNOS5_GPF0(1),
+			.name = "GPF0",
+			.value = (2<<4),
+			.act = GPIO_PULL_NONE,
+		},
+		.cfg[4] = { /* CAM_FLASH_EN */
+			.pin = EXYNOS5_GPE0(1),
+			.name = "GPE0",
+			.value = (2<<4),
+			.act = GPIO_PULL_NONE,
+		},
+		.cfg[5] = { /* CAM_FLASH_SET */
+			.pin = EXYNOS5_GPE0(2),
+			.name = "GPE0",
+			.value = (2<<8),
+			.act = GPIO_PULL_NONE,
+		},
+		.cfg[6] = { /* CAM_MCLK */
+			.pin = EXYNOS5_GPH0(3),
+			.name = "GPH0",
+			.value = (2<<12),
+			.act = GPIO_PULL_NONE,
+		},
+		.power = { /* CAM_IO_EN - VDDA_2.8V*/
+			.pin = EXYNOS5_GPV0(3),
+			.name = "GPV0",
+			.value = 1,
+			.act = GPIO_OUTPUT,
+		},
+		.reset_myself = { /* 5M_CAM_RESET */
+			.pin = EXYNOS5_GPE0(0),
+			.name = "GPE0",
+			.value = 0,
+			.act = GPIO_RESET,
+		},
+		.reset_peer = { /* CAM_VT_nRST */
+			.pin = EXYNOS5_GPG1(6),
+			.name = "GPG1",
+			.value = 0,
+			.act = GPIO_RESET,
+		},
+	},
 };
 #endif
 
@@ -82,96 +150,63 @@ static struct exynos5_fimc_is_sensor_info s5k6a3 = {
 	.mipi_lanes = 1,
 	.mipi_settle = 12,
 	.mipi_align = 24,
+	.sensor_power = {
+		.cam_core = "5m_core_1.5v",
+		.cam_io_myself = "vt_cam_1.8v",
+		.cam_io_peer = "cam_io_1.8v",
+	},
+	.sensor_gpio = {
+		.cfg[0] = { /* ISP_TXD */
+			.pin = EXYNOS5_GPE0(7),
+			.name = "GPE0",
+			.value = (3<<28),
+			.act = GPIO_PULL_NONE,
+		},
+		.cfg[1] = { /* ISP_RXD */
+			.pin = EXYNOS5_GPE1(1),
+			.name = "GPE1",
+			.value = (3<<4),
+			.act = GPIO_PULL_NONE,
+		},
+		.cfg[2] = { /* VT_CAM_SDA_18V */
+			.pin = EXYNOS5_GPF0(2),
+			.name = "GPF0",
+			.value = (2<<8),
+			.act = GPIO_PULL_NONE,
+		},
+		.cfg[3] = { /* VT_CAM_SCL_18V */
+			.pin = EXYNOS5_GPF0(3),
+			.name = "GPF0",
+			.value = (2<<12),
+			.act = GPIO_PULL_NONE,
+		},
+		.cfg[4] = { /* VTCAM_MCLK */
+			.pin = EXYNOS5_GPG2(1),
+			.name = "GPG2",
+			.value = (2<<4),
+			.act = GPIO_PULL_NONE,
+		},
+		.power = { /* CAM_IO_EN - VDDA_2.8V*/
+			.pin = EXYNOS5_GPV0(3),
+			.name = "GPV0",
+			.value = 1,
+			.act = GPIO_OUTPUT,
+		},
+		.reset_myself = { /* CAM_VT_nRST */
+			.pin = EXYNOS5_GPG1(6),
+			.name = "GPG1",
+			.value = 0,
+			.act = GPIO_RESET,
+		},
+		.reset_peer = { /* 5M_CAM_RESET */
+			.pin = EXYNOS5_GPE0(0),
+			.name = "GPE0",
+			.value = 0,
+			.act = GPIO_RESET,
+		},
+	},
 };
 #endif
-
-static struct exynos5_fimc_is_regulator_info regulator_manta = {
-	.cam_core = "5m_core_1.5v",
-	.cam_io = "cam_io_1.8v",
-	.cam_af = "cam_af_2.8v",
-	.cam_vt = "vt_cam_1.8v",
-};
-
-static struct exynos5_fimc_is_gpio_info gpio_manta = {
-	.gpio[0] = {
-		.pin = EXYNOS5_GPE0(0),
-		.name = "GPE0",
-		.value = 0,
-		.act = GPIO_RESET,
-	},
-	.gpio[1] = {
-		.pin = EXYNOS5_GPG1(6),
-		.name = "GPG1",
-		.value = 0,
-		.act = GPIO_RESET,
-	},
-	.gpio[2] = {
-		.pin = EXYNOS5_GPE0(7),
-		.name = "GPE0",
-		.value = (3<<28),
-		.act = GPIO_PULL_NONE,
-	},
-	.gpio[3] = {
-		.pin = EXYNOS5_GPE1(1),
-		.name = "GPE1",
-		.value = (3<<4),
-		.act = GPIO_PULL_NONE,
-	},
-	.gpio[4] = {
-		.pin = EXYNOS5_GPF0(0),
-		.name = "GPF0",
-		.value = (2<<0),
-		.act = GPIO_PULL_NONE,
-	},
-	.gpio[5] = {
-		.pin = EXYNOS5_GPF0(1),
-		.name = "GPF0",
-		.value = (2<<4),
-		.act = GPIO_PULL_NONE,
-	},
-	.gpio[6] = {
-		.pin = EXYNOS5_GPF0(2),
-		.name = "GPF0",
-		.value = (2<<8),
-		.act = GPIO_PULL_NONE,
-	},
-	.gpio[7] = {
-		.pin = EXYNOS5_GPF0(3),
-		.name = "GPF0",
-		.value = (2<<12),
-		.act = GPIO_PULL_NONE,
-	},
-	.gpio[8] = {
-		.pin = EXYNOS5_GPG1(0),
-		.name = "GPG1",
-		.value = (2<<0),
-		.act = GPIO_PULL_NONE,
-	},
-	.gpio[9] = {
-		.pin = EXYNOS5_GPG1(1),
-		.name = "GPG1",
-		.value = (2<<4),
-		.act = GPIO_PULL_NONE,
-	},
-	.gpio[10] = {
-		.pin = EXYNOS5_GPG2(1),
-		.name = "GPG2",
-		.value = (2<<4),
-		.act = GPIO_PULL_NONE,
-	},
-	.gpio[11] = {
-		.pin = EXYNOS5_GPH0(3),
-		.name = "GPH0",
-		.value = (2<<12),
-		.act = GPIO_PULL_NONE,
-	},
-	.gpio[12] = {
-		.pin = EXYNOS5_GPV0(3),
-		.name = "GPV0",
-		.value = 1,
-		.act = GPIO_OUTPUT,
-	},
-};
 
 static struct platform_device *camera_devices[] __initdata = {
 	&exynos5_device_fimc_is,
@@ -190,21 +225,21 @@ void __init exynos5_manta_camera_init(void)
 	platform_add_devices(camera_devices, ARRAY_SIZE(camera_devices));
 
 	dev_set_name(&exynos5_device_fimc_is.dev, "s5p-mipi-csis.0");
-	clk_add_alias("gscl_wrap0", "exynos5-fimc-is", "gscl_wrap0",
+	clk_add_alias("gscl_wrap0", FIMC_IS_MODULE_NAME, "gscl_wrap0",
 			&exynos5_device_fimc_is.dev);
-	clk_add_alias("sclk_gscl_wrap0", "exynos5-fimc-is", "sclk_gscl_wrap0",
+	clk_add_alias("sclk_gscl_wrap0", FIMC_IS_MODULE_NAME, "sclk_gscl_wrap0",
 			&exynos5_device_fimc_is.dev);
 
 	dev_set_name(&exynos5_device_fimc_is.dev, "s5p-mipi-csis.1");
-	clk_add_alias("gscl_wrap1", "exynos5-fimc-is", "gscl_wrap1",
+	clk_add_alias("gscl_wrap1", FIMC_IS_MODULE_NAME, "gscl_wrap1",
 			&exynos5_device_fimc_is.dev);
-	clk_add_alias("sclk_gscl_wrap1", "exynos5-fimc-is", "sclk_gscl_wrap1",
+	clk_add_alias("sclk_gscl_wrap1", FIMC_IS_MODULE_NAME, "sclk_gscl_wrap1",
 			&exynos5_device_fimc_is.dev);
 
 	dev_set_name(&exynos5_device_fimc_is.dev, "exynos-gsc.0");
-	clk_add_alias("gscl", "exynos5-fimc-is", "gscl",
+	clk_add_alias("gscl", FIMC_IS_MODULE_NAME, "gscl",
 			&exynos5_device_fimc_is.dev);
-	dev_set_name(&exynos5_device_fimc_is.dev, "exynos5-fimc-is");
+	dev_set_name(&exynos5_device_fimc_is.dev, FIMC_IS_MODULE_NAME);
 
 #if defined CONFIG_VIDEO_S5K6A3
 	exynos5_fimc_is_data.sensor_info[s5k6a3.sensor_position] = &s5k6a3;
@@ -212,8 +247,6 @@ void __init exynos5_manta_camera_init(void)
 #if defined CONFIG_VIDEO_S5K4E5
 	exynos5_fimc_is_data.sensor_info[s5k4e5.sensor_position] = &s5k4e5;
 #endif
-	exynos5_fimc_is_data.regulator_info = &regulator_manta;
-	exynos5_fimc_is_data.gpio_info = &gpio_manta;
 
 	exynos5_fimc_is_set_platdata(&exynos5_fimc_is_data);
 }
