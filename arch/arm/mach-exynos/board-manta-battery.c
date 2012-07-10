@@ -433,12 +433,8 @@ static int manta_power_debug_dump(struct seq_file *s, void *unused)
 	seq_printf(s, "ta_en=%d ta_nchg=%d ta_int=%d\n",
 		   gpio_get_value(GPIO_TA_EN), gpio_get_value(gpio_TA_nCHG),
 		   gpio_get_value(GPIO_TA_INT));
-	seq_printf(s, "usb=%d pogo=%d ta_adc(usb)=%d ta_adc(pogo)=%d cable=%d\n",
-		   manta_bat_usb_online, manta_bat_pogo_online,
-		   read_ta_adc(CHARGE_SOURCE_USB),
-		   exynos5_manta_get_revision() >= MANTA_REV_PRE_ALPHA ?
-		   read_ta_adc(CHARGE_SOURCE_POGO) : 0,
-		   cable_type);
+	seq_printf(s, "usb=%d pogo=%d cable=%d\n",
+		   manta_bat_usb_online, manta_bat_pogo_online, cable_type);
 	return 0;
 }
 
@@ -449,6 +445,27 @@ static int manta_power_debug_open(struct inode *inode, struct file *file)
 
 static const struct file_operations manta_power_debug_fops = {
 	.open = manta_power_debug_open,
+	.read = seq_read,
+	.llseek = seq_lseek,
+	.release = single_release,
+};
+
+static int manta_power_adc_debug_dump(struct seq_file *s, void *unused)
+{
+	seq_printf(s, "ta_adc(usb)=%d ta_adc(pogo)=%d\n",
+		   read_ta_adc(CHARGE_SOURCE_USB),
+		   exynos5_manta_get_revision() >= MANTA_REV_PRE_ALPHA ?
+		   read_ta_adc(CHARGE_SOURCE_POGO) : 0);
+	return 0;
+}
+
+static int manta_power_adc_debug_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, manta_power_adc_debug_dump, inode->i_private);
+}
+
+static const struct file_operations manta_power_adc_debug_fops = {
+	.open = manta_power_adc_debug_open,
 	.read = seq_read,
 	.llseek = seq_lseek,
 	.release = single_release,
@@ -501,6 +518,11 @@ void __init exynos5_manta_battery_init(void)
 	if (IS_ERR_OR_NULL(debugfs_create_file("manta-power", S_IRUGO, NULL,
 					       NULL, &manta_power_debug_fops)))
 		pr_err("failed to create manta-power debugfs entry\n");
+
+	if (IS_ERR_OR_NULL(debugfs_create_file("manta-power-adc", S_IRUGO, NULL,
+					       NULL,
+					       &manta_power_adc_debug_fops)))
+		pr_err("failed to create manta-power-adc debugfs entry\n");
 }
 
 static void exynos5_manta_power_changed(struct power_supply *psy)
