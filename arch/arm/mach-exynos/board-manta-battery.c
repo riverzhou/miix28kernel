@@ -15,6 +15,7 @@
 #include <linux/delay.h>
 #include <linux/platform_device.h>
 #include <linux/interrupt.h>
+#include <linux/mutex.h>
 #include <linux/debugfs.h>
 
 #include <plat/adc.h>
@@ -57,6 +58,9 @@ static struct bq24191_chg_callbacks *chg_callbacks;
 static struct manta_bat_callbacks *bat_callbacks;
 
 static struct s3c_adc_client *ta_adc_client;
+
+static DEFINE_MUTEX(manta_bat_charger_detect_lock);
+static DEFINE_MUTEX(manta_bat_adc_lock);
 
 static void max17047_fg_register_callbacks(struct max17047_fg_callbacks *ptr)
 {
@@ -113,6 +117,8 @@ static int read_ta_adc(enum charge_source_type source)
 	int adc_sel;
 	int result;
 
+	mutex_lock(&manta_bat_adc_lock);
+
 	if (source == CHARGE_SOURCE_USB)
 		adc_sel = GPIO_USB_SEL1;
 	else
@@ -139,6 +145,7 @@ static int read_ta_adc(enum charge_source_type source)
 
 	/* switch back to normal */
 	gpio_set_value(adc_sel, 1);
+	mutex_unlock(&manta_bat_adc_lock);
 	return result;
 }
 
@@ -203,9 +210,12 @@ static void update_charging_status(bool usb_connected, bool pogo_connected)
 
 static void change_cable_status(void)
 {
-	int ta_int = gpio_get_value(GPIO_TA_INT);
+	int ta_int;
 	union power_supply_propval pogo_connected = {0,};
 	union power_supply_propval usb_connected = {0,};
+
+	mutex_lock(&manta_bat_charger_detect_lock);
+	ta_int = gpio_get_value(GPIO_TA_INT);
 
 	if (exynos5_manta_get_revision() >= MANTA_REV_PRE_ALPHA &&
 	    (!manta_bat_smb347_mains || !manta_bat_smb347_usb)) {
@@ -243,6 +253,8 @@ static void change_cable_status(void)
 
 	if (bat_callbacks && bat_callbacks->change_cable_status)
 		bat_callbacks->change_cable_status(bat_callbacks, cable_type);
+
+	mutex_unlock(&manta_bat_charger_detect_lock);
 }
 
 static char *exynos5_manta_supplicant[] = { "manta-board" };
