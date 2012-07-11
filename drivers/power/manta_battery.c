@@ -27,6 +27,7 @@
 #include <linux/workqueue.h>
 #include <linux/timer.h>
 #include <linux/platform_data/manta_battery.h>
+#include "../../arch/arm/mach-exynos/board-manta.h"
 
 struct manta_bat_data {
 	struct manta_bat_platform_data *pdata;
@@ -292,7 +293,11 @@ static void manta_bat_cable_work(struct work_struct *work)
 	case CABLE_TYPE_AC:
 		battery->charging_status = POWER_SUPPLY_STATUS_CHARGING;
 		manta_bat_enable_charging(battery, true);
-		wake_lock(&battery->vbus_wake_lock);
+
+		if (exynos5_manta_get_revision() <= MANTA_REV_LUNCHBOX)
+			wake_lock(&battery->vbus_wake_lock);
+		else
+			wake_lock_timeout(&battery->vbus_wake_lock, HZ * 2);
 		break;
 	default:
 		pr_err("%s: Invalid cable type\n", __func__);
