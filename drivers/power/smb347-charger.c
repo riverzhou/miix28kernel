@@ -690,9 +690,12 @@ static int smb347_hw_init(struct smb347_charger *smb)
 	if (ret < 0)
 		goto fail;
 
+// HACK for Manta pre-alpha 0.2, TH_BATTERY not connected properly
+#if 0 // HACK
 	ret = smb347_set_temp_limits(smb);
 	if (ret < 0)
 		goto fail;
+#endif // HACK
 
 	/* If USB charging is disabled we put the USB in suspend mode */
 	if (!smb->pdata->use_usb) {
