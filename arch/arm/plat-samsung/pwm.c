@@ -23,7 +23,14 @@
 
 #include <mach/map.h>
 
+#include <plat/cpu.h>
 #include <plat/regs-timer.h>
+
+enum duty_cycle {
+	DUTY_CYCLE_ZERO,
+	DUTY_CYCLE_PULSE,
+	DUTY_CYCLE_FULL,
+};
 
 struct pwm_device {
 	struct list_head	 list;
@@ -40,6 +47,7 @@ struct pwm_device {
 	unsigned char		 running;
 	unsigned char		 use_count;
 	unsigned char		 pwm_id;
+	enum duty_cycle		 duty_cycle;
 };
 
 #define pwm_dbg(_pwm, msg...) dev_dbg(&(_pwm)->pdev->dev, msg)
@@ -112,9 +120,33 @@ int pwm_enable(struct pwm_device *pwm)
 
 	spin_lock_irqsave(&pwm_spinlock, flags);
 
-	tcon = __raw_readl(S3C2410_TCON);
-	tcon |= pwm_tcon_start(pwm);
-	__raw_writel(tcon, S3C2410_TCON);
+	if (soc_is_s3c24xx()) {
+		tcon = __raw_readl(S3C2410_TCON);
+		tcon |= pwm_tcon_start(pwm);
+		__raw_writel(tcon, S3C2410_TCON);
+	} else {
+		tcon = __raw_readl(S3C2410_TCON);
+		if (!(tcon & pwm_tcon_start(pwm))) {
+			tcon |= pwm_tcon_manulupdate(pwm);
+			__raw_writel(tcon, S3C2410_TCON);
+
+			tcon &= ~pwm_tcon_manulupdate(pwm);
+			if (pwm->duty_cycle == DUTY_CYCLE_ZERO)
+				tcon &= ~pwm_tcon_autoreload(pwm);
+			else
+				tcon |= pwm_tcon_autoreload(pwm);
+			tcon |= pwm_tcon_start(pwm);
+			__raw_writel(tcon, S3C2410_TCON);
+		} else if (!(tcon & pwm_tcon_autoreload(pwm)) &&
+			   pwm->duty_cycle != DUTY_CYCLE_ZERO) {
+			tcon |= pwm_tcon_manulupdate(pwm);
+			__raw_writel(tcon, S3C2410_TCON);
+
+			tcon &= ~pwm_tcon_manulupdate(pwm);
+			tcon |= pwm_tcon_autoreload(pwm);
+			__raw_writel(tcon, S3C2410_TCON);
+		}
+	}
 
 	pwm->running = 1;
 
@@ -131,9 +163,15 @@ void pwm_disable(struct pwm_device *pwm)
 
 	spin_lock_irqsave(&pwm_spinlock, flags);
 
-	tcon = __raw_readl(S3C2410_TCON);
-	tcon &= ~pwm_tcon_start(pwm);
-	__raw_writel(tcon, S3C2410_TCON);
+	if (soc_is_s3c24xx()) {
+		tcon = __raw_readl(S3C2410_TCON);
+		tcon &= ~pwm_tcon_start(pwm);
+		__raw_writel(tcon, S3C2410_TCON);
+	} else {
+		tcon = __raw_readl(S3C2410_TCON);
+		tcon &= ~pwm_tcon_autoreload(pwm);
+		__raw_writel(tcon, S3C2410_TCON);
+	}
 
 	pwm->running = 0;
 
@@ -169,6 +207,7 @@ int pwm_config(struct pwm_device *pwm, int duty_ns, int period_ns)
 	unsigned long tcon;
 	unsigned long tcnt;
 	long tcmp;
+	enum duty_cycle duty_cycle;
 
 	/* We currently avoid using 64bit arithmetic by using the
 	 * fact that anything faster than 1Hz is easily representable
@@ -184,48 +223,61 @@ int pwm_config(struct pwm_device *pwm, int duty_ns, int period_ns)
 	    duty_ns == pwm->duty_ns)
 		return 0;
 
-	/* The TCMP and TCNT can be read without a lock, they're not
-	 * shared between the timers. */
-
-	tcmp = __raw_readl(S3C2410_TCMPB(pwm->pwm_id));
-	tcnt = __raw_readl(S3C2410_TCNTB(pwm->pwm_id));
-
 	period = NS_IN_HZ / period_ns;
+
+	/* Check to see if we are changing the clock rate of the PWM */
+
+	if (pwm->period_ns != period_ns && pwm_is_tdiv(pwm)) {
+		tin_rate = pwm_calc_tin(pwm, period);
+		clk_set_rate(pwm->clk_div, tin_rate);
+
+		pwm_dbg(pwm, "tin_rate=%lu\n", tin_rate);
+	} else {
+		tin_rate = clk_get_rate(pwm->clk);
+	}
+
+	/* Note, counters count down */
+
+	tin_ns = NS_IN_HZ / tin_rate;
+
+	tcnt = DIV_ROUND_CLOSEST(period_ns, tin_ns);
+	tcmp = DIV_ROUND_CLOSEST(duty_ns, tin_ns);
+
+	if (tcnt <= 1) {
+		/* Too small to generate a pulse */
+		return -ERANGE;
+	}
 
 	pwm_dbg(pwm, "duty_ns=%d, period_ns=%d (%lu)\n",
 		duty_ns, period_ns, period);
 
-	/* Check to see if we are changing the clock rate of the PWM */
+	if (tcmp == 0)
+		duty_cycle = DUTY_CYCLE_ZERO;
+	else if (tcmp == tcnt)
+		duty_cycle = DUTY_CYCLE_FULL;
+	else
+		duty_cycle = DUTY_CYCLE_PULSE;
 
-	if (pwm->period_ns != period_ns) {
-		if (pwm_is_tdiv(pwm)) {
-			tin_rate = pwm_calc_tin(pwm, period);
-			clk_set_rate(pwm->clk_div, tin_rate);
-		} else
-			tin_rate = clk_get_rate(pwm->clk);
-
-		pwm->period_ns = period_ns;
-
-		pwm_dbg(pwm, "tin_rate=%lu\n", tin_rate);
-
-		tin_ns = NS_IN_HZ / tin_rate;
-		tcnt = period_ns / tin_ns;
-	} else
-		tin_ns = NS_IN_HZ / clk_get_rate(pwm->clk);
-	pwm->duty_ns = duty_ns;
-
-	/* Note, counters count down */
-	tcmp = duty_ns / tin_ns;
 	tcmp = tcnt - tcmp;
 	/* the pwm hw only checks the compare register after a decrement,
 	   so the pin never toggles if tcmp = tcnt */
 	if (tcmp == tcnt)
 		tcmp--;
 
-	pwm_dbg(pwm, "tin_ns=%lu, tcmp=%ld/%lu\n", tin_ns, tcmp, tcnt);
+	/*
+	 * PWM counts 1 hidden tick at the end of each period on S3C64XX and
+	 * EXYNOS series, so tcmp and tcnt should be subtracted 1.
+	 */
+	if (!soc_is_s3c24xx()) {
+		tcnt--;
+		/*
+		 * tcmp can be -1. It appears 100% duty cycle and PWM never
+		 * toggles when TCMPB is set to 0xFFFFFFFF (-1).
+		 */
+		tcmp--;
+	}
 
-	if (tcmp < 0)
-		tcmp = 0;
+	pwm_dbg(pwm, "tin_ns=%lu, tcmp=%ld/%lu\n", tin_ns, tcmp, tcnt);
 
 	/* Update the PWM register block. */
 
@@ -234,13 +286,34 @@ int pwm_config(struct pwm_device *pwm, int duty_ns, int period_ns)
 	__raw_writel(tcmp, S3C2410_TCMPB(pwm->pwm_id));
 	__raw_writel(tcnt, S3C2410_TCNTB(pwm->pwm_id));
 
-	tcon = __raw_readl(S3C2410_TCON);
-	tcon |= pwm_tcon_manulupdate(pwm);
-	tcon |= pwm_tcon_autoreload(pwm);
-	__raw_writel(tcon, S3C2410_TCON);
+	if (soc_is_s3c24xx()) {
+		tcon = __raw_readl(S3C2410_TCON);
+		tcon |= pwm_tcon_manulupdate(pwm);
+		tcon |= pwm_tcon_autoreload(pwm);
+		__raw_writel(tcon, S3C2410_TCON);
 
-	tcon &= ~pwm_tcon_manulupdate(pwm);
-	__raw_writel(tcon, S3C2410_TCON);
+		tcon &= ~pwm_tcon_manulupdate(pwm);
+		__raw_writel(tcon, S3C2410_TCON);
+	} else {
+		tcon = __raw_readl(S3C2410_TCON);
+		if (pwm->running == 1 &&
+		    tcon & pwm_tcon_start(pwm) &&
+		    pwm->duty_cycle != duty_cycle) {
+			if (duty_cycle == DUTY_CYCLE_ZERO) {
+				tcon |= pwm_tcon_manulupdate(pwm);
+				__raw_writel(tcon, S3C2410_TCON);
+
+				tcon &= ~pwm_tcon_manulupdate(pwm);
+				tcon &= ~pwm_tcon_autoreload(pwm);
+			} else {
+				tcon |= pwm_tcon_autoreload(pwm);
+			}
+			__raw_writel(tcon, S3C2410_TCON);
+		}
+	}
+	pwm->duty_ns = duty_ns;
+	pwm->period_ns = period_ns;
+	pwm->duty_cycle = duty_cycle;
 
 	spin_unlock_irqrestore(&pwm_spinlock, flags);
 
@@ -261,12 +334,35 @@ static int pwm_register(struct pwm_device *pwm)
 	return 0;
 }
 
+static void s3c_pwm_init(struct pwm_device *pwm)
+{
+	unsigned long tcon;
+
+	if (soc_is_s3c24xx()) {
+		tcon = __raw_readl(S3C2410_TCON);
+		tcon |= pwm_tcon_invert(pwm);
+		__raw_writel(tcon, S3C2410_TCON);
+	} else {
+		__raw_writel(0, S3C2410_TCMPB(pwm->pwm_id));
+		__raw_writel(0, S3C2410_TCNTB(pwm->pwm_id));
+
+		tcon = __raw_readl(S3C2410_TCON);
+		tcon |= pwm_tcon_invert(pwm);
+		tcon |= pwm_tcon_manulupdate(pwm);
+		tcon &= ~pwm_tcon_autoreload(pwm);
+		tcon &= ~pwm_tcon_start(pwm);
+		__raw_writel(tcon, S3C2410_TCON);
+
+		tcon &= ~pwm_tcon_manulupdate(pwm);
+		__raw_writel(tcon, S3C2410_TCON);
+	}
+}
+
 static int s3c_pwm_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
 	struct pwm_device *pwm;
 	unsigned long flags;
-	unsigned long tcon;
 	unsigned int id = pdev->id;
 	int ret;
 
@@ -306,9 +402,7 @@ static int s3c_pwm_probe(struct platform_device *pdev)
 
 	spin_lock_irqsave(&pwm_spinlock, flags);
 
-	tcon = __raw_readl(S3C2410_TCON);
-	tcon |= pwm_tcon_invert(pwm);
-	__raw_writel(tcon, S3C2410_TCON);
+	s3c_pwm_init(pwm);
 
 	spin_unlock_irqrestore(&pwm_spinlock, flags);
 
@@ -359,6 +453,21 @@ static int __devexit s3c_pwm_remove(struct platform_device *pdev)
 static int s3c_pwm_suspend(struct platform_device *pdev, pm_message_t state)
 {
 	struct pwm_device *pwm = platform_get_drvdata(pdev);
+	unsigned long tcon;
+
+	if (!soc_is_s3c24xx()) {
+		if (pwm->running == 0) {
+			tcon = __raw_readl(S3C2410_TCON);
+			if (pwm->duty_cycle == DUTY_CYCLE_ZERO) {
+				tcon |= pwm_tcon_manulupdate(pwm);
+			} else if (pwm->duty_cycle == DUTY_CYCLE_FULL) {
+				tcon &= pwm_tcon_invert(pwm);
+				tcon |= pwm_tcon_manulupdate(pwm);
+			}
+			tcon &= ~pwm_tcon_start(pwm);
+			__raw_writel(tcon, S3C2410_TCON);
+		}
+	}
 
 	/* No one preserve these values during suspend so reset them
 	 * Otherwise driver leaves PWM unconfigured if same values
@@ -373,13 +482,7 @@ static int s3c_pwm_suspend(struct platform_device *pdev, pm_message_t state)
 static int s3c_pwm_resume(struct platform_device *pdev)
 {
 	struct pwm_device *pwm = platform_get_drvdata(pdev);
-	unsigned long tcon;
-
-	/* Restore invertion */
-	tcon = __raw_readl(S3C2410_TCON);
-	tcon |= pwm_tcon_invert(pwm);
-	__raw_writel(tcon, S3C2410_TCON);
-
+	s3c_pwm_init(pwm);
 	return 0;
 }
 
