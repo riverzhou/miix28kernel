@@ -428,13 +428,34 @@ static struct platform_device *manta_battery_devices[] __initdata = {
 	&manta_device_battery,
 };
 
+static char *charger_type_str(int cable_type)
+{
+	switch (cable_type) {
+	case CABLE_TYPE_NONE:
+		return "none";
+	case CABLE_TYPE_AC:
+		return "ac";
+	case CABLE_TYPE_USB:
+		return "usb";
+	default:
+		break;
+	}
+
+	return "?";
+}
+
+
 static int manta_power_debug_dump(struct seq_file *s, void *unused)
 {
 	seq_printf(s, "ta_en=%d ta_nchg=%d ta_int=%d\n",
 		   gpio_get_value(GPIO_TA_EN), gpio_get_value(gpio_TA_nCHG),
 		   gpio_get_value(GPIO_TA_INT));
-	seq_printf(s, "usb=%d pogo=%d cable=%d\n",
-		   manta_bat_usb_online, manta_bat_pogo_online, cable_type);
+	seq_printf(s, "usb=%s type=%s; pogo=%s type=%s; selected=%s\n",
+		   manta_bat_usb_online ? "online" : "offline",
+		   charger_type_str(manta_bat_charge_type[CHARGE_SOURCE_USB]),
+		   manta_bat_pogo_online ? "online" : "offline",
+		   charger_type_str(manta_bat_charge_type[CHARGE_SOURCE_POGO]),
+		   charger_type_str(cable_type));
 	return 0;
 }
 
