@@ -42,12 +42,14 @@
 #include <plat/iic.h>
 #include <plat/sdhci.h>
 #include <plat/udc-hs.h>
+#include <plat/ehci.h>
 
 #include <mach/map.h>
 #include <mach/sysmmu.h>
 #include <mach/exynos_fiq_debugger.h>
 #include <mach/exynos-ion.h>
 #include <mach/dwmci.h>
+#include <mach/ohci.h>
 #include <mach/tmu.h>
 
 #include "../../../drivers/staging/android/ram_console.h"
@@ -400,6 +402,8 @@ static struct platform_device *manta_devices[] __initdata = {
 	&exynos_device_ion,
 	&exynos_device_tmu,
 	&s3c_device_usb_hsotg,
+	&s5p_device_ehci,
+	&exynos4_device_ohci,
 };
 
 static struct s3c_hsotg_plat manta_hsotg_pdata;
@@ -513,6 +517,26 @@ static void __init exynos5_manta_sysfs_soc_init(void)
 	return;  /* Or return parent should you need to use one later */
 }
 
+/* USB EHCI */
+static struct s5p_ehci_platdata exynos5_manta_ehci_pdata;
+
+static void __init exynos5_manta_ehci_init(void)
+{
+	struct s5p_ehci_platdata *pdata = &exynos5_manta_ehci_pdata;
+
+	s5p_ehci_set_platdata(pdata);
+}
+
+/* USB OHCI */
+static struct exynos4_ohci_platdata exynos5_manta_ohci_pdata;
+
+static void __init exynos5_manta_ohci_init(void)
+{
+	struct exynos4_ohci_platdata *pdata = &exynos5_manta_ohci_pdata;
+
+	exynos4_ohci_set_platdata(pdata);
+}
+
 static void __init manta_machine_init(void)
 {
 	manta_init_hw_rev();
@@ -539,6 +563,8 @@ static void __init manta_machine_init(void)
 	manta_gpio_power_init();
 
 	manta_udc_init();
+	exynos5_manta_ehci_init();
+	exynos5_manta_ohci_init();
 	ramconsole_pdata.bootinfo = exynos_get_resetreason();
 	platform_add_devices(manta_devices, ARRAY_SIZE(manta_devices));
 
