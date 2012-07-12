@@ -57,7 +57,6 @@ struct manta_bat_data {
 	struct delayed_work	monitor_work;
 	struct work_struct	cable_work;
 
-	void (*get_init_cable_state)(struct power_supply *psy);
 	bool		slow_poll;
 	ktime_t		last_poll;
 };
@@ -204,6 +203,9 @@ static void manta_bat_update_data(struct manta_bat_data *battery)
 {
 	int ret;
 	int v;
+
+	if (battery->pdata->poll_charger_type)
+		battery->cable_type = battery->pdata->poll_charger_type();
 
 	if (battery->pdata->get_voltage_now) {
 		ret = battery->pdata->get_voltage_now();
@@ -470,7 +472,9 @@ static __devinit int manta_bat_probe(struct platform_device *pdev)
 		battery->pdata->register_callbacks(&battery->callbacks);
 
 	/* get initial cable status */
-	battery->cable_type = battery->pdata->get_init_cable_state();
+	if (battery->pdata->poll_charger_type)
+		battery->cable_type = battery->pdata->poll_charger_type();
+
 	wake_lock(&battery->cable_wake_lock);
 	queue_work(battery->monitor_wqueue, &battery->cable_work);
 

@@ -181,20 +181,23 @@ static int detect_charge_type(enum charge_source_type source, bool online)
 	return charge_type;
 }
 
-static void update_charging_status(bool usb_connected, bool pogo_connected)
+static int update_charging_status(bool usb_connected, bool pogo_connected)
 {
 	int i;
+	int ret = 0;
 
 	if (manta_bat_usb_online != usb_connected) {
 		manta_bat_usb_online = usb_connected;
 		manta_bat_charge_type[CHARGE_SOURCE_USB] =
 			detect_charge_type(CHARGE_SOURCE_USB, usb_connected);
+		ret = 1;
 	}
 
 	if (manta_bat_pogo_online != pogo_connected) {
 		manta_bat_pogo_online = pogo_connected;
 		manta_bat_charge_type[CHARGE_SOURCE_POGO] =
 			detect_charge_type(CHARGE_SOURCE_POGO, pogo_connected);
+		ret = 1;
 	}
 
 	/* Find the highest-priority charging source */
@@ -206,6 +209,8 @@ static void update_charging_status(bool usb_connected, bool pogo_connected)
 		cable_type = manta_bat_charge_type[i];
 	else
 		cable_type = CABLE_TYPE_NONE;
+
+	return ret;
 }
 
 static void change_cable_status(void)
@@ -213,6 +218,7 @@ static void change_cable_status(void)
 	int ta_int;
 	union power_supply_propval pogo_connected = {0,};
 	union power_supply_propval usb_connected = {0,};
+	int status_change = 0;
 
 	mutex_lock(&manta_bat_charger_detect_lock);
 	ta_int = gpio_get_value(GPIO_TA_INT);
@@ -240,18 +246,20 @@ static void change_cable_status(void)
 				POWER_SUPPLY_PROP_ONLINE, &usb_connected);
 
 		if (exynos5_manta_get_revision() >= MANTA_REV_PRE_ALPHA)
-			update_charging_status(usb_connected.intval,
-					       pogo_connected.intval);
+			status_change =
+				update_charging_status(usb_connected.intval,
+						       pogo_connected.intval);
 		else
-			update_charging_status(true, false);
+			status_change = update_charging_status(true, false);
 	} else {
-		update_charging_status(false, false);
+		status_change = update_charging_status(false, false);
 	}
 
 	pr_debug("%s: ta_int(%d), cable_type(%d)", __func__,
 		 ta_int, cable_type);
 
-	if (bat_callbacks && bat_callbacks->change_cable_status)
+	if (status_change && bat_callbacks &&
+	    bat_callbacks->change_cable_status)
 		bat_callbacks->change_cable_status(bat_callbacks, cable_type);
 
 	mutex_unlock(&manta_bat_charger_detect_lock);
@@ -296,8 +304,9 @@ static void manta_bat_unregister_callbacks(void)
 	bat_callbacks = NULL;
 }
 
-static int manta_bat_get_init_cable_state(void)
+static int manta_bat_poll_charger_type(void)
 {
+	change_cable_status();
 	return cable_type;
 }
 
@@ -414,7 +423,7 @@ static struct manta_bat_platform_data manta_battery_pdata = {
 	.register_callbacks = manta_bat_register_callbacks,
 	.unregister_callbacks = manta_bat_unregister_callbacks,
 
-	.get_init_cable_state = manta_bat_get_init_cable_state,
+	.poll_charger_type = manta_bat_poll_charger_type,
 
 	.set_charging_current = manta_bat_set_charging_current,
 	.set_charging_enable = manta_bat_set_charging_enable,

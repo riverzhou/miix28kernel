@@ -42,7 +42,7 @@ struct manta_bat_platform_data {
 	int temp_low_recovery;
 	int temp_low_threshold;
 
-	int (*get_init_cable_state) (void);
+	int (*poll_charger_type) (void);
 };
 
 #endif
