@@ -149,6 +149,30 @@ static int read_ta_adc(enum charge_source_type source)
 	return result;
 }
 
+int manta_bat_otg_enable(bool enable)
+{
+	int ret;
+	union power_supply_propval value;
+
+	if (!manta_bat_smb347_usb)
+		manta_bat_smb347_usb = power_supply_get_by_name("smb347-usb");
+
+	if (!manta_bat_smb347_usb) {
+		pr_err("%s: failed to get smb347-usb power supply\n",
+		       __func__);
+		return -ENODEV;
+	}
+
+	value.intval = enable ? 1 : 0;
+	ret = manta_bat_smb347_usb->set_property(manta_bat_smb347_usb,
+						 POWER_SUPPLY_PROP_USB_OTG,
+						 &value);
+	if (ret)
+		pr_err("%s: failed to set smb347-usb OTG mode\n",
+		       __func__);
+	return ret;
+}
+
 static bool check_samsung_charger(enum charge_source_type source)
 {
 	bool result;
