@@ -21,6 +21,8 @@
 
 #include <plat/gpio-cfg.h>
 
+#include "board-manta.h"
+
 #define GPIO_DET_35		EXYNOS5_GPX0(1)
 
 static void sec_jack_set_micbias_state(bool on)
@@ -110,7 +112,6 @@ struct sec_jack_platform_data sec_jack_pdata = {
 	.buttons_zones = sec_jack_buttons_zones,
 	.num_buttons_zones = ARRAY_SIZE(sec_jack_buttons_zones),
 	.det_gpio = GPIO_DET_35,
-	.det_active_high = true,
 };
 
 static struct platform_device sec_device_jack = {
@@ -123,6 +124,10 @@ void __init exynos5_manta_jack_init(void)
 {
 	s3c_gpio_cfgpin(GPIO_DET_35, S3C_GPIO_INPUT);
 	s3c_gpio_setpull(GPIO_DET_35, S3C_GPIO_PULL_NONE);
+
+	/* GPIO_DET_35 is inverted on <= PRE_ALPHA boards */
+	if (exynos5_manta_get_revision() <= MANTA_REV_PRE_ALPHA)
+		sec_jack_pdata.det_active_high = true;
 
 	platform_device_register(&sec_device_jack);
 }
