@@ -13,9 +13,7 @@
 #ifndef _S5P_DP_CORE_H
 #define _S5P_DP_CORE_H
 
-#ifdef CONFIG_HAS_EARLYSUSPEND
-#include <linux/earlysuspend.h>
-#endif
+#include <linux/lcd.h>
 
 struct link_train {
 	int eq_loop;
@@ -34,13 +32,14 @@ struct s5p_dp_device {
 	struct clk		*clock;
 	unsigned int		irq;
 	void __iomem		*reg_base;
+	int 			enabled;
+	bool			user_disabled;
+	struct mutex		lock;
 
 	struct video_info	*video_info;
 	struct link_train	link_train;
 
-#ifdef CONFIG_HAS_EARLYSUSPEND
-	struct early_suspend	early_suspend;
-#endif
+	struct lcd_device	*lcd;
 };
 
 /* s5p_dp_reg.c */
