@@ -597,10 +597,18 @@ static void exynos5_manta_power_changed(struct power_supply *psy)
 	change_cable_status();
 }
 
+static int exynos5_manta_power_get_property(struct power_supply *psy,
+	    enum power_supply_property psp,
+	    union power_supply_propval *val)
+{
+	return -EINVAL;
+}
+
 static struct power_supply exynos5_manta_power_supply = {
 	.name = "manta-board",
 	.type = POWER_SUPPLY_TYPE_BATTERY,
 	.external_power_changed = exynos5_manta_power_changed,
+	.get_property = exynos5_manta_power_get_property,
 };
 
 static int __init exynos5_manta_battery_late_init(void)
