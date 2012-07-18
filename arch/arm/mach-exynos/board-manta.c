@@ -667,6 +667,7 @@ static void __init manta_machine_init(void)
 	exynos5_manta_display_init();
 	exynos5_manta_input_init();
 	exynos5_manta_battery_init();
+	exynos5_manta_pogo_init();
 	exynos5_manta_wlan_init();
 	exynos5_manta_audio_init();
 	exynos5_manta_media_init();

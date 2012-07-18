@@ -65,6 +65,7 @@ obj-$(CONFIG_MACH_SMDK5250)		+= mach-smdk5250.o
 obj-$(CONFIG_MACH_MANTA)		+= board-manta.o
 obj-$(CONFIG_MACH_MANTA)		+= board-manta-audio.o
 obj-$(CONFIG_MACH_MANTA)		+= board-manta-battery.o
+obj-$(CONFIG_MACH_MANTA)		+= board-manta-pogo.o
 obj-$(CONFIG_MACH_MANTA)		+= board-manta-display.o
 obj-$(CONFIG_MACH_MANTA)		+= board-manta-input.o
 obj-$(CONFIG_MACH_MANTA)		+= board-manta-power.o

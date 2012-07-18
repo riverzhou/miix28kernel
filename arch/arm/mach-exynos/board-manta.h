@@ -35,6 +35,7 @@ void exynos5_manta_display_init(void);
 void exynos5_manta_input_init(void);
 void exynos5_manta_power_init(void);
 void exynos5_manta_battery_init(void);
+void exynos5_manta_pogo_init(void);
 void exynos5_manta_wlan_init(void);
 void exynos5_manta_media_init(void);
 void exynos5_manta_camera_init(void);
@@ -50,5 +51,6 @@ int exynos5_manta_get_revision(void);
 int manta_stmpe811_read_adc_data(u8 channel);
 extern int manta_bat_otg_enable(bool enable);
 void manta_otg_set_usb_state(bool connected);
+int manta_pogo_set_vbus(bool status);
 
 #endif
