@@ -224,6 +224,15 @@ static int smb347_read(struct smb347_charger *smb, u8 reg)
 	int ret;
 
 	ret = i2c_smbus_read_byte_data(smb->client, reg);
+
+	/*
+	 * HACK: manta i2c sometimes returns NXIO for a missing ACK.
+	 * Usually works the second time.
+	 */
+
+	if (ret < 0)
+		ret = i2c_smbus_read_byte_data(smb->client, reg);
+
 	if (ret < 0)
 		dev_warn(&smb->client->dev, "failed to read reg 0x%x: %d\n",
 			 reg, ret);
