@@ -77,6 +77,7 @@ void __init exynos5_manta_input_init(void)
 	gpio_request(GPIO_TOUCH_RESET, "TSP_RST");
 	s3c_gpio_cfgpin(GPIO_TOUCH_RESET, S3C_GPIO_OUTPUT);
 	s3c_gpio_setpull(GPIO_TOUCH_RESET, S3C_GPIO_PULL_NONE);
+	s5p_gpio_set_pd_cfg(GPIO_TOUCH_RESET, S5P_GPIO_PD_PREV_STATE);
 
 	gpio_request(GPIO_TOUCH_EN_XVDD, "TSP_XVDD");
 	s3c_gpio_cfgpin(GPIO_TOUCH_EN_XVDD, S3C_GPIO_OUTPUT);
