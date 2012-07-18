@@ -39,9 +39,17 @@
 
 #define MAX77686_DVS_VOL_COMP 50000
 
-enum MAX77686_DEVICE_ID {
-	MAX77686_DEVICE_PASS1 = 0x1,
-	MAX77686_DEVICE_PASS2 = 0x2,
+#define MAX77686_CHIPREV_MASK		0x7
+#define MAX77686_VERSION_MASK		0x78
+
+enum MAX77686_CHIPREV {
+	CHIPREV_MAX77686_PASS1 = 0x1,
+	CHIPREV_MAX77686_PASS2 = 0x2,
+};
+
+enum MAX77686_VERSION {
+	VERSION_MAX77686,
+	VERSION_MAX77686A,
 };
 
 struct max77686_data {
@@ -50,7 +58,8 @@ struct max77686_data {
 	int num_regulators;
 	struct regulator_dev **rdev;
 	int ramp_delay; /* in mV/us */
-	int device_id;
+	u8 version;
+	u8 chip_rev;
 
 	struct max77686_opmode_data *opmode_data;
 
@@ -92,26 +101,31 @@ struct voltage_map_desc {
 };
 
 /* LDO3 ~ 5, 9 ~ 14, 16 ~ 26 (uV) */
-static const struct voltage_map_desc ldo_voltage_map_desc = {
+static struct voltage_map_desc ldo_voltage_map_desc = {
 	.min = 800000,	.max = 3950000,	.step = 50000,	.n_bits = 6,
 };
 
 /* LDO1 ~ 2, 6 ~ 8, 15 (uV) */
-static const struct voltage_map_desc ldo_low_voltage_map_desc = {
+static struct voltage_map_desc ldo_low_voltage_map_desc = {
 	.min = 800000,	.max = 2375000,	.step = 25000,	.n_bits = 6,
 };
 
 /* Buck2, 3, 4 (uV) */
-static const struct voltage_map_desc buck_dvs_voltage_map_desc = {
+static struct voltage_map_desc buck_dvs_voltage_map_desc = {
 	.min = 600000,	.max = 3787500,	.step = 12500,	.n_bits = 8,
 };
 
 /* Buck1, 5 ~ 9 (uV) */
-static const struct voltage_map_desc buck_voltage_map_desc = {
+static struct voltage_map_desc buck_voltage_map_desc = {
 	.min = 750000,	.max = 3900000,	.step = 50000,	.n_bits = 6,
 };
 
-static const struct voltage_map_desc *reg_voltage_map[] = {
+/* Buck1 (uV) for MAX77686A */
+static struct voltage_map_desc buck1_voltage_map_desc = {
+	.min = 750000,	.max = 1537500,	.step = 12500,	.n_bits = 6,
+};
+
+static struct voltage_map_desc *reg_voltage_map[] = {
 	[MAX77686_LDO1] = &ldo_low_voltage_map_desc,
 	[MAX77686_LDO2] = &ldo_low_voltage_map_desc,
 	[MAX77686_LDO3] = &ldo_voltage_map_desc,
@@ -448,7 +462,8 @@ static int max77686_set_voltage(struct regulator_dev *rdev,
 	desc = reg_voltage_map[rid];
 
 	/* W/A code about voltage drop of PASS1 */
-	if (max77686->device_id <= MAX77686_DEVICE_PASS1) {
+	if (max77686->version < VERSION_MAX77686A &&
+			max77686->chip_rev <= CHIPREV_MAX77686_PASS1) {
 		if (rid >= MAX77686_BUCK1 && rid <= MAX77686_BUCK4) {
 			min_uV = min_uV + MAX77686_DVS_VOL_COMP;
 			max_uV = max_uV + MAX77686_DVS_VOL_COMP;
@@ -701,8 +716,11 @@ static __devinit int max77686_pmic_probe(struct platform_device *pdev)
 	max77686->ramp_delay = max77686_set_ramp_rate(i2c, pdata->ramp_rate);
 
 	max77686_read_reg(i2c, MAX77686_REG_DEVICE_ID, &data);
-	max77686->device_id = (data & 0x7);
-	pr_debug("%s: DEVICE ID=0x%x\n", __func__, data);
+	max77686->version =
+		(data & MAX77686_VERSION_MASK) >> __ffs(MAX77686_VERSION_MASK);
+	max77686->chip_rev = data & MAX77686_CHIPREV_MASK;
+	pr_info("%s: Device ID=0x%02x, (version:%d, chip_rev:%d)\n", __func__,
+			data, max77686->version, max77686->chip_rev);
 
 	max77686_show_pwron_src(max77686);
 
@@ -786,6 +804,9 @@ static __devinit int max77686_pmic_probe(struct platform_device *pdev)
 
 	if (pdata->has_full_constraints)
 		regulator_has_full_constraints();
+
+	if (max77686->version > VERSION_MAX77686)
+		reg_voltage_map[MAX77686_BUCK1] = &buck1_voltage_map_desc;
 
 	for (i = 0; i < pdata->num_regulators; i++) {
 		const struct voltage_map_desc *desc;
