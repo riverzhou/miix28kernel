@@ -504,6 +504,7 @@ config MACH_SMDK5250
 
 config MACH_MANTA
 	bool "Manta"
+	select SOC_BUS
 	select SOC_EXYNOS5250
 	select S3C_DEV_HSMMC3
 	select S3C_DEV_I2C1
