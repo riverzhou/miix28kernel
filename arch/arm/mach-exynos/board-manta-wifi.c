@@ -129,7 +129,7 @@ static int __init manta_mac_addr_setup(char *str)
 	return 1;
 }
 
-__setup("androidboot.macaddr=", manta_mac_addr_setup);
+__setup("androidboot.wifimacaddr=", manta_mac_addr_setup);
 
 static int manta_wifi_get_mac_addr(unsigned char *buf)
 {
