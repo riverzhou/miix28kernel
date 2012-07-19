@@ -247,8 +247,6 @@ static void manta_bat_set_charging_enable(int en)
 	manta_bat_chg_enabled = en;
 
 	if (exynos5_manta_get_revision() >= MANTA_REV_PRE_ALPHA) {
-		gpio_set_value(GPIO_TA_EN, !en);
-
 		if (!manta_bat_smb347_battery)
 			manta_bat_smb347_battery =
 				power_supply_get_by_name("smb347-battery");
@@ -364,6 +362,7 @@ static struct smb347_charger_platform_data smb347_chg_pdata = {
 	.mains_current_limit = 1800000,
 	.usb_hc_current_limit = 1500000,
 	.irq_gpio = GPIO_TA_nCHG_ALPHA,
+	.en_gpio = GPIO_TA_EN,
 	.supplied_to = exynos5_manta_supplicant,
 	.num_supplicants = ARRAY_SIZE(exynos5_manta_supplicant),
 };
