@@ -50,8 +50,11 @@ static int cable_type;
 static int manta_bat_charge_type[CHARGE_SOURCE_MAX];
 static bool manta_bat_usb_online;
 static bool manta_bat_pogo_online;
+static bool manta_bat_chg_enabled;
+static bool manta_bat_chg_enable_synced;
 static struct power_supply *manta_bat_smb347_mains;
 static struct power_supply *manta_bat_smb347_usb;
+static struct power_supply *manta_bat_smb347_battery;
 
 static struct max17047_fg_callbacks *fg_callbacks;
 static struct bq24191_chg_callbacks *chg_callbacks;
@@ -237,6 +240,57 @@ static int update_charging_status(bool usb_connected, bool pogo_connected)
 	return ret;
 }
 
+static void manta_bat_set_charging_enable(int en)
+{
+	union power_supply_propval value;
+
+	manta_bat_chg_enabled = en;
+
+	if (exynos5_manta_get_revision() >= MANTA_REV_PRE_ALPHA) {
+		gpio_set_value(GPIO_TA_EN, !en);
+
+		if (!manta_bat_smb347_battery)
+			manta_bat_smb347_battery =
+				power_supply_get_by_name("smb347-battery");
+
+		if (!manta_bat_smb347_battery)
+			return;
+
+		value.intval = en ? 1 : 0;
+		manta_bat_smb347_battery->set_property(
+			manta_bat_smb347_battery,
+			POWER_SUPPLY_PROP_CHARGE_ENABLED,
+			&value);
+		manta_bat_chg_enable_synced = true;
+
+	} else if (chg_callbacks && chg_callbacks->set_charging_enable) {
+		chg_callbacks->set_charging_enable(chg_callbacks, en);
+	}
+}
+
+static void manta_bat_sync_charge_enable(void)
+{
+	union power_supply_propval chg_enabled = {0,};
+
+	if (!manta_bat_smb347_battery)
+		return;
+
+	manta_bat_smb347_battery->get_property(
+		manta_bat_smb347_battery,
+		POWER_SUPPLY_PROP_CHARGE_ENABLED,
+		&chg_enabled);
+
+	if (chg_enabled.intval != manta_bat_chg_enabled) {
+		if (manta_bat_chg_enable_synced) {
+			pr_info("%s: charger changed enable state to %d\n",
+				__func__, chg_enabled.intval);
+			manta_bat_chg_enabled = chg_enabled.intval;
+		}
+
+		manta_bat_set_charging_enable(manta_bat_chg_enabled);
+	}
+}
+
 static void change_cable_status(void)
 {
 	int ta_int;
@@ -248,13 +302,17 @@ static void change_cable_status(void)
 	ta_int = gpio_get_value(GPIO_TA_INT);
 
 	if (exynos5_manta_get_revision() >= MANTA_REV_PRE_ALPHA &&
-	    (!manta_bat_smb347_mains || !manta_bat_smb347_usb)) {
+	    (!manta_bat_smb347_mains || !manta_bat_smb347_usb ||
+	     !manta_bat_smb347_battery)) {
 		manta_bat_smb347_mains =
 			power_supply_get_by_name("smb347-mains");
 		manta_bat_smb347_usb =
 			power_supply_get_by_name("smb347-usb");
+		manta_bat_smb347_battery =
+			power_supply_get_by_name("smb347-battery");
 
-		if (!manta_bat_smb347_mains || !manta_bat_smb347_usb)
+		if (!manta_bat_smb347_mains || !manta_bat_smb347_usb ||
+		    !manta_bat_smb347_battery)
 			pr_err("%s: failed to get power supplies\n", __func__);
 	}
 
@@ -269,12 +327,14 @@ static void change_cable_status(void)
 				manta_bat_smb347_usb,
 				POWER_SUPPLY_PROP_ONLINE, &usb_connected);
 
-		if (exynos5_manta_get_revision() >= MANTA_REV_PRE_ALPHA)
+		if (exynos5_manta_get_revision() >= MANTA_REV_PRE_ALPHA) {
 			status_change =
 				update_charging_status(usb_connected.intval,
 						       pogo_connected.intval);
-		else
+			manta_bat_sync_charge_enable();
+		} else {
 			status_change = update_charging_status(true, false);
+		}
 	} else {
 		status_change = update_charging_status(false, false);
 	}
@@ -397,14 +457,6 @@ static void manta_bat_set_charging_current(int cable_type)
 			chg_callbacks->set_charging_current(chg_callbacks,
 							    cable_type);
 	}
-}
-
-static void manta_bat_set_charging_enable(int en)
-{
-	if (exynos5_manta_get_revision() >= MANTA_REV_PRE_ALPHA)
-		gpio_set_value(GPIO_TA_EN, !en);
-	else if (chg_callbacks && chg_callbacks->set_charging_enable)
-		chg_callbacks->set_charging_enable(chg_callbacks, en);
 }
 
 static int manta_bat_get_capacity(void)
