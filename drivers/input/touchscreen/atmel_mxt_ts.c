@@ -1526,6 +1526,8 @@ static ssize_t mxt_update_fw_store(struct device *dev,
 	const struct firmware *fw = NULL;
 	const char *firmware_name = data->pdata->firmware_name ?: MXT_FW_NAME;
 	int error;
+	struct input_dev *input_dev = data->input_dev;
+	bool enabled_status;
 
 	error = wait_for_completion_interruptible_timeout(&data->init_done,
 			msecs_to_jiffies(90 * MSEC_PER_SEC));
@@ -1535,7 +1537,16 @@ static ssize_t mxt_update_fw_store(struct device *dev,
 			error);
 		return -EBUSY;
 	}
+	mutex_lock(&input_dev->mutex);
 
+	enabled_status = data->enabled;
+	if (!enabled_status) {
+		error = mxt_power_on(data);
+		if (error) {
+			dev_err(dev, "Failed to turn on touch\n");
+			goto err_power_on;
+		}
+	}
 	disable_irq(data->irq);
 
 	dev_info(dev, "Updating firmware from sysfs\n");
@@ -1543,7 +1554,7 @@ static ssize_t mxt_update_fw_store(struct device *dev,
 	error = request_firmware(&fw, firmware_name, dev);
 	if (error) {
 		dev_err(dev, "Unable to open firmware %s\n", firmware_name);
-		goto out;
+		goto err_request_firmware;
 	}
 
 	memset(&fw_info, 0, sizeof(struct mxt_fw_info));
@@ -1551,13 +1562,13 @@ static ssize_t mxt_update_fw_store(struct device *dev,
 
 	error = mxt_verify_fw(&fw_info, fw);
 	if (error)
-		goto out;
+		goto err_verify_fw;
 
 	/* Change to the bootloader mode */
 	error = mxt_write_object(data, MXT_GEN_COMMAND_T6,
 			MXT_COMMAND_RESET, MXT_BOOT_VALUE);
 	if (error)
-		goto out;
+		goto err_write_object;
 
 	msleep(MXT_RESET_TIME);
 
@@ -1574,13 +1585,21 @@ static ssize_t mxt_update_fw_store(struct device *dev,
 		error = mxt_initialize(&fw_info);
 		if (error) {
 			dev_err(dev, "Failed to initialize\n");
-			goto out;
+			goto err_initialize;
 		}
 	}
 	error = mxt_make_highchg(data);
-out:
-	enable_irq(data->irq);
+
+err_initialize:
+err_write_object:
+err_verify_fw:
 	release_firmware(fw);
+err_request_firmware:
+	enable_irq(data->irq);
+	if (!enabled_status)
+		mxt_power_off(data);
+err_power_on:
+	mutex_unlock(&input_dev->mutex);
 
 	if (error)
 		return error;
@@ -1603,10 +1622,14 @@ static const struct attribute_group mxt_attr_group = {
 
 static int mxt_start(struct mxt_data *data)
 {
-	int error;
-	/* Touch enable */
-	error = mxt_write_object(data,
-			MXT_TOUCH_MULTI_T9, MXT_TOUCH_CTRL, 0x83);
+	int error = 0;
+
+	if (data->enabled) {
+		dev_err(&data->client->dev, "Touch is already started\n");
+		return error;
+	}
+
+	error = mxt_power_on(data);
 	if (error)
 		dev_err(&data->client->dev, "Fail to start touch\n");
 	else
@@ -1619,10 +1642,12 @@ static void mxt_stop(struct mxt_data *data)
 {
 	int id, count = 0;
 
+	if (!data->enabled) {
+		dev_err(&data->client->dev, "Touch is already stopped\n");
+		return;
+	}
 	disable_irq(data->irq);
-	/* Touch disable */
-	mxt_write_object(data,
-			MXT_TOUCH_MULTI_T9, MXT_TOUCH_CTRL, 0);
+	mxt_power_off(data);
 
 	/* release the finger which is remained */
 	for (id = 0; id < MXT_MAX_FINGER; id++) {
@@ -1686,12 +1711,6 @@ static int mxt_ts_finish_init(struct mxt_data *data)
 		goto err_req_irq;
 	}
 
-	/*
-	* to prevent unnecessary report of touch event
-	* it will be enabled in open function
-	*/
-	mxt_stop(data);
-
 	error = mxt_make_highchg(data);
 	if (error) {
 		dev_err(&client->dev, "Failed to clear CHG pin\n");
@@ -1699,6 +1718,12 @@ static int mxt_ts_finish_init(struct mxt_data *data)
 	}
 
 	dev_info(&client->dev,  "Mxt touch controller initialized\n");
+
+	/*
+	 * to prevent unnecessary report of touch event
+	 * it will be enabled in open function
+	 */
+	mxt_stop(data);
 
 	/* for blocking to be excuted open function untile finishing ts init */
 	complete_all(&data->init_done);
@@ -2033,12 +2058,6 @@ static int mxt_resume(struct device *dev)
 	struct i2c_client *client = to_i2c_client(dev);
 	struct mxt_data *data = i2c_get_clientdata(client);
 	struct input_dev *input_dev = data->input_dev;
-
-	/* Soft reset */
-	mxt_write_object(data, MXT_GEN_COMMAND_T6,
-			MXT_COMMAND_RESET, 1);
-
-	msleep(MXT_RESET_TIME);
 
 	mutex_lock(&input_dev->mutex);
 
