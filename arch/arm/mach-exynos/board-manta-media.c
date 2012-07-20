@@ -30,6 +30,7 @@ static struct platform_device *media_devices[] __initdata = {
 	&exynos5_device_gsc1,
 	&exynos5_device_gsc2,
 	&exynos5_device_gsc3,
+	&s5p_device_jpeg,
 };
 
 static struct s5p_mfc_platdata manta_mfc_pd = {
@@ -47,6 +48,8 @@ static void __init manta_media_sysmmu_init(void)
 			    &exynos5_device_gsc2.dev);
 	platform_set_sysmmu(&SYSMMU_PLATDEV(gsc3).dev,
 			    &exynos5_device_gsc3.dev);
+	platform_set_sysmmu(&SYSMMU_PLATDEV(jpeg).dev,
+			    &s5p_device_jpeg.dev);
 }
 
 void __init exynos5_manta_media_init(void)
