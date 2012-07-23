@@ -713,7 +713,7 @@ static int exynos5_manta_power_get_property(struct power_supply *psy,
 
 static struct power_supply exynos5_manta_power_supply = {
 	.name = "manta-board",
-	.type = POWER_SUPPLY_TYPE_BATTERY,
+	.type = POWER_SUPPLY_TYPE_UNKNOWN,
 	.external_power_changed = exynos5_manta_power_changed,
 	.get_property = exynos5_manta_power_get_property,
 };
