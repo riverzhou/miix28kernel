@@ -26,6 +26,7 @@
 #include <mach/gpio.h>
 
 #include <plat/devs.h>
+#include <plat/gpio-cfg.h>
 
 #include "board-manta.h"
 
@@ -210,6 +211,11 @@ static void manta_audio_setup_clocks(void)
 void __init exynos5_manta_audio_init(void)
 {
 	manta_audio_setup_clocks();
+
+	s5p_gpio_set_pd_cfg(GPIO_ES305_WAKEUP, S5P_GPIO_PD_PREV_STATE);
+	s5p_gpio_set_pd_cfg(GPIO_ES305_RESET, S5P_GPIO_PD_PREV_STATE);
+	s5p_gpio_set_pd_cfg(GPIO_ES305_CLK_EN, S5P_GPIO_PD_PREV_STATE);
+	s5p_gpio_set_pd_cfg(GPIO_CODEC_LDO_EN, S5P_GPIO_PD_PREV_STATE);
 
 	i2c_register_board_info(4, i2c_devs4, ARRAY_SIZE(i2c_devs4));
 	i2c_register_board_info(7, i2c_devs7, ARRAY_SIZE(i2c_devs7));
