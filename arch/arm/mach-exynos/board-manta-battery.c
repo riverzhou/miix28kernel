@@ -37,6 +37,9 @@
 #define	GPIO_TA_INT		EXYNOS5_GPX0(0)
 #define	GPIO_TA_nCHG_LUNCHBOX	EXYNOS5_GPG1(4)
 #define	GPIO_TA_nCHG_ALPHA	EXYNOS5_GPX0(4)
+#define GPIO_OTG_VBUS_SENSE	EXYNOS5_GPX1(0)
+#define GPIO_VBUS_POGO_5V	EXYNOS5_GPX1(2)
+#define GPIO_OTG_VBUS_SENSE_FAC	EXYNOS5_GPB0(1)
 
 static int gpio_TA_nCHG = GPIO_TA_nCHG_ALPHA;
 
@@ -99,6 +102,17 @@ static void charger_gpio_init(void)
 
 	s3c_gpio_cfgpin(GPIO_TA_INT, S3C_GPIO_INPUT);
 	s3c_gpio_setpull(GPIO_TA_INT, S3C_GPIO_PULL_NONE);
+
+	if (hw_rev > MANTA_REV_ALPHA) {
+		s3c_gpio_cfgpin(GPIO_OTG_VBUS_SENSE, S3C_GPIO_INPUT);
+		s3c_gpio_setpull(GPIO_OTG_VBUS_SENSE, S3C_GPIO_PULL_NONE);
+
+		s3c_gpio_cfgpin(GPIO_VBUS_POGO_5V, S3C_GPIO_INPUT);
+		s3c_gpio_setpull(GPIO_VBUS_POGO_5V, S3C_GPIO_PULL_NONE);
+
+		s3c_gpio_cfgpin(GPIO_OTG_VBUS_SENSE_FAC, S3C_GPIO_INPUT);
+		s3c_gpio_setpull(GPIO_OTG_VBUS_SENSE_FAC, S3C_GPIO_PULL_NONE);
+	}
 
 	s3c_gpio_cfgpin(gpio_TA_nCHG, S3C_GPIO_INPUT);
 	s3c_gpio_setpull(gpio_TA_nCHG, hw_rev >= MANTA_REV_PRE_ALPHA ?
@@ -295,9 +309,12 @@ static void change_cable_status(void)
 	union power_supply_propval pogo_connected = {0,};
 	union power_supply_propval usb_connected = {0,};
 	int status_change = 0;
+	int hw_rev = exynos5_manta_get_revision();
 
 	mutex_lock(&manta_bat_charger_detect_lock);
-	ta_int = gpio_get_value(GPIO_TA_INT);
+	ta_int = hw_rev <= MANTA_REV_ALPHA ? gpio_get_value(GPIO_TA_INT) :
+			gpio_get_value(GPIO_OTG_VBUS_SENSE) |
+			gpio_get_value(GPIO_VBUS_POGO_5V);
 
 	if (exynos5_manta_get_revision() >= MANTA_REV_PRE_ALPHA &&
 	    (!manta_bat_smb347_mains || !manta_bat_smb347_usb ||
@@ -491,6 +508,28 @@ static int manta_bat_get_current_now(int *i_current)
 
 static irqreturn_t ta_int_intr(int irq, void *arg)
 {
+	union power_supply_propval value = {0,};
+	int ret = 0;
+
+	if (exynos5_manta_get_revision() > MANTA_REV_ALPHA) {
+		value.intval = gpio_get_value(GPIO_OTG_VBUS_SENSE);
+		ret = manta_bat_smb347_usb->set_property(manta_bat_smb347_usb,
+				POWER_SUPPLY_PROP_ONLINE,
+				&value);
+		if (ret)
+			pr_err("%s: failed to change smb347-usb online\n",
+				__func__);
+
+		value.intval = gpio_get_value(GPIO_VBUS_POGO_5V);
+		ret = manta_bat_smb347_mains->set_property(
+				manta_bat_smb347_mains,
+				POWER_SUPPLY_PROP_ONLINE,
+				&value);
+		if (ret)
+			pr_err("%s: failed to change smb347-mains online\n",
+				__func__);
+	}
+
 	change_cable_status();
 	return IRQ_HANDLED;
 }
@@ -544,9 +583,20 @@ static char *charger_type_str(int cable_type)
 
 static int manta_power_debug_dump(struct seq_file *s, void *unused)
 {
-	seq_printf(s, "ta_en=%d ta_nchg=%d ta_int=%d\n",
-		   gpio_get_value(GPIO_TA_EN), gpio_get_value(gpio_TA_nCHG),
-		   gpio_get_value(GPIO_TA_INT));
+	if (exynos5_manta_get_revision() > MANTA_REV_ALPHA) {
+		seq_printf(s, "ta_en=%d ta_nchg=%d ta_int=%d usbin=%d, dcin=%d\n",
+			gpio_get_value(GPIO_TA_EN),
+			gpio_get_value(gpio_TA_nCHG),
+			gpio_get_value(GPIO_TA_INT),
+			gpio_get_value(GPIO_OTG_VBUS_SENSE),
+			gpio_get_value(GPIO_VBUS_POGO_5V));
+	} else {
+		seq_printf(s, "ta_en=%d ta_nchg=%d ta_int=%d\n",
+			gpio_get_value(GPIO_TA_EN),
+			gpio_get_value(gpio_TA_nCHG),
+			gpio_get_value(GPIO_TA_INT));
+	}
+
 	seq_printf(s, "usb=%s type=%s; pogo=%s type=%s; selected=%s\n",
 		   manta_bat_usb_online ? "online" : "offline",
 		   charger_type_str(manta_bat_charge_type[CHARGE_SOURCE_USB]),
@@ -665,23 +715,54 @@ static struct power_supply exynos5_manta_power_supply = {
 static int __init exynos5_manta_battery_late_init(void)
 {
 	int ret;
+	int hw_rev = exynos5_manta_get_revision();
 
 	ret = power_supply_register(NULL, &exynos5_manta_power_supply);
 	if (ret)
 		pr_err("%s: failed to register power supply\n", __func__);
 
-	ret = request_threaded_irq(gpio_to_irq(GPIO_TA_INT), NULL,
-				   ta_int_intr,
-				   IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING |
-				   IRQF_ONESHOT, "ta_int", NULL);
-	if (ret) {
-		pr_err("%s: ta_int register failed, ret=%d\n",
-		       __func__, ret);
+	if (hw_rev <= MANTA_REV_ALPHA) {
+		ret = request_threaded_irq(gpio_to_irq(GPIO_TA_INT), NULL,
+				ta_int_intr,
+				IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING |
+				IRQF_ONESHOT, "ta_int", NULL);
+		if (ret) {
+			pr_err("%s: ta_int register failed, ret=%d\n",
+					__func__, ret);
+		} else {
+			ret = enable_irq_wake(gpio_to_irq(GPIO_TA_INT));
+			if (ret)
+				pr_warn("%s: failed to enable irq_wake for ta_int\n",
+					__func__);
+		}
 	} else {
-		ret = enable_irq_wake(gpio_to_irq(GPIO_TA_INT));
-		if (ret)
-			pr_warn("%s: failed to enable irq_wake for ta_int\n",
-				__func__);
+		ret = request_threaded_irq(gpio_to_irq(GPIO_OTG_VBUS_SENSE),
+				NULL, ta_int_intr,
+				IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING |
+				IRQF_ONESHOT, "usbin_irq", NULL);
+		if (ret) {
+			pr_err("%s: usbin register failed, ret=%d\n",
+				__func__, ret);
+		} else {
+			ret = enable_irq_wake(gpio_to_irq(GPIO_OTG_VBUS_SENSE));
+			if (ret)
+				pr_warn("%s: failed to enable irq_wake for usbin\n",
+					__func__);
+		}
+
+		ret = request_threaded_irq(gpio_to_irq(GPIO_VBUS_POGO_5V), NULL,
+				ta_int_intr,
+				IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING |
+				IRQF_ONESHOT, "usbin_irq", NULL);
+		if (ret) {
+			pr_err("%s: usbin register failed, ret=%d\n",
+					__func__, ret);
+		} else {
+			ret = enable_irq_wake(gpio_to_irq(GPIO_VBUS_POGO_5V));
+			if (ret)
+				pr_warn("%s: failed to enable irq_wake for usbin\n",
+						__func__);
+		}
 	}
 
 	/* Poll initial cable state */
