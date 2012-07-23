@@ -469,7 +469,7 @@ static int __devinit bh1721fvc_i2c_probe(struct i2c_client *client,
 	bh1721fvc->light_poll_delay = ns_to_ktime(POLL_DELAY_DEFAULT);
 	bh1721fvc->light_sampling_frequency = SAMPLING_FREQUENCY_DEFAULT;
 	bh1721fvc->state = STATE_POWER_DOWN;
-	bh1721fvc->measure_mode = STATE_L_MEASURE;
+	bh1721fvc->measure_mode = STATE_AUTO_MEASURE;
 	bh1721fvc->is_measuring = false;
 	bh1721fvc->timer.function = bh1721fvc_timer_func;
 
