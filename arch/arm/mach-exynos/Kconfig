@@ -549,6 +549,7 @@ config MACH_MANTA
 	select SAMSUNG_DEV_PWM
 	select S3C64XX_DEV_SPI2
 	select EXYNOS_SETUP_SPI
+	select USB_OTG_UTILS
 	help
 	  Machine support for Manta
 

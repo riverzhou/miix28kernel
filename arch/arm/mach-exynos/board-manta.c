@@ -541,6 +541,7 @@ static void __init manta_machine_init(void)
 	exynos5_manta_sysfs_soc_init();
 	exynos5_manta_nfc_init();
 	exynos5_manta_bt_init();
+	exynos5_manta_connector_init();
 }
 
 MACHINE_START(MANTA, "Manta")

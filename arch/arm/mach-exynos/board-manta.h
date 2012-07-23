@@ -44,9 +44,11 @@ void exynos5_manta_jack_init(void);
 void exynos5_manta_vib_init(void);
 void exynos5_manta_nfc_init(void);
 void exynos5_manta_bt_init(void);
+void exynos5_manta_connector_init(void);
 
 int exynos5_manta_get_revision(void);
 int manta_stmpe811_read_adc_data(u8 channel);
 extern int manta_bat_otg_enable(bool enable);
+void manta_otg_set_usb_state(bool connected);
 
 #endif

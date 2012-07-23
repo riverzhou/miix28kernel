@@ -80,6 +80,7 @@ obj-$(CONFIG_MACH_MANTA)		+= board-manta-jack.o
 obj-$(CONFIG_MACH_MANTA)		+= board-manta-vibrator.o
 obj-$(CONFIG_MACH_MANTA)		+= board-manta-nfc.o
 obj-$(CONFIG_MACH_MANTA)		+= board-manta-bluetooth.o
+obj-$(CONFIG_MACH_MANTA)		+= board-manta-connector.o
 
 # device support
 

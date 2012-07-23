@@ -239,6 +239,7 @@ static int update_charging_status(bool usb_connected, bool pogo_connected)
 		manta_bat_usb_online = usb_connected;
 		manta_bat_charge_type[CHARGE_SOURCE_USB] =
 			detect_charge_type(CHARGE_SOURCE_USB, usb_connected);
+		manta_otg_set_usb_state(manta_bat_charge_type[CHARGE_SOURCE_USB] == CABLE_TYPE_USB);
 		ret = 1;
 	}
 
