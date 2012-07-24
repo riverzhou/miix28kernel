@@ -124,8 +124,10 @@ static void charger_gpio_init(void)
 
 	s3c_gpio_cfgpin(GPIO_USB_SEL1, S3C_GPIO_OUTPUT);
 	s3c_gpio_setpull(GPIO_USB_SEL1, S3C_GPIO_PULL_NONE);
+	gpio_set_value(GPIO_USB_SEL1, 1);
 	s3c_gpio_cfgpin(GPIO_POGO_SEL1, S3C_GPIO_OUTPUT);
 	s3c_gpio_setpull(GPIO_POGO_SEL1, S3C_GPIO_PULL_NONE);
+	gpio_set_value(GPIO_POGO_SEL1, 1);
 }
 
 static int read_ta_adc(enum charge_source_type source)
