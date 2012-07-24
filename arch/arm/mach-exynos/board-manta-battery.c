@@ -314,6 +314,7 @@ static void change_cable_status(void)
 	union power_supply_propval usb_connected = {0,};
 	int status_change = 0;
 	int hw_rev = exynos5_manta_get_revision();
+	int ret;
 
 	mutex_lock(&manta_bat_charger_detect_lock);
 	ta_int = hw_rev <= MANTA_REV_ALPHA ? gpio_get_value(GPIO_TA_INT) :
@@ -333,6 +334,29 @@ static void change_cable_status(void)
 		if (!manta_bat_smb347_mains || !manta_bat_smb347_usb ||
 		    !manta_bat_smb347_battery)
 			pr_err("%s: failed to get power supplies\n", __func__);
+	}
+
+	if (exynos5_manta_get_revision() > MANTA_REV_ALPHA) {
+		if (manta_bat_smb347_usb) {
+			usb_connected.intval = gpio_get_value(GPIO_OTG_VBUS_SENSE);
+			ret = manta_bat_smb347_usb->set_property(manta_bat_smb347_usb,
+					POWER_SUPPLY_PROP_ONLINE,
+					&usb_connected);
+			if (ret)
+				pr_err("%s: failed to change smb347-usb online\n",
+					__func__);
+		}
+
+		if (manta_bat_smb347_mains) {
+			pogo_connected.intval = gpio_get_value(GPIO_VBUS_POGO_5V);
+			ret = manta_bat_smb347_mains->set_property(
+					manta_bat_smb347_mains,
+					POWER_SUPPLY_PROP_ONLINE,
+					&pogo_connected);
+			if (ret)
+				pr_err("%s: failed to change smb347-mains online\n",
+					__func__);
+		}
 	}
 
 	if (ta_int) {
@@ -512,28 +536,6 @@ static int manta_bat_get_current_now(int *i_current)
 
 static irqreturn_t ta_int_intr(int irq, void *arg)
 {
-	union power_supply_propval value = {0,};
-	int ret = 0;
-
-	if (exynos5_manta_get_revision() > MANTA_REV_ALPHA) {
-		value.intval = gpio_get_value(GPIO_OTG_VBUS_SENSE);
-		ret = manta_bat_smb347_usb->set_property(manta_bat_smb347_usb,
-				POWER_SUPPLY_PROP_ONLINE,
-				&value);
-		if (ret)
-			pr_err("%s: failed to change smb347-usb online\n",
-				__func__);
-
-		value.intval = gpio_get_value(GPIO_VBUS_POGO_5V);
-		ret = manta_bat_smb347_mains->set_property(
-				manta_bat_smb347_mains,
-				POWER_SUPPLY_PROP_ONLINE,
-				&value);
-		if (ret)
-			pr_err("%s: failed to change smb347-mains online\n",
-				__func__);
-	}
-
 	change_cable_status();
 	return IRQ_HANDLED;
 }
