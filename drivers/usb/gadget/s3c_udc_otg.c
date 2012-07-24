@@ -24,6 +24,7 @@
 #include <linux/clk.h>
 #include <linux/kernel.h>
 #include <linux/platform_device.h>
+#include <linux/usb/otg.h>
 #include <plat/regs-otg.h>
 #include <plat/usb-phy.h>
 #include <plat/udc-hs.h>
@@ -234,7 +235,9 @@ static void udc_disable(struct s3c_udc *dev)
 	utemp |= SOFT_DISCONNECT;
 	__raw_writel(utemp, dev->regs + S3C_UDC_OTG_DCTL);
 	udelay(20);
-	if (pdata && pdata->phy_exit)
+	if (dev->phy)
+		usb_phy_shutdown(dev->phy);
+	else if (pdata && pdata->phy_exit)
 		pdata->phy_exit(pdev, S5P_USB_PHY_DEVICE);
 	clk_disable(dev->clk);
 }
@@ -283,7 +286,9 @@ static int udc_enable(struct s3c_udc *dev)
 
 	enable_irq(dev->irq);
 	clk_enable(dev->clk);
-	if (pdata->phy_init)
+	if (dev->phy)
+		usb_phy_init(dev->phy);
+	else if (pdata->phy_init)
 		pdata->phy_init(pdev, S5P_USB_PHY_DEVICE);
 	reconfig_usbd();
 
@@ -1159,6 +1164,7 @@ static int s3c_udc_probe(struct platform_device *pdev)
 		goto err_regs_res;
 	}
 
+	dev->phy = usb_get_transceiver();
 	udc_reinit(dev);
 
 	dev->clk = clk_get(&pdev->dev, "usbotg");
@@ -1211,6 +1217,9 @@ static int s3c_udc_probe(struct platform_device *pdev)
 		goto err_add_udc;
 	}
 
+	if (dev->phy)
+		otg_set_peripheral(dev->phy->otg, &dev->gadget);
+
 	create_proc_files();
 
 	return retval;
@@ -1228,6 +1237,8 @@ err_irq:
 err_regs:
 	iounmap(dev->regs);
 err_regs_res:
+	if (dev->phy)
+		usb_put_transceiver(dev->phy);
 	release_mem_region(res->start, resource_size(res));
 	return retval;
 }
@@ -1244,6 +1255,8 @@ static int s3c_udc_remove(struct platform_device *pdev)
 	usb_del_gadget_udc(&dev->gadget);
 	device_unregister(&dev->gadget.dev);
 
+	if (dev->phy)
+		usb_put_transceiver(dev->phy);
 	clk_put(dev->clk);
 	if (dev->usb_ctrl)
 		dma_free_coherent(&pdev->dev,
