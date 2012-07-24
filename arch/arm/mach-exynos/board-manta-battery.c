@@ -71,6 +71,8 @@ static DEFINE_MUTEX(manta_bat_adc_lock);
 static void max17047_fg_register_callbacks(struct max17047_fg_callbacks *ptr)
 {
 	fg_callbacks = ptr;
+	if (exynos5_manta_get_revision() >= MANTA_REV_BETA)
+		fg_callbacks->get_temperature = NULL;
 }
 
 static void max17047_fg_unregister_callbacks(void)
