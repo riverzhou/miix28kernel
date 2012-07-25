@@ -253,6 +253,13 @@ static struct as3668_platform_data as3668_pdata = {
 	.audio_man_start = AS3668_AUDIO_INPUT_AUTO_PRECHARGE,
 };
 
+/* I2C0 */
+static struct i2c_board_info i2c_devs0[] __initdata = {
+	{
+		I2C_BOARD_INFO("exynos_hdcp", (0x74 >> 1)),
+	},
+};
+
 /* I2C1 */
 static struct i2c_board_info i2c_devs1[] __initdata = {
 	{
@@ -389,6 +396,7 @@ static struct platform_device *manta_devices[] __initdata = {
 	&ramconsole_device,
 	&persistent_trace_device,
 	&persistent_clock,
+	&s3c_device_i2c0,
 	&s3c_device_i2c1,
 	&s3c_device_i2c2,
 	&s3c_device_i2c3,
@@ -546,6 +554,7 @@ static void __init manta_machine_init(void)
 	exynos_ion_set_platdata();
 	manta_dwmci_init();
 
+	s3c_i2c0_set_platdata(NULL);
 	s3c_i2c1_set_platdata(NULL);
 	s3c_i2c2_set_platdata(NULL);
 	s3c_i2c3_set_platdata(NULL);
@@ -553,6 +562,7 @@ static void __init manta_machine_init(void)
 	s3c_i2c5_set_platdata(NULL);
 	s3c_i2c7_set_platdata(NULL);
 
+	i2c_register_board_info(0, i2c_devs0, ARRAY_SIZE(i2c_devs0));
 	i2c_register_board_info(1, i2c_devs1, ARRAY_SIZE(i2c_devs1));
 	if (exynos5_manta_get_revision() <= MANTA_REV_LUNCHBOX)
 		i2c_register_board_info(2, i2c_devs2, ARRAY_SIZE(i2c_devs2));
