@@ -639,6 +639,29 @@ static int max77686_set_ramp_rate(struct i2c_client *i2c, int rate)
 	return ramp_delay;
 }
 
+static __devinit void max77686_show_pwron_src(struct max77686_data *max77686)
+{
+	const char *src[] = {
+		"PWRON=High", "JIGONB=Low", "ACOKB=Low", "Manual Reset Event",
+		"ALARM1", "ALARM2", "SMPL Event", "WTSR Event"
+	};
+	struct i2c_client *i2c = max77686->iodev->i2c;
+	int i, ret;
+	u8 data = 0;
+
+	ret = max77686_read_reg(i2c, MAX77686_REG_PWRON, &data);
+	if (ret < 0) {
+		dev_err(max77686->dev, "%s: fail to read PWRON reg(%d)\n",
+				__func__, ret);
+		return;
+	}
+
+	for (i = 0; i < ARRAY_SIZE(src); i++)
+		if (data & 1 << i)
+			dev_info(max77686->dev, "Power on triggered by %s\n",
+					src[i]);
+}
+
 static __devinit int max77686_pmic_probe(struct platform_device *pdev)
 {
 	struct max77686_dev *iodev = dev_get_drvdata(pdev->dev.parent);
@@ -680,6 +703,8 @@ static __devinit int max77686_pmic_probe(struct platform_device *pdev)
 	max77686_read_reg(i2c, MAX77686_REG_DEVICE_ID, &data);
 	max77686->device_id = (data & 0x7);
 	pr_debug("%s: DEVICE ID=0x%x\n", __func__, data);
+
+	max77686_show_pwron_src(max77686);
 
 	/*
 	 * TODO
