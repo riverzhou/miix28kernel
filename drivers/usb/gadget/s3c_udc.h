@@ -139,7 +139,6 @@ struct s3c_udc {
 	struct resource *regs_res;
 	unsigned int irq;
 	unsigned req_pending:1, req_std:1, req_config:1;
-	int udc_enabled;
 };
 
 extern struct s3c_udc *the_controller;

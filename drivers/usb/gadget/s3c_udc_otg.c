@@ -299,19 +299,16 @@ int s3c_vbus_enable(struct usb_gadget *gadget, int is_active)
 {
 	unsigned long flags;
 	struct s3c_udc *dev = container_of(gadget, struct s3c_udc, gadget);
-	if (dev->udc_enabled != is_active) {
-		dev->udc_enabled = is_active;
 
-		if (!is_active) {
-			spin_lock_irqsave(&dev->lock, flags);
-			stop_activity(dev, dev->driver);
-			spin_unlock_irqrestore(&dev->lock, flags);
-			udc_disable(dev);
-		} else {
-			udc_reinit(dev);
-			udc_enable(dev);
-			s3c_udc_soft_connect();
-		}
+	if (!is_active) {
+		spin_lock_irqsave(&dev->lock, flags);
+		stop_activity(dev, dev->driver);
+		spin_unlock_irqrestore(&dev->lock, flags);
+		udc_disable(dev);
+	} else {
+		udc_reinit(dev);
+		udc_enable(dev);
+		s3c_udc_soft_connect();
 	}
 
 	return 0;
@@ -342,10 +339,8 @@ static int s3c_udc_start(struct usb_gadget *gadget,
 
 	printk(KERN_INFO "bound driver '%s'\n",
 			driver->driver.name);
-#if !defined(CONFIG_USB_EXYNOS_SWITCH) && !defined(CONFIG_MFD_MAX77686)
 	udc_enable(dev);
-	dev->udc_enabled = 1;
-#endif
+
 	return 0;
 }
 
@@ -1290,8 +1285,7 @@ static int s3c_udc_suspend(struct platform_device *pdev, pm_message_t state)
 		if (dev->driver->disconnect)
 			dev->driver->disconnect(&dev->gadget);
 
-		if (dev->udc_enabled)
-			udc_disable(dev);
+		udc_disable(dev);
 	}
 
 	return 0;
@@ -1301,7 +1295,7 @@ static int s3c_udc_resume(struct platform_device *pdev)
 {
 	struct s3c_udc *dev = the_controller;
 
-	if (dev->driver && dev->udc_enabled) {
+	if (dev->driver) {
 		udc_reinit(dev);
 		udc_enable(dev);
 		s3c_udc_soft_connect();
