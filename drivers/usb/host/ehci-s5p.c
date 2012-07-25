@@ -30,6 +30,7 @@ struct s5p_ehci_hcd {
 	struct device *dev;
 	struct usb_hcd *hcd;
 	struct clk *clk;
+	struct usb_phy *phy;
 };
 
 static const struct hc_driver s5p_ehci_hc_driver = {
@@ -95,6 +96,7 @@ static int __devinit s5p_ehci_probe(struct platform_device *pdev)
 
 	s5p_ehci->hcd = hcd;
 	s5p_ehci->clk = clk_get(&pdev->dev, "usbhost");
+	s5p_ehci->phy = usb_get_transceiver();
 
 	if (IS_ERR(s5p_ehci->clk)) {
 		dev_err(&pdev->dev, "Failed to get usbhost clock\n");
@@ -129,7 +131,9 @@ static int __devinit s5p_ehci_probe(struct platform_device *pdev)
 		goto fail;
 	}
 
-	if (pdata->phy_init)
+	if (s5p_ehci->phy)
+		usb_phy_init(s5p_ehci->phy);
+	else if (pdata->phy_init)
 		pdata->phy_init(pdev, S5P_USB_PHY_HOST);
 
 	ehci = hcd_to_ehci(hcd);
@@ -156,6 +160,12 @@ static int __devinit s5p_ehci_probe(struct platform_device *pdev)
 
 	platform_set_drvdata(pdev, s5p_ehci);
 
+	if (s5p_ehci->phy) {
+		err = otg_set_host(s5p_ehci->phy->otg, &hcd->self);
+		if (err)
+			goto fail;
+	}
+
 	return 0;
 
 fail:
@@ -167,6 +177,8 @@ fail_clken:
 fail_clk:
 	usb_put_hcd(hcd);
 fail_hcd:
+	if (s5p_ehci->phy)
+		usb_put_transceiver(s5p_ehci->phy);
 	kfree(s5p_ehci);
 	return err;
 }
@@ -179,8 +191,12 @@ static int __devexit s5p_ehci_remove(struct platform_device *pdev)
 
 	usb_remove_hcd(hcd);
 
-	if (pdata && pdata->phy_exit)
+	if (s5p_ehci->phy) {
+		otg_set_host(s5p_ehci->phy->otg, NULL);
+		usb_put_transceiver(s5p_ehci->phy);
+	} else if (pdata && pdata->phy_exit) {
 		pdata->phy_exit(pdev, S5P_USB_PHY_HOST);
+	}
 
 	iounmap(hcd->regs);
 
@@ -213,6 +229,15 @@ static int s5p_ehci_suspend(struct device *dev)
 	unsigned long flags;
 	int rc = 0;
 
+	/*
+	 * If we have an otg driver, the otg wakelock blocks suspend while
+	 * we are in host mode. When you unplug the host cable, the otg driver
+	 * stops the ehci controller and shuts down the phy immediately, so the
+	 * ehci has already been stopped when this function is called.
+	 */
+	if (s5p_ehci->phy)
+		return 0;
+
 	if (time_before(jiffies, ehci->next_statechange))
 		msleep(20);
 
@@ -242,6 +267,9 @@ static int s5p_ehci_resume(struct device *dev)
 	struct ehci_hcd *ehci = hcd_to_ehci(hcd);
 	struct platform_device *pdev = to_platform_device(dev);
 	struct s5p_ehci_platdata *pdata = pdev->dev.platform_data;
+
+	if (s5p_ehci->phy)
+		return 0;
 
 	if (pdata && pdata->phy_init)
 		pdata->phy_init(pdev, S5P_USB_PHY_HOST);
