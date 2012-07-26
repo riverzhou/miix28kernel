@@ -17,6 +17,7 @@
 #include <linux/interrupt.h>
 #include <linux/mutex.h>
 #include <linux/debugfs.h>
+#include <linux/suspend.h>
 
 #include <plat/adc.h>
 #include <plat/gpio-cfg.h>
@@ -718,6 +719,42 @@ static struct power_supply exynos5_manta_power_supply = {
 	.get_property = exynos5_manta_power_get_property,
 };
 
+static int exynos5_manta_battery_pm_event(struct notifier_block *notifier,
+					  unsigned long pm_event,
+					  void *unused)
+{
+	int hw_rev = exynos5_manta_get_revision();
+
+	switch (pm_event) {
+	case PM_SUSPEND_PREPARE:
+		if (hw_rev <= MANTA_REV_ALPHA) {
+			disable_irq(gpio_to_irq(GPIO_TA_INT));
+		} else {
+			disable_irq(gpio_to_irq(GPIO_OTG_VBUS_SENSE));
+			disable_irq(gpio_to_irq(GPIO_VBUS_POGO_5V));
+		}
+		break;
+
+	case PM_POST_SUSPEND:
+		if (hw_rev <= MANTA_REV_ALPHA) {
+			enable_irq(gpio_to_irq(GPIO_TA_INT));
+		} else {
+			enable_irq(gpio_to_irq(GPIO_OTG_VBUS_SENSE));
+			enable_irq(gpio_to_irq(GPIO_VBUS_POGO_5V));
+		}
+		break;
+
+	default:
+		break;
+	}
+
+	return NOTIFY_DONE;
+}
+
+static struct notifier_block exynos5_manta_battery_pm_notifier_block = {
+	.notifier_call = exynos5_manta_battery_pm_event,
+};
+
 static int __init exynos5_manta_battery_late_init(void)
 {
 	int ret;
@@ -770,6 +807,11 @@ static int __init exynos5_manta_battery_late_init(void)
 						__func__);
 		}
 	}
+
+	ret = register_pm_notifier(&exynos5_manta_battery_pm_notifier_block);
+	if (ret)
+		pr_warn("%s: failed to register PM notifier; ret=%d\n",
+			__func__, ret);
 
 	/* Poll initial cable state */
 	change_cable_status();
