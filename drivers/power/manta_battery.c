@@ -39,7 +39,6 @@ struct manta_bat_data {
 	struct power_supply	psy_usb;
 	struct power_supply	psy_ac;
 
-	struct wake_lock	vbus_wake_lock;
 	struct wake_lock	monitor_wake_lock;
 	struct wake_lock	cable_wake_lock;
 
@@ -285,21 +284,14 @@ static void manta_bat_cable_work(struct work_struct *work)
 		manta_bat_enable_charging(battery, false);
 		if (battery->batt_health == POWER_SUPPLY_HEALTH_OVERVOLTAGE)
 			battery->batt_health = POWER_SUPPLY_HEALTH_GOOD;
-		wake_lock_timeout(&battery->vbus_wake_lock, HZ * 2);
 		break;
 	case CABLE_TYPE_USB:
 		battery->charging_status = POWER_SUPPLY_STATUS_CHARGING;
 		manta_bat_enable_charging(battery, true);
-		wake_lock(&battery->vbus_wake_lock);
 		break;
 	case CABLE_TYPE_AC:
 		battery->charging_status = POWER_SUPPLY_STATUS_CHARGING;
 		manta_bat_enable_charging(battery, true);
-
-		if (exynos5_manta_get_revision() <= MANTA_REV_LUNCHBOX)
-			wake_lock(&battery->vbus_wake_lock);
-		else
-			wake_lock_timeout(&battery->vbus_wake_lock, HZ * 2);
 		break;
 	default:
 		pr_err("%s: Invalid cable type\n", __func__);
@@ -426,8 +418,6 @@ static __devinit int manta_bat_probe(struct platform_device *pdev)
 	battery->batt_vcell = -1;
 	battery->batt_soc = -1;
 
-	wake_lock_init(&battery->vbus_wake_lock, WAKE_LOCK_SUSPEND,
-			"vbus_present");
 	wake_lock_init(&battery->monitor_wake_lock, WAKE_LOCK_SUSPEND,
 			"manta-battery-monitor");
 	wake_lock_init(&battery->cable_wake_lock, WAKE_LOCK_SUSPEND,
@@ -490,7 +480,6 @@ err_supply_unreg_usb:
 err_supply_unreg_bat:
 	power_supply_unregister(&battery->psy_bat);
 err_wake_lock:
-	wake_lock_destroy(&battery->vbus_wake_lock);
 	wake_lock_destroy(&battery->monitor_wake_lock);
 	wake_lock_destroy(&battery->cable_wake_lock);
 err_pdata:
@@ -510,7 +499,6 @@ static int __devexit manta_bat_remove(struct platform_device *pdev)
 	power_supply_unregister(&battery->psy_usb);
 	power_supply_unregister(&battery->psy_ac);
 
-	wake_lock_destroy(&battery->vbus_wake_lock);
 	wake_lock_destroy(&battery->monitor_wake_lock);
 	wake_lock_destroy(&battery->cable_wake_lock);
 
