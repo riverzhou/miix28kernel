@@ -226,17 +226,17 @@ static int current_to_hw(const unsigned int *tbl, size_t size, unsigned int val)
 
 static int smb347_read(struct smb347_charger *smb, u8 reg)
 {
+	int t;
 	int ret;
-
-	ret = i2c_smbus_read_byte_data(smb->client, reg);
 
 	/*
 	 * HACK: manta i2c sometimes returns NXIO for a missing ACK.
-	 * Usually works the second time.
 	 */
-
-	if (ret < 0)
+	for (t = 0; t < 10; t++) {
 		ret = i2c_smbus_read_byte_data(smb->client, reg);
+		if (ret >= 0)
+			break;
+	}
 
 	if (ret < 0)
 		dev_warn(&smb->client->dev, "failed to read reg 0x%x: %d\n",
@@ -246,9 +246,18 @@ static int smb347_read(struct smb347_charger *smb, u8 reg)
 
 static int smb347_write(struct smb347_charger *smb, u8 reg, u8 val)
 {
+	int t;
 	int ret;
 
-	ret = i2c_smbus_write_byte_data(smb->client, reg, val);
+	/*
+	 * HACK: manta i2c sometimes returns ECONNREFUSED for a missing ACK.
+	 */
+	for (t = 0; t < 10; t++) {
+		ret = i2c_smbus_write_byte_data(smb->client, reg, val);
+		if (ret >= 0)
+			break;
+	}
+
 	if (ret < 0)
 		dev_warn(&smb->client->dev, "failed to write reg 0x%x: %d\n",
 			 reg, ret);
