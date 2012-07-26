@@ -782,28 +782,28 @@ static int __init exynos5_manta_battery_late_init(void)
 		ret = request_threaded_irq(gpio_to_irq(GPIO_OTG_VBUS_SENSE),
 				NULL, ta_int_intr,
 				IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING |
-				IRQF_ONESHOT, "usbin_irq", NULL);
+				IRQF_ONESHOT, "otg vbus", NULL);
 		if (ret) {
-			pr_err("%s: usbin register failed, ret=%d\n",
+			pr_err("%s: otg vbus irq register failed, ret=%d\n",
 				__func__, ret);
 		} else {
 			ret = enable_irq_wake(gpio_to_irq(GPIO_OTG_VBUS_SENSE));
 			if (ret)
-				pr_warn("%s: failed to enable irq_wake for usbin\n",
+				pr_warn("%s: failed to enable irq_wake for otg vbus\n",
 					__func__);
 		}
 
 		ret = request_threaded_irq(gpio_to_irq(GPIO_VBUS_POGO_5V), NULL,
 				ta_int_intr,
 				IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING |
-				IRQF_ONESHOT, "usbin_irq", NULL);
+				IRQF_ONESHOT, "pogo vbus", NULL);
 		if (ret) {
-			pr_err("%s: usbin register failed, ret=%d\n",
+			pr_err("%s: pogo vbus irq register failed, ret=%d\n",
 					__func__, ret);
 		} else {
 			ret = enable_irq_wake(gpio_to_irq(GPIO_VBUS_POGO_5V));
 			if (ret)
-				pr_warn("%s: failed to enable irq_wake for usbin\n",
+				pr_warn("%s: failed to enable irq_wake for pogo vbus\n",
 						__func__);
 		}
 	}
