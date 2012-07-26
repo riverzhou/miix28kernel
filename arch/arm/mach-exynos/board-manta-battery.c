@@ -18,6 +18,7 @@
 #include <linux/mutex.h>
 #include <linux/debugfs.h>
 #include <linux/suspend.h>
+#include <linux/pm_wakeup.h>
 
 #include <plat/adc.h>
 #include <plat/gpio-cfg.h>
@@ -65,6 +66,8 @@ static struct bq24191_chg_callbacks *chg_callbacks;
 static struct manta_bat_callbacks *bat_callbacks;
 
 static struct s3c_adc_client *ta_adc_client;
+
+static struct wakeup_source manta_bat_vbus_ws;
 
 static DEFINE_MUTEX(manta_bat_charger_detect_lock);
 static DEFINE_MUTEX(manta_bat_adc_lock);
@@ -389,6 +392,13 @@ static void change_cable_status(void)
 	if (status_change && bat_callbacks &&
 	    bat_callbacks->change_cable_status)
 		bat_callbacks->change_cable_status(bat_callbacks, cable_type);
+
+	if (status_change) {
+		if (manta_bat_charge_type[CHARGE_SOURCE_USB] == CHARGER_USB)
+			__pm_stay_awake(&manta_bat_vbus_ws);
+		else
+			__pm_wakeup_event(&manta_bat_vbus_ws, 500);
+	}
 
 	mutex_unlock(&manta_bat_charger_detect_lock);
 }
@@ -812,6 +822,8 @@ static int __init exynos5_manta_battery_late_init(void)
 	if (ret)
 		pr_warn("%s: failed to register PM notifier; ret=%d\n",
 			__func__, ret);
+
+	wakeup_source_init(&manta_bat_vbus_ws, "vbus");
 
 	/* Poll initial cable state */
 	change_cable_status();
