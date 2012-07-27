@@ -364,15 +364,19 @@ static void change_cable_status(void)
 	}
 
 	if (ta_int) {
-		if (manta_bat_smb347_mains)
-			manta_bat_smb347_mains->get_property(
-				manta_bat_smb347_mains,
-				POWER_SUPPLY_PROP_ONLINE, &pogo_connected);
+		if (exynos5_manta_get_revision() <= MANTA_REV_ALPHA) {
+			if (manta_bat_smb347_mains)
+				manta_bat_smb347_mains->get_property(
+					manta_bat_smb347_mains,
+					POWER_SUPPLY_PROP_ONLINE,
+					&pogo_connected);
 
-		if (manta_bat_smb347_usb)
-			manta_bat_smb347_usb->get_property(
-				manta_bat_smb347_usb,
-				POWER_SUPPLY_PROP_ONLINE, &usb_connected);
+			if (manta_bat_smb347_usb)
+				manta_bat_smb347_usb->get_property(
+					manta_bat_smb347_usb,
+					POWER_SUPPLY_PROP_ONLINE,
+					&usb_connected);
+		}
 
 		if (exynos5_manta_get_revision() >= MANTA_REV_PRE_ALPHA) {
 			status_change =
