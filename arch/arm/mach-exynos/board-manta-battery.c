@@ -26,7 +26,7 @@
 #include <linux/platform_data/max17047_fuelgauge.h>
 #include <linux/platform_data/bq24191_charger.h>
 #include <linux/power/smb347-charger.h>
-#include <linux/platform_data/manta_battery.h>
+#include <linux/platform_data/android_battery.h>
 
 #include "board-manta.h"
 
@@ -45,14 +45,14 @@
 
 static int gpio_TA_nCHG = GPIO_TA_nCHG_ALPHA;
 
-enum charge_source_type {
-	CHARGE_SOURCE_POGO,
-	CHARGE_SOURCE_USB,
-	CHARGE_SOURCE_MAX,
+enum charge_connector {
+	CHARGE_CONNECTOR_POGO,
+	CHARGE_CONNECTOR_USB,
+	CHARGE_CONNECTOR_MAX,
 };
 
-static int cable_type;
-static int manta_bat_charge_type[CHARGE_SOURCE_MAX];
+static int charge_source;
+static int manta_bat_charge_source[CHARGE_CONNECTOR_MAX];
 static bool manta_bat_usb_online;
 static bool manta_bat_pogo_online;
 static bool manta_bat_chg_enabled;
@@ -63,7 +63,7 @@ static struct power_supply *manta_bat_smb347_battery;
 
 static struct max17047_fg_callbacks *fg_callbacks;
 static struct bq24191_chg_callbacks *chg_callbacks;
-static struct manta_bat_callbacks *bat_callbacks;
+static struct android_bat_callbacks *bat_callbacks;
 
 static struct s3c_adc_client *ta_adc_client;
 
@@ -140,7 +140,7 @@ static void charger_gpio_init(void)
 	gpio_set_value(GPIO_POGO_SEL1, 1);
 }
 
-static int read_ta_adc(enum charge_source_type source)
+static int read_ta_adc(enum charge_connector conn)
 {
 	int vol1, vol2;
 	int adc_sel;
@@ -148,7 +148,7 @@ static int read_ta_adc(enum charge_source_type source)
 
 	mutex_lock(&manta_bat_adc_lock);
 
-	if (source == CHARGE_SOURCE_USB)
+	if (conn == CHARGE_CONNECTOR_USB)
 		adc_sel = GPIO_USB_SEL1;
 	else
 		adc_sel = GPIO_POGO_SEL1;
@@ -202,36 +202,36 @@ int manta_bat_otg_enable(bool enable)
 	return ret;
 }
 
-static bool check_samsung_charger(enum charge_source_type source)
+static bool check_samsung_charger(enum charge_connector conn)
 {
 	bool result;
 	int ta_adc;
 
-	ta_adc = read_ta_adc(source);
+	ta_adc = read_ta_adc(conn);
 
 	/* ADC range was recommended by HW */
 	result = ta_adc > TA_ADC_LOW && ta_adc < TA_ADC_HIGH;
-	pr_debug("%s : ta_adc source=%d val=%d, return %d\n", __func__,
-		 source, ta_adc, result);
+	pr_debug("%s : ta_adc conn=%d val=%d, return %d\n", __func__,
+		 conn, ta_adc, result);
 	return result;
 }
 
-static int detect_charge_type(enum charge_source_type source, bool online)
+static int detect_charge_source(enum charge_connector conn, bool online)
 {
 	int is_ta;
-	int charge_type;
+	int charge_source;
 
 	if (!online)
-		return CABLE_TYPE_NONE;
+		return CHARGE_SOURCE_NONE;
 
-	is_ta = check_samsung_charger(source);
+	is_ta = check_samsung_charger(conn);
 
 	if (is_ta)
-		charge_type = CABLE_TYPE_AC;
+		charge_source = CHARGE_SOURCE_AC;
 	else
-		charge_type = CABLE_TYPE_USB;
+		charge_source = CHARGE_SOURCE_USB;
 
-	return charge_type;
+	return charge_source;
 }
 
 static int update_charging_status(bool usb_connected, bool pogo_connected)
@@ -241,28 +241,32 @@ static int update_charging_status(bool usb_connected, bool pogo_connected)
 
 	if (manta_bat_usb_online != usb_connected) {
 		manta_bat_usb_online = usb_connected;
-		manta_bat_charge_type[CHARGE_SOURCE_USB] =
-			detect_charge_type(CHARGE_SOURCE_USB, usb_connected);
-		manta_otg_set_usb_state(manta_bat_charge_type[CHARGE_SOURCE_USB] == CABLE_TYPE_USB);
+		manta_bat_charge_source[CHARGE_CONNECTOR_USB] =
+			detect_charge_source(CHARGE_CONNECTOR_USB,
+					     usb_connected);
+		manta_otg_set_usb_state(
+			manta_bat_charge_source[CHARGE_CONNECTOR_USB] ==
+			CHARGE_SOURCE_USB);
 		ret = 1;
 	}
 
 	if (manta_bat_pogo_online != pogo_connected) {
 		manta_bat_pogo_online = pogo_connected;
-		manta_bat_charge_type[CHARGE_SOURCE_POGO] =
-			detect_charge_type(CHARGE_SOURCE_POGO, pogo_connected);
+		manta_bat_charge_source[CHARGE_CONNECTOR_POGO] =
+			detect_charge_source(CHARGE_CONNECTOR_POGO,
+					     pogo_connected);
 		ret = 1;
 	}
 
 	/* Find the highest-priority charging source */
-	for (i = 0; i < CHARGE_SOURCE_MAX; i++)
-		if (manta_bat_charge_type[i] != CABLE_TYPE_NONE)
+	for (i = 0; i < CHARGE_CONNECTOR_MAX; i++)
+		if (manta_bat_charge_source[i] != CHARGE_SOURCE_NONE)
 			break;
 
-	if (i < CHARGE_SOURCE_MAX)
-		cable_type = manta_bat_charge_type[i];
+	if (i < CHARGE_CONNECTOR_MAX)
+		charge_source = manta_bat_charge_source[i];
 	else
-		cable_type = CABLE_TYPE_NONE;
+		charge_source = CHARGE_SOURCE_NONE;
 
 	return ret;
 }
@@ -316,7 +320,7 @@ static void manta_bat_sync_charge_enable(void)
 	}
 }
 
-static void change_cable_status(void)
+static void change_charger_status(void)
 {
 	int ta_int;
 	union power_supply_propval pogo_connected = {0,};
@@ -395,15 +399,17 @@ static void change_cable_status(void)
 		status_change = update_charging_status(false, false);
 	}
 
-	pr_debug("%s: ta_int(%d), cable_type(%d)", __func__,
-		 ta_int, cable_type);
+	pr_debug("%s: ta_int(%d), charge_source(%d)", __func__,
+		 ta_int, charge_source);
 
 	if (status_change && bat_callbacks &&
-	    bat_callbacks->change_cable_status)
-		bat_callbacks->change_cable_status(bat_callbacks, cable_type);
+	    bat_callbacks->charge_source_changed)
+		bat_callbacks->charge_source_changed(bat_callbacks,
+						     charge_source);
 
 	if (status_change) {
-		if (manta_bat_charge_type[CHARGE_SOURCE_USB] == CHARGER_USB)
+		if (manta_bat_charge_source[CHARGE_CONNECTOR_USB] ==
+		    CHARGE_SOURCE_USB)
 			__pm_stay_awake(&manta_bat_vbus_ws);
 		else
 			__pm_wakeup_event(&manta_bat_vbus_ws, 500);
@@ -443,7 +449,7 @@ static struct bq24191_platform_data bq24191_chg_pdata = {
 	.gpio_ta_en = GPIO_TA_EN,
 };
 
-static void manta_bat_register_callbacks(struct manta_bat_callbacks *ptr)
+static void manta_bat_register_callbacks(struct android_bat_callbacks *ptr)
 {
 	bat_callbacks = ptr;
 }
@@ -453,10 +459,10 @@ static void manta_bat_unregister_callbacks(void)
 	bat_callbacks = NULL;
 }
 
-static int manta_bat_poll_charger_type(void)
+static int manta_bat_poll_charge_source(void)
 {
-	change_cable_status();
-	return cable_type;
+	change_charger_status();
+	return charge_source;
 }
 
 static void exynos5_manta_set_mains_current(void)
@@ -475,8 +481,8 @@ static void exynos5_manta_set_mains_current(void)
 	}
 
 	value.intval =
-		manta_bat_charge_type[CHARGE_SOURCE_POGO] == CHARGER_USB ?
-		500000 : 1800000;
+		manta_bat_charge_source[CHARGE_CONNECTOR_POGO] ==
+		   CHARGE_SOURCE_USB ? 500000 : 1800000;
 
 	ret = manta_bat_smb347_mains->set_property(manta_bat_smb347_mains,
 					 POWER_SUPPLY_PROP_CURRENT_MAX,
@@ -501,8 +507,8 @@ static void exynos5_manta_set_usb_hc(void)
 	}
 
 	value.intval =
-		manta_bat_charge_type[CHARGE_SOURCE_USB] == CHARGER_USB ?
-		0 : 1;
+		manta_bat_charge_source[CHARGE_CONNECTOR_USB] ==
+		CHARGE_SOURCE_USB ? 0 : 1;
 	ret = manta_bat_smb347_usb->set_property(manta_bat_smb347_usb,
 						 POWER_SUPPLY_PROP_USB_HC,
 						 &value);
@@ -511,7 +517,7 @@ static void exynos5_manta_set_usb_hc(void)
 		       __func__);
 }
 
-static void manta_bat_set_charging_current(int cable_type)
+static void manta_bat_set_charging_current(int charge_source)
 {
 	if (exynos5_manta_get_revision() >= MANTA_REV_PRE_ALPHA) {
 		exynos5_manta_set_mains_current();
@@ -519,7 +525,7 @@ static void manta_bat_set_charging_current(int cable_type)
 	} else {
 		if (chg_callbacks && chg_callbacks->set_charging_current)
 			chg_callbacks->set_charging_current(chg_callbacks,
-							    cable_type);
+							    charge_source);
 	}
 }
 
@@ -556,15 +562,15 @@ static int manta_bat_get_current_now(int *i_current)
 
 static irqreturn_t ta_int_intr(int irq, void *arg)
 {
-	change_cable_status();
+	change_charger_status();
 	return IRQ_HANDLED;
 }
 
-static struct manta_bat_platform_data manta_battery_pdata = {
+static struct android_bat_platform_data android_battery_pdata = {
 	.register_callbacks = manta_bat_register_callbacks,
 	.unregister_callbacks = manta_bat_unregister_callbacks,
 
-	.poll_charger_type = manta_bat_poll_charger_type,
+	.poll_charge_source = manta_bat_poll_charge_source,
 
 	.set_charging_current = manta_bat_set_charging_current,
 	.set_charging_enable = manta_bat_set_charging_enable,
@@ -580,24 +586,24 @@ static struct manta_bat_platform_data manta_battery_pdata = {
 	.temp_low_threshold = 0,		/* 0c */
 };
 
-static struct platform_device manta_device_battery = {
-	.name = "manta-battery",
+static struct platform_device android_device_battery = {
+	.name = "android-battery",
 	.id = -1,
-	.dev.platform_data = &manta_battery_pdata,
+	.dev.platform_data = &android_battery_pdata,
 };
 
 static struct platform_device *manta_battery_devices[] __initdata = {
-	&manta_device_battery,
+	&android_device_battery,
 };
 
-static char *charger_type_str(int cable_type)
+static char *charge_source_str(int charge_source)
 {
-	switch (cable_type) {
-	case CABLE_TYPE_NONE:
+	switch (charge_source) {
+	case CHARGE_SOURCE_NONE:
 		return "none";
-	case CABLE_TYPE_AC:
+	case CHARGE_SOURCE_AC:
 		return "ac";
-	case CABLE_TYPE_USB:
+	case CHARGE_SOURCE_USB:
 		return "usb";
 	default:
 		break;
@@ -625,10 +631,12 @@ static int manta_power_debug_dump(struct seq_file *s, void *unused)
 
 	seq_printf(s, "usb=%s type=%s; pogo=%s type=%s; selected=%s\n",
 		   manta_bat_usb_online ? "online" : "offline",
-		   charger_type_str(manta_bat_charge_type[CHARGE_SOURCE_USB]),
+		   charge_source_str(
+			   manta_bat_charge_source[CHARGE_CONNECTOR_USB]),
 		   manta_bat_pogo_online ? "online" : "offline",
-		   charger_type_str(manta_bat_charge_type[CHARGE_SOURCE_POGO]),
-		   charger_type_str(cable_type));
+		   charge_source_str(
+			   manta_bat_charge_source[CHARGE_CONNECTOR_POGO]),
+		   charge_source_str(charge_source));
 	return 0;
 }
 
@@ -647,9 +655,9 @@ static const struct file_operations manta_power_debug_fops = {
 static int manta_power_adc_debug_dump(struct seq_file *s, void *unused)
 {
 	seq_printf(s, "ta_adc(usb)=%d ta_adc(pogo)=%d\n",
-		   read_ta_adc(CHARGE_SOURCE_USB),
+		   read_ta_adc(CHARGE_CONNECTOR_USB),
 		   exynos5_manta_get_revision() >= MANTA_REV_PRE_ALPHA ?
-		   read_ta_adc(CHARGE_SOURCE_POGO) : 0);
+		   read_ta_adc(CHARGE_CONNECTOR_POGO) : 0);
 	return 0;
 }
 
@@ -706,7 +714,7 @@ void __init exynos5_manta_battery_init(void)
 					ARRAY_SIZE(i2c_devs2_lunchbox));
 
 	if (exynos5_manta_get_revision() >= MANTA_REV_PRE_ALPHA)
-		ta_adc_client = s3c_adc_register(&manta_device_battery,
+		ta_adc_client = s3c_adc_register(&android_device_battery,
 						 NULL, NULL, 0);
 
 	if (IS_ERR_OR_NULL(debugfs_create_file("manta-power", S_IRUGO, NULL,
@@ -721,7 +729,7 @@ void __init exynos5_manta_battery_init(void)
 
 static void exynos5_manta_power_changed(struct power_supply *psy)
 {
-	change_cable_status();
+	change_charger_status();
 }
 
 static int exynos5_manta_power_get_property(struct power_supply *psy,
@@ -834,8 +842,8 @@ static int __init exynos5_manta_battery_late_init(void)
 
 	wakeup_source_init(&manta_bat_vbus_ws, "vbus");
 
-	/* Poll initial cable state */
-	change_cable_status();
+	/* Poll initial charger state */
+	change_charger_status();
 	return 0;
 }
 
