@@ -19,6 +19,7 @@
 #include <linux/platform_device.h>
 #include <linux/slab.h>
 #include <mach/videonode.h>
+/* #include <plat/bts.h> */
 #include <media/exynos_mc.h>
 #include <linux/cma.h>
 #include <asm/cacheflush.h>
@@ -32,12 +33,10 @@
 #include <linux/v4l2-mediabus.h>
 
 #include "fimc-is-core.h"
-#include "fimc-is-helper.h"
 #include "fimc-is-param.h"
 #include "fimc-is-cmd.h"
 #include "fimc-is-regs.h"
 #include "fimc-is-err.h"
-#include "fimc-is-misc.h"
 
 struct fimc_is_fmt fimc_is_formats[] = {
 	 {
@@ -154,7 +153,7 @@ void fimc_is_set_plane_size(struct fimc_is_frame *frame, unsigned int sizes[])
 		dbg("V4L2_PIX_FMT_SBGGR16(w:%d)(h:%d)\n",
 				frame->width, frame->height);
 		sizes[0] = frame->width*frame->height*2;
-		sizes[1] = 5*1024;
+		sizes[1] = 8*1024;
 		break;
 	case V4L2_PIX_FMT_SBGGR12:
 		dbg("V4L2_PIX_FMT_SBGGR12(w:%d)(h:%d)\n",
@@ -181,23 +180,25 @@ int fimc_is_video_probe(struct fimc_is_video_common *video,
 	snprintf(video->vd.name, sizeof(video->vd.name),
 		"%s", video_name);
 
-	video->core		= core;
-	video->vb2		= core->vb2;
-	video->vd.fops		= fops;
-	video->vd.ioctl_ops	= ioctl_ops;
-	video->vd.v4l2_dev	= &core->mdev->v4l2_dev;
-	video->vd.minor		= -1;
-	video->vd.release	= video_device_release;
-	video->vd.lock		= &core->vb_lock;
+	mutex_init(&video->lock);
+
+	video->core				= core;
+	video->vb2				= core->mem.vb2;
+	video->vd.fops				= fops;
+	video->vd.ioctl_ops			= ioctl_ops;
+	video->vd.v4l2_dev			= &core->mdev->v4l2_dev;
+	video->vd.minor				= -1;
+	video->vd.release			= video_device_release;
+	video->vd.lock				= &video->lock;
 	video_set_drvdata(&video->vd, core);
 
-	vbq			= &video->vbq;
+	vbq					= &video->vbq;
 	memset(vbq, 0, sizeof(struct vb2_queue));
-	vbq->type		= vbq_type;
-	vbq->io_modes		= VB2_MMAP | VB2_USERPTR | VB2_DMABUF;
-	vbq->drv_priv		= video_data;
-	vbq->ops		= vb2_ops;
-	vbq->mem_ops		= core->vb2->ops;
+	vbq->type				= vbq_type;
+	vbq->io_modes			= VB2_MMAP | VB2_USERPTR | VB2_DMABUF;
+	vbq->drv_priv				= video_data;
+	vbq->ops				= vb2_ops;
+	vbq->mem_ops				= core->mem.vb2->ops;
 
 	vb2_queue_init(vbq);
 
@@ -283,16 +284,13 @@ int fimc_is_video_set_format_mplane(struct fimc_is_video_common *video,
 	frame = fimc_is_find_format(&pix->pixelformat, NULL, 0);
 	if (!frame) {
 		err("pixel format is not found\n");
-		ret = EINVAL;
+		ret = -EINVAL;
 		goto p_err;
 	}
 
-	video->frame.format.pixelformat
-							= frame->pixelformat;
-	video->frame.format.mbus_code
-							= frame->mbus_code;
-	video->frame.format.num_planes
-							= frame->num_planes;
+	video->frame.format.pixelformat = frame->pixelformat;
+	video->frame.format.mbus_code	= frame->mbus_code;
+	video->frame.format.num_planes	= frame->num_planes;
 	video->frame.width		= pix->width;
 	video->frame.height		= pix->height;
 
@@ -300,33 +298,166 @@ p_err:
 	return ret;
 }
 
-int fimc_is_video_buffer_queue(struct fimc_is_video_common *video,
-	struct vb2_buffer *vb)
+int fimc_is_video_qbuf(struct fimc_is_video_common *video,
+	struct v4l2_buffer *buf)
+{
+	int ret = 0;
+
+	ret = vb2_qbuf(&video->vbq, buf);
+
+	return ret;
+}
+
+int fimc_is_video_dqbuf(struct fimc_is_video_common *video,
+	struct v4l2_buffer *buf, bool blocking)
+{
+	int ret = 0;
+
+	ret = vb2_dqbuf(&video->vbq, buf, blocking);
+
+	video->buf_mask &= ~(1<<buf->index);
+
+	return ret;
+}
+
+int fimc_is_video_streamon(struct fimc_is_video_common *video,
+	enum v4l2_buf_type type)
+{
+	int ret = 0;
+
+	ret = vb2_streamon(&video->vbq, type);
+
+	return ret;
+}
+
+int fimc_is_video_streamoff(struct fimc_is_video_common *video,
+	enum v4l2_buf_type type)
+{
+	int ret = 0;
+
+	ret = vb2_streamoff(&video->vbq, type);
+
+	return ret;
+}
+
+
+int fimc_is_video_queue_setup(struct fimc_is_video_common *video,
+	unsigned int *num_planes,
+	unsigned int sizes[],
+	void *allocators[])
 {
 	u32 ret = 0, i;
 	struct fimc_is_core *core = video->core;
 
-	if (!test_bit(FIMC_IS_VIDEO_BUFFER_PREPARED, &video->state)) {
-		for (i = 0; i < vb->num_planes; i++) {
-			video->buf_dva[vb->v4l2_buf.index][i]
-				= (u32)core->vb2->plane_addr(vb, i);
+	*num_planes = (unsigned int)(video->frame.format.num_planes);
+	fimc_is_set_plane_size(&video->frame, sizes);
 
-			video->buf_kva[vb->v4l2_buf.index][i]
-				= (u32)core->vb2->plane_kvaddr(vb, i);
-			/*
-			printk(KERN_INFO "\nkvaddr -> qbuf(%d) : 0x%08x\n",
-				i, video->buf_kva[vb->v4l2_buf.index][i]);
-			printk(KERN_INFO "dvaddr -> qbuf(%d) : 0x%08x\n",
-				i, video->buf_dva[vb->v4l2_buf.index][i]);
-			*/
-
-		}
-
-		video->buf_ref_cnt++;
-
-		if (video->buffers == video->buf_ref_cnt)
-			set_bit(FIMC_IS_VIDEO_BUFFER_PREPARED, &video->state);
+	for (i = 0; i < *num_planes; i++) {
+		allocators[i] =  core->mem.alloc_ctx;
+		video->frame.size[i] = sizes[i];
 	}
 
 	return ret;
 }
+
+
+int fimc_is_video_buffer_queue(struct fimc_is_video_common *video,
+	struct vb2_buffer *vb, struct fimc_is_framemgr *framemgr)
+{
+	u32 ret = 0, i;
+	u32 index = vb->v4l2_buf.index;
+	u32 ext_size;
+	struct fimc_is_core *core = video->core;
+
+	if (!test_bit(FIMC_IS_VIDEO_BUFFER_PREPARED, &video->state)) {
+		if (video->frame.format.pixelformat == V4L2_PIX_FMT_YVU420M) {
+			video->buf_dva[index][0]
+				= core->mem.vb2->plane_addr(vb, 0);
+			video->buf_kva[index][0]
+				= core->mem.vb2->plane_kvaddr(vb, 0);
+
+			video->buf_dva[index][1]
+				= core->mem.vb2->plane_addr(vb, 2);
+			video->buf_kva[index][1]
+				= core->mem.vb2->plane_kvaddr(vb, 2);
+
+			video->buf_dva[index][2]
+				= core->mem.vb2->plane_addr(vb, 1);
+			video->buf_kva[index][2]
+				= core->mem.vb2->plane_kvaddr(vb, 1);
+		} else {
+			for (i = 0; i < vb->num_planes; i++) {
+				video->buf_dva[index][i]
+					= core->mem.vb2->plane_addr(vb, i);
+				video->buf_kva[index][i]
+					= core->mem.vb2->plane_kvaddr(vb, i);
+			}
+		}
+
+		if (framemgr) {
+			if ((framemgr->id == FRAMEMGR_ID_SENSOR) ||
+				(framemgr->id == FRAMEMGR_ID_ISP)) {
+				ext_size = sizeof(struct camera2_shot_ext) -
+					sizeof(struct camera2_shot);
+
+				framemgr->frame[index].dvaddr_buffer[0] =
+					video->buf_dva[index][0];
+
+				framemgr->frame[index].kvaddr_buffer[0] =
+					video->buf_kva[index][0];
+
+				framemgr->frame[index].dvaddr_shot =
+					video->buf_dva[index][1] + ext_size;
+
+				framemgr->frame[index].kvaddr_shot =
+					video->buf_kva[index][1] + ext_size;
+
+				framemgr->frame[index].shot =
+					(struct camera2_shot *)
+					(video->buf_kva[index][1] + ext_size);
+
+				framemgr->frame[index].shot_ext =
+					(struct camera2_shot_ext *)
+					(video->buf_kva[index][1]);
+
+				framemgr->frame[index].shot_size =
+					video->frame.size[1];
+			} else {
+				for (i = 0; i < vb->num_planes; i++) {
+					framemgr->frame[index].dvaddr_buffer[i]
+						= video->buf_dva[index][i];
+
+					framemgr->frame[index].kvaddr_buffer[i]
+						= video->buf_kva[index][i];
+				}
+			}
+
+			framemgr->frame[index].vb = vb;
+			framemgr->frame[index].planes = vb->num_planes;
+		}
+
+		video->buf_ref_cnt++;
+
+		if (video->buffers == video->buf_ref_cnt) {
+			dbg("buffer prepared!!!\n");
+			set_bit(FIMC_IS_VIDEO_BUFFER_PREPARED, &video->state);
+		}
+	}
+
+	return ret;
+}
+
+int buffer_done(struct fimc_is_video_common *video, u32 index)
+{
+	int ret = 0;
+
+	if (index == FIMC_IS_INVALID_BUF_INDEX) {
+		err("buffer done had invalid index(%d)", index);
+		ret = -EINVAL;
+	}
+
+	vb2_buffer_done(video->vbq.bufs[index], VB2_BUF_STATE_DONE);
+
+	return ret;
+}
+

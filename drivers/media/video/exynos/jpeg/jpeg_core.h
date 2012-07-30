@@ -1,6 +1,6 @@
 /* linux/drivers/media/video/samsung/jpeg_v2x/jpeg_core.h
  *
- * Copyright (c) 2010 Samsung Electronics Co., Ltd.
+ * Copyright (c) 2012 Samsung Electronics Co., Ltd.
  * http://www.samsung.com/
  *
  * Definition for core file of the jpeg operation.
@@ -55,6 +55,7 @@ enum jpeg_result {
 	ERR_DEC_INVALID_FORMAT,
 	ERR_MULTI_SCAN,
 	ERR_FRAME,
+	ERR_TIME_OUT,
 	ERR_UNKNOWN,
 };
 
@@ -78,12 +79,14 @@ enum jpeg_frame_format {
 	YCRCB_422_2P,
 	YCBYCR_422_3P,
 	YCBCR_420_3P,
+	YCRCB_420_3P,
 	YCBCR_420_2P,
 	YCRCB_420_2P,
 	YCBCR_420_2P_M,
 	YCRCB_420_2P_M,
 	RGB_565,
 	RGB_888,
+	BGR_888,
 	GRAY,
 };
 

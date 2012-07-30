@@ -1069,6 +1069,9 @@ enum otf_input_bitwidth {
 
 enum otf_input_order {
 	OTF_INPUT_ORDER_BAYER_GR_BG	= 0,
+	OTF_INPUT_ORDER_BAYER_RG_GB	= 1,
+	OTF_INPUT_ORDER_BAYER_BG_GR	= 2,
+	OTF_INPUT_ORDER_BAYER_GB_RG	= 3
 };
 
 enum otf_intput_error {
@@ -1310,7 +1313,9 @@ enum isp_flash_command {
 	ISP_FLASH_COMMAND_AUTO		= 2,
 	ISP_FLASH_COMMAND_TORCH		= 3,   /* 3 sec */
 	ISP_FLASH_COMMAND_FLASH_ON	= 4,
-	ISP_FLASH_COMMAND_CAPTURE	= 5
+	ISP_FLASH_COMMAND_CAPTURE	= 5,
+	ISP_FLASH_COMMAND_TRIGGER	= 6,
+	ISP_FLASH_COMMAND_CALIBRATION	= 7
 };
 
 enum isp_flash_redeye {
@@ -1342,13 +1347,25 @@ enum isp_awb_error {
 
 /* --------------------------  Effect  ----------------------------------- */
 enum isp_imageeffect_command {
-	ISP_IMAGE_EFFECT_DISABLE           = 0,
-	ISP_IMAGE_EFFECT_MONOCHROME        = 1,
-	ISP_IMAGE_EFFECT_NEGATIVE_MONO     = 2,
-	ISP_IMAGE_EFFECT_NEGATIVE_COLOR    = 3,
-	ISP_IMAGE_EFFECT_SEPIA             = 4,
-	ISP_IMAGE_EFFECT_EMBOSS            = 5,
-	ISP_IMAGE_EFFECT_CCM               = 15,
+	ISP_IMAGE_EFFECT_DISABLE		= 0,
+	ISP_IMAGE_EFFECT_MONOCHROME		= 1,
+	ISP_IMAGE_EFFECT_NEGATIVE_MONO		= 2,
+	ISP_IMAGE_EFFECT_NEGATIVE_COLOR		= 3,
+	ISP_IMAGE_EFFECT_SEPIA			= 4,
+	ISP_IMAGE_EFFECT_AQUA			= 5,
+	ISP_IMAGE_EFFECT_EMBOSS			= 6,
+	ISP_IMAGE_EFFECT_EMBOSS_MONO		= 7,
+	ISP_IMAGE_EFFECT_SKETCH			= 8,
+	ISP_IMAGE_EFFECT_RED_YELLOW_POINT	= 9,
+	ISP_IMAGE_EFFECT_GREEN_POINT		= 10,
+	ISP_IMAGE_EFFECT_BLUE_POINT		= 11,
+	ISP_IMAGE_EFFECT_MAGENTA_POINT		= 12,
+	ISP_IMAGE_EFFECT_WARM_VINTAGE		= 13,
+	ISP_IMAGE_EFFECT_COLD_VINTAGE		= 14,
+	ISP_IMAGE_EFFECT_POSTERIZE		= 15,
+	ISP_IMAGE_EFFECT_SOLARIZE		= 16,
+	ISP_IMAGE_EFFECT_WASHED			= 17,
+	ISP_IMAGE_EFFECT_CCM			= 18,
 };
 
 enum isp_imageeffect_error {
@@ -1375,9 +1392,21 @@ enum iso_adjust_command {
 	ISP_ADJUST_COMMAND_MANUAL_BRIGHTNESS	= (1 << 4),
 	ISP_ADJUST_COMMAND_MANUAL_HUE		= (1 << 5),
 	ISP_ADJUST_COMMAND_MANUAL_HOTPIXEL	= (1 << 6),
-	ISP_ADJUST_COMMAND_MANUAL_SHADING	= (1 << 7),
-	ISP_ADJUST_COMMAND_MANUAL_ALL		= 0x7F
+	ISP_ADJUST_COMMAND_MANUAL_NOISEREDUCTION = (1 << 7),
+	ISP_ADJUST_COMMAND_MANUAL_SHADING	= (1 << 8),
+	ISP_ADJUST_COMMAND_MANUAL_GAMMA		= (1 << 9),
+	ISP_ADJUST_COMMAND_MANUAL_EDGEENHANCEMENT = (1 << 10),
+	ISP_ADJUST_COMMAND_MANUAL_SCENE		= (1 << 11),
+	ISP_ADJUST_COMMAND_MANUAL_FRAMETIME	= (1 << 12),
+	ISP_ADJUST_COMMAND_MANUAL_ALL		= 0x1FFF
 };
+
+enum isp_adjust_scene_index {
+	ISP_ADJUST_SCENE_NORMAL			= 0,
+	ISP_ADJUST_SCENE_NIGHT_PREVIEW		= 1,
+	ISP_ADJUST_SCENE_NIGHT_CAPTURE		= 2
+};
+
 
 enum isp_adjust_error {
 	ISP_ADJUST_ERROR_NO		= 0 /* Adjust setting is done */
@@ -1385,10 +1414,16 @@ enum isp_adjust_error {
 
 /* -------------------------  Metering  ---------------------------------- */
 enum isp_metering_command {
-	ISP_METERING_COMMAND_AVERAGE	= 0,
-	ISP_METERING_COMMAND_SPOT	= 1,
-	ISP_METERING_COMMAND_MATRIX	= 2,
-	ISP_METERING_COMMAND_CENTER	= 3
+	ISP_METERING_COMMAND_AVERAGE		= 0,
+	ISP_METERING_COMMAND_SPOT		= 1,
+	ISP_METERING_COMMAND_MATRIX		= 2,
+	ISP_METERING_COMMAND_CENTER		= 3,
+	ISP_METERING_COMMAND_EXPOSURE_MODE	= (1 << 8)
+};
+
+enum isp_exposure_mode {
+	ISP_EXPOSUREMODE_OFF		= 1,
+	ISP_EXPOSUREMODE_AUTO		= 2
 };
 
 enum isp_metering_error {
@@ -1551,11 +1586,11 @@ enum fd_config_orientation {
 struct param_control {
 	u32	cmd;
 	u32	bypass;
-	u32 buffer_address;
-	u32 buffer_number;
-	u32 first_drop_frame;
-	u32 run_mode;			/* 0: continuous, 1: single */
-	u32	reserved[PARAMETER_MAX_MEMBER-7];
+	u32	buffer_address;
+	u32	buffer_number;
+	/* 0: continuous, 1: single */
+	u32	run_mode;
+	u32	reserved[PARAMETER_MAX_MEMBER-6];
 	u32	err;
 };
 
@@ -1587,15 +1622,15 @@ struct param_dma_input {
 	u32	buffer_number;
 	u32	buffer_address;
 	u32	uiCropOffsetX;
-	u32 uiCropOffsetY;
-	u32 uiCropWidth;
-	u32 uiCropHeight;
-	u32 uiUserMinFrameTime;
-	u32 uiUserMaxFrameTime;
-	u32 uiWideFrameGap;
-	u32 uiFrameGap;
-	u32 uiLineGap;
-	u32 uiReserved[PARAMETER_MAX_MEMBER-19];
+	u32	uiCropOffsetY;
+	u32	uiCropWidth;
+	u32	uiCropHeight;
+	u32	uiUserMinFrameTime;
+	u32	uiUserMaxFrameTime;
+	u32	uiWideFrameGap;
+	u32	uiFrameGap;
+	u32	uiLineGap;
+	u32	uiReserved[PARAMETER_MAX_MEMBER-19];
 	u32	err;
 };
 
@@ -1646,9 +1681,9 @@ struct param_isp_aa {
 	u32	target;
 	u32	mode;
 	u32	scene;
-	u32 uiAfTouch;
-	u32 uiAfFace;
-	u32 uiAfResponse;
+	u32	uiAfTouch;
+	u32	uiAfFace;
+	u32	uiAfResponse;
 	u32	sleep;
 	u32	touch_x;
 	u32	touch_y;
@@ -1693,9 +1728,21 @@ struct param_isp_adjust {
 	s32	exposure;
 	s32	brightness;
 	s32	hue;
-	s32	hot_pixel_enable;
-	s32	shading_correction_enable;
-	u32	reserved[PARAMETER_MAX_MEMBER-10];
+	/* 0 or 1 */
+	u32	uiHotPixelEnable;
+	/* -127 ~ 127 */
+	s32	uiNoiseReductionStrength;
+	/* 0 or 1 */
+	u32	uiShadingCorrectionEnable;
+	/* 0 or 1 */
+	u32	uiUserGammaEnable;
+	/* -127 ~ 127 */
+	s32	uiEdgeEnhancementStrength;
+	/* ISP_AdjustSceneIndexEnum */
+	u32	uiUserSceneMode;
+	u32	uiMinFrameTime;
+	u32	uiMaxFrameTime;
+	u32	uiReserved[PARAMETER_MAX_MEMBER-16];
 	u32	err;
 };
 
@@ -1705,7 +1752,8 @@ struct param_isp_metering {
 	u32	win_pos_y;
 	u32	win_width;
 	u32	win_height;
-	u32	reserved[PARAMETER_MAX_MEMBER-6];
+	u32	exposure_mode;
+	u32	reserved[PARAMETER_MAX_MEMBER-7];
 	u32	err;
 };
 
@@ -2008,8 +2056,10 @@ struct is_face_marker {
 	struct is_fd_rect right_eye;
 	struct is_fd_rect mouth;
 	u32	roll_angle;
-	u32  yaw_angle;
+	u32 yaw_angle;
 	u32	confidence;
+	u32	uiIsTracked;
+	u32	uiTrackedFaceID;
 	u32	smile_level;
 	u32	blink_level;
 };

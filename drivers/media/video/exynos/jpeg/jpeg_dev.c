@@ -1,6 +1,6 @@
 /* linux/drivers/media/video/exynos/jpeg/jpeg_dev.c
  *
- * Copyright (c) 2010 Samsung Electronics Co., Ltd.
+ * Copyright (c) 2012 Samsung Electronics Co., Ltd.
  * http://www.samsung.com/
  *
  * Core file for Samsung Jpeg v2.x Interface driver
@@ -50,58 +50,6 @@
 #include "jpeg_mem.h"
 #include "jpeg_regs.h"
 #include "regs_jpeg_v2_x.h"
-
-void jpeg_watchdog(unsigned long arg)
-{
-	struct jpeg_dev *dev = (struct jpeg_dev *)arg;
-
-	printk(KERN_DEBUG "jpeg_watchdog\n");
-	if (test_bit(0, &dev->hw_run)) {
-		atomic_inc(&dev->watchdog_cnt);
-		printk(KERN_DEBUG "jpeg_watchdog_count.\n");
-	}
-
-	if (atomic_read(&dev->watchdog_cnt) >= JPEG_WATCHDOG_CNT)
-		queue_work(dev->watchdog_workqueue, &dev->watchdog_work);
-
-	dev->watchdog_timer.expires = jiffies +
-					msecs_to_jiffies(JPEG_WATCHDOG_INTERVAL);
-	add_timer(&dev->watchdog_timer);
-}
-
-static void jpeg_watchdog_worker(struct work_struct *work)
-{
-	struct jpeg_dev *dev;
-	struct jpeg_ctx *ctx;
-	unsigned long flags;
-	struct vb2_buffer *src_vb, *dst_vb;
-
-	printk(KERN_DEBUG "jpeg_watchdog_worker\n");
-	dev = container_of(work, struct jpeg_dev, watchdog_work);
-
-	spin_lock_irqsave(&dev->slock, flags);
-	clear_bit(0, &dev->hw_run);
-	if (dev->mode == ENCODING)
-		ctx = v4l2_m2m_get_curr_priv(dev->m2m_dev_enc);
-	else
-		ctx = v4l2_m2m_get_curr_priv(dev->m2m_dev_dec);
-
-	if (ctx) {
-		src_vb = v4l2_m2m_src_buf_remove(ctx->m2m_ctx);
-		dst_vb = v4l2_m2m_dst_buf_remove(ctx->m2m_ctx);
-
-		v4l2_m2m_buf_done(src_vb, VB2_BUF_STATE_ERROR);
-		v4l2_m2m_buf_done(dst_vb, VB2_BUF_STATE_ERROR);
-		if (dev->mode == ENCODING)
-			v4l2_m2m_job_finish(dev->m2m_dev_enc, ctx->m2m_ctx);
-		else
-			v4l2_m2m_job_finish(dev->m2m_dev_dec, ctx->m2m_ctx);
-	} else {
-		printk(KERN_ERR "watchdog_ctx is NULL\n");
-	}
-
-	spin_unlock_irqrestore(&dev->slock, flags);
-}
 
 static int jpeg_dec_queue_setup(struct vb2_queue *vq,
 					const struct v4l2_format *fmt, unsigned int *num_buffers,
@@ -312,7 +260,7 @@ static int queue_init_dec(void *priv, struct vb2_queue *src_vq,
 
 	memset(src_vq, 0, sizeof(*src_vq));
 	src_vq->type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
-	src_vq->io_modes = VB2_MMAP | VB2_USERPTR;
+	src_vq->io_modes = VB2_MMAP | VB2_USERPTR | VB2_DMABUF;
 	src_vq->drv_priv = ctx;
 	src_vq->buf_struct_size = sizeof(struct v4l2_m2m_buffer);
 	src_vq->ops = &jpeg_dec_vb2_qops;
@@ -324,7 +272,7 @@ static int queue_init_dec(void *priv, struct vb2_queue *src_vq,
 
 	memset(dst_vq, 0, sizeof(*dst_vq));
 	dst_vq->type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
-	dst_vq->io_modes = VB2_MMAP | VB2_USERPTR;
+	dst_vq->io_modes = VB2_MMAP | VB2_USERPTR | VB2_DMABUF;
 	dst_vq->drv_priv = ctx;
 	dst_vq->buf_struct_size = sizeof(struct v4l2_m2m_buffer);
 	dst_vq->ops = &jpeg_dec_vb2_qops;
@@ -341,7 +289,7 @@ static int queue_init_enc(void *priv, struct vb2_queue *src_vq,
 
 	memset(src_vq, 0, sizeof(*src_vq));
 	src_vq->type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
-	src_vq->io_modes = VB2_MMAP | VB2_USERPTR;
+	src_vq->io_modes = VB2_MMAP | VB2_USERPTR | VB2_DMABUF;
 	src_vq->drv_priv = ctx;
 	src_vq->buf_struct_size = sizeof(struct v4l2_m2m_buffer);
 	src_vq->ops = &jpeg_enc_vb2_qops;
@@ -353,7 +301,7 @@ static int queue_init_enc(void *priv, struct vb2_queue *src_vq,
 
 	memset(dst_vq, 0, sizeof(*dst_vq));
 	dst_vq->type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
-	dst_vq->io_modes = VB2_MMAP | VB2_USERPTR;
+	dst_vq->io_modes = VB2_MMAP | VB2_USERPTR | VB2_DMABUF;
 	dst_vq->drv_priv = ctx;
 	dst_vq->buf_struct_size = sizeof(struct v4l2_m2m_buffer);
 	dst_vq->ops = &jpeg_enc_vb2_qops;
@@ -412,6 +360,12 @@ static int jpeg_m2m_open(struct file *file)
 #else
 	pm_runtime_get_sync(&dev->plat_dev->dev);
 #endif
+#else
+	dev->vb2->resume(dev->alloc_ctx);
+#ifdef CONFIG_BUSFREQ_OPP
+	/* lock bus frequency */
+	dev_lock(dev->bus_dev, &dev->plat_dev->dev, BUSFREQ_400MHZ);
+#endif
 #endif
 
 	return 0;
@@ -427,8 +381,6 @@ static int jpeg_m2m_release(struct file *file)
 	unsigned long flags;
 
 	spin_lock_irqsave(&ctx->slock, flags);
-	if (test_bit(0, &ctx->dev->hw_run) == 0)
-		del_timer_sync(&ctx->dev->watchdog_timer);
 
 	v4l2_m2m_ctx_release(ctx->m2m_ctx);
 	spin_unlock_irqrestore(&ctx->slock, flags);
@@ -442,6 +394,12 @@ static int jpeg_m2m_release(struct file *file)
 #endif
 #else
 	pm_runtime_put_sync(&ctx->dev->plat_dev->dev);
+#endif
+#else
+	ctx->dev->vb2->suspend(ctx->dev->alloc_ctx);
+#ifdef CONFIG_BUSFREQ_OPP
+	/* Unlock bus frequency */
+	dev_unlock(ctx->dev->bus_dev, &ctx->dev->plat_dev->dev);
 #endif
 #endif
 	clk_disable(ctx->dev->clk);
@@ -516,20 +474,12 @@ static void jpeg_device_enc_run(void *priv)
 	jpeg_set_stream_buf_address(dev->reg_base, dev->vb2->plane_addr(vb, 0));
 
 	vb = v4l2_m2m_next_src_buf(ctx->m2m_ctx);
-	if (enc_param.in_plane == 1)
-		jpeg_set_frame_buf_address(dev->reg_base,
-			enc_param.in_fmt, dev->vb2->plane_addr(vb, 0), 0, 0);
-	if (enc_param.in_plane == 2)
-		jpeg_set_frame_buf_address(dev->reg_base,
-			enc_param.in_fmt, dev->vb2->plane_addr(vb, 0),
-			dev->vb2->plane_addr(vb, 1), 0);
-	if (enc_param.in_plane == 3)
-		jpeg_set_frame_buf_address(dev->reg_base,
-			enc_param.in_fmt, dev->vb2->plane_addr(vb, 0),
-			dev->vb2->plane_addr(vb, 1), dev->vb2->plane_addr(vb, 2));
+	jpeg_set_frame_buf_address(dev->reg_base,
+	enc_param.in_fmt, dev->vb2->plane_addr(vb, 0), enc_param.in_width, enc_param.in_height);
 
 	jpeg_set_encode_hoff_cnt(dev->reg_base, enc_param.out_fmt);
 
+	jpeg_set_timer_count(dev->reg_base, enc_param.in_width * enc_param.in_height * 32 + 0xff);
 	jpeg_set_enc_dec_mode(dev->reg_base, ENCODING);
 
 	spin_unlock_irqrestore(&ctx->slock, flags);
@@ -547,16 +497,6 @@ static void jpeg_device_dec_run(void *priv)
 
 	spin_lock_irqsave(&ctx->slock, flags);
 
-	printk(KERN_DEBUG "dec_run.\n");
-
-	if (timer_pending(&ctx->dev->watchdog_timer) == 0) {
-		ctx->dev->watchdog_timer.expires = jiffies +
-					msecs_to_jiffies(JPEG_WATCHDOG_INTERVAL);
-		add_timer(&ctx->dev->watchdog_timer);
-	}
-
-	set_bit(0, &ctx->dev->hw_run);
-
 	dev->mode = DECODING;
 	dec_param = ctx->param.dec_param;
 
@@ -569,16 +509,8 @@ static void jpeg_device_dec_run(void *priv)
 	jpeg_set_stream_buf_address(dev->reg_base, dev->vb2->plane_addr(vb, 0));
 
 	vb = v4l2_m2m_next_dst_buf(ctx->m2m_ctx);
-	if (dec_param.out_plane == 1)
-		jpeg_set_frame_buf_address(dev->reg_base,
-			dec_param.out_fmt, dev->vb2->plane_addr(vb, 0), 0, 0);
-	else if (dec_param.out_plane == 2) {
-		jpeg_set_frame_buf_address(dev->reg_base,
-		dec_param.out_fmt, dev->vb2->plane_addr(vb, 0), dev->vb2->plane_addr(vb, 1), 0);
-	} else if (dec_param.out_plane == 3)
-		jpeg_set_frame_buf_address(dev->reg_base,
-			dec_param.out_fmt, dev->vb2->plane_addr(vb, 0),
-			dev->vb2->plane_addr(vb, 1), dev->vb2->plane_addr(vb, 2));
+	jpeg_set_frame_buf_address(dev->reg_base,
+	dec_param.out_fmt, dev->vb2->plane_addr(vb, 0), dec_param.in_width, dec_param.in_height);
 
 	if (dec_param.out_width > 0 && dec_param.out_height > 0) {
 		if ((dec_param.out_width * 2 == dec_param.in_width) &&
@@ -593,6 +525,7 @@ static void jpeg_device_dec_run(void *priv)
 
 	jpeg_set_dec_out_fmt(dev->reg_base, dec_param.out_fmt);
 	jpeg_set_dec_bitstream_size(dev->reg_base, dec_param.size);
+	jpeg_set_timer_count(dev->reg_base, dec_param.in_width * dec_param.in_height * 8 + 0xff);
 	jpeg_set_enc_dec_mode(dev->reg_base, DECODING);
 
 	spin_unlock_irqrestore(&ctx->slock, flags);
@@ -640,7 +573,7 @@ static irqreturn_t jpeg_irq(int irq, void *priv)
 	struct jpeg_ctx *ctx;
 	unsigned long payload_size = 0;
 
-	spin_lock(&ctrl->slock);
+	jpeg_clean_interrupt(ctrl->reg_base);
 
 	if (ctrl->mode == ENCODING)
 		ctx = v4l2_m2m_get_curr_priv(ctrl->m2m_dev_enc);
@@ -649,10 +582,11 @@ static irqreturn_t jpeg_irq(int irq, void *priv)
 
 	if (ctx == 0) {
 		printk(KERN_ERR "ctx is null.\n");
-		int_status = jpeg_int_pending(ctrl);
 		jpeg_sw_reset(ctrl->reg_base);
 		goto ctx_err;
 	}
+
+	spin_lock(&ctx->slock);
 
 	src_vb = v4l2_m2m_src_buf_remove(ctx->m2m_ctx);
 	dst_vb = v4l2_m2m_dst_buf_remove(ctx->m2m_ctx);
@@ -660,7 +594,7 @@ static irqreturn_t jpeg_irq(int irq, void *priv)
 	int_status = jpeg_int_pending(ctrl);
 
 	if (int_status) {
-		switch (int_status & 0x1f) {
+		switch (int_status & 0x1ff) {
 		case 0x1:
 			ctrl->irq_ret = ERR_PROT;
 			break;
@@ -675,6 +609,9 @@ static irqreturn_t jpeg_irq(int irq, void *priv)
 			break;
 		case 0x10:
 			ctrl->irq_ret = ERR_FRAME;
+			break;
+		case 0x20:
+			ctrl->irq_ret = ERR_TIME_OUT;
 			break;
 		default:
 			ctrl->irq_ret = ERR_UNKNOWN;
@@ -696,13 +633,13 @@ static irqreturn_t jpeg_irq(int irq, void *priv)
 		v4l2_m2m_buf_done(dst_vb, VB2_BUF_STATE_ERROR);
 	}
 
-	clear_bit(0, &ctx->dev->hw_run);
 	if (ctrl->mode == ENCODING)
 		v4l2_m2m_job_finish(ctrl->m2m_dev_enc, ctx->m2m_ctx);
 	else
 		v4l2_m2m_job_finish(ctrl->m2m_dev_dec, ctx->m2m_ctx);
+
+	spin_unlock(&ctx->slock);
 ctx_err:
-	spin_unlock(&ctrl->slock);
 	return IRQ_HANDLED;
 }
 
@@ -882,13 +819,6 @@ static int jpeg_probe(struct platform_device *pdev)
 	dev->bus_dev = dev_get("exynos-busfreq");
 #endif
 
-	dev->watchdog_workqueue = create_singlethread_workqueue(JPEG_NAME);
-	INIT_WORK(&dev->watchdog_work, jpeg_watchdog_worker);
-	atomic_set(&dev->watchdog_cnt, 0);
-	init_timer(&dev->watchdog_timer);
-	dev->watchdog_timer.data = (unsigned long)dev;
-	dev->watchdog_timer.function = jpeg_watchdog;
-
 	/* clock disable */
 	clk_disable(dev->clk);
 
@@ -929,10 +859,6 @@ static int jpeg_remove(struct platform_device *pdev)
 {
 	struct jpeg_dev *dev = platform_get_drvdata(pdev);
 
-	del_timer_sync(&dev->watchdog_timer);
-	flush_workqueue(dev->watchdog_workqueue);
-	destroy_workqueue(dev->watchdog_workqueue);
-
 	v4l2_m2m_release(dev->m2m_dev_enc);
 	video_unregister_device(dev->vfd_enc);
 
@@ -958,6 +884,11 @@ static int jpeg_remove(struct platform_device *pdev)
 	pm_runtime_put_sync(&pdev->dev);
 	pm_runtime_disable(&pdev->dev);
 #endif
+#else
+#ifdef CONFIG_BUSFREQ_OPP
+	/* lock bus frequency */
+	dev_unlock(dev->bus_dev, &pdev->dev);
+#endif
 #endif
 	kfree(dev);
 	return 0;
@@ -980,6 +911,17 @@ static int jpeg_suspend(struct platform_device *pdev, pm_message_t state)
 #else
 	pm_runtime_put_sync(&pdev->dev);
 #endif
+#else
+	struct jpeg_dev *dev = platform_get_drvdata(pdev);
+
+	if (dev->ctx) {
+		dev->vb2->suspend(dev->alloc_ctx);
+		clk_disable(dev->clk);
+	}
+#ifdef CONFIG_BUSFREQ_OPP
+	/* lock bus frequency */
+	dev_unlock(dev->bus_dev, &pdev->dev);
+#endif
 #endif
 	return 0;
 }
@@ -997,6 +939,13 @@ static int jpeg_resume(struct platform_device *pdev)
 #else
 	pm_runtime_get_sync(&pdev->dev);
 #endif
+#else
+	struct jpeg_dev *dev = platform_get_drvdata(pdev);
+
+	if (dev->ctx) {
+		clk_enable(dev->clk);
+		dev->vb2->resume(dev->alloc_ctx);
+	}
 #endif
 	return 0;
 }
