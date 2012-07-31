@@ -118,6 +118,10 @@ static void charger_gpio_init(void)
 
 		s3c_gpio_cfgpin(GPIO_OTG_VBUS_SENSE_FAC, S3C_GPIO_INPUT);
 		s3c_gpio_setpull(GPIO_OTG_VBUS_SENSE_FAC, S3C_GPIO_PULL_NONE);
+		s5p_gpio_set_pd_cfg(GPIO_OTG_VBUS_SENSE_FAC,
+					S5P_GPIO_PD_PREV_STATE);
+		s5p_gpio_set_pd_pull(GPIO_OTG_VBUS_SENSE_FAC,
+					S5P_GPIO_PD_UPDOWN_DISABLE);
 	}
 
 	s3c_gpio_cfgpin(gpio_TA_nCHG, S3C_GPIO_INPUT);
