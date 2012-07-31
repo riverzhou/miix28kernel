@@ -152,6 +152,9 @@ static struct wm8994_pdata wm1811_pdata = {
 	.micbias = {0x2f, 0x2f},
 	.micd_lvl_sel = 0xff,
 
+	/* Support external capacitors*/
+	.jd_ext_cap = 1,
+
 	.ldo_ena_always_driven = true,
 	.irq_base = MANTA_IRQ_BOARD_AUDIO_START,
 };
