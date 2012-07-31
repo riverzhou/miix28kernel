@@ -402,6 +402,16 @@ static struct dw_mci_board exynos_dwmci0_pdata __initdata = {
 	.ddr_timing		= 0x03030002,
 };
 
+/* DEVFREQ controlling mif */
+static struct platform_device exynos_bus_mif_devfreq = {
+	.name                   = "exynos5-bus-mif",
+};
+
+/* DEVFREQ controlling int */
+static struct platform_device exynos_bus_int_devfreq = {
+	.name                   = "exynos5-bus-int",
+};
+
 static struct platform_device *manta_devices[] __initdata = {
 	&ramconsole_device,
 	&persistent_trace_device,
@@ -422,6 +432,8 @@ static struct platform_device *manta_devices[] __initdata = {
 	&s3c_device_usb_hsotg,
 	&s5p_device_ehci,
 	&exynos4_device_ohci,
+	&exynos_bus_mif_devfreq,
+	&exynos_bus_int_devfreq,
 };
 
 static struct s3c_hsotg_plat manta_hsotg_pdata;
