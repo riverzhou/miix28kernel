@@ -48,6 +48,7 @@
 #include <mach/exynos_fiq_debugger.h>
 #include <mach/exynos-ion.h>
 #include <mach/dwmci.h>
+#include <mach/tmu.h>
 
 #include "../../../drivers/staging/android/ram_console.h"
 #include "board-manta.h"
@@ -290,6 +291,19 @@ static struct i2c_board_info i2c_devs2[] __initdata = {
 	},
 };
 
+/* TMU */
+static struct tmu_data manta_tmu_pdata __initdata = {
+	.ts = {
+		.stop_throttle		= 78,
+		.start_throttle		= 80,
+		.start_tripping		= 110,
+		.start_emergency	= 120,
+	},
+
+	.efuse_value	= 80,
+	.slope		= 0x07000F02,
+};
+
 /* defined in arch/arm/mach-exynos/reserve-mem.c */
 extern void exynos_cma_region_reserve(struct cma_region *,
 				struct cma_region *, size_t, const char *);
@@ -384,6 +398,7 @@ static struct platform_device *manta_devices[] __initdata = {
 	&manta_event_device,
 	&exynos5_device_dwmci0,
 	&exynos_device_ion,
+	&exynos_device_tmu,
 	&s3c_device_usb_hsotg,
 };
 
@@ -520,6 +535,7 @@ static void __init manta_machine_init(void)
 	else
 		s3c_adc_set_platdata(&manta_adc_data);
 
+	exynos_tmu_set_platdata(&manta_tmu_pdata);
 	manta_gpio_power_init();
 
 	manta_udc_init();
