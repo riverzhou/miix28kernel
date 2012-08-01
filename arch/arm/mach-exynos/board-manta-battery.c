@@ -55,6 +55,7 @@ static int charge_source;
 static int manta_bat_charge_source[CHARGE_CONNECTOR_MAX];
 static bool manta_bat_usb_online;
 static bool manta_bat_pogo_online;
+static bool manta_bat_otg_enabled;
 static bool manta_bat_chg_enabled;
 static bool manta_bat_chg_enable_synced;
 static struct power_supply *manta_bat_smb347_mains;
@@ -192,6 +193,13 @@ int manta_bat_otg_enable(bool enable)
 		return -ENODEV;
 	}
 
+	mutex_lock(&manta_bat_charger_detect_lock);
+
+	if (manta_bat_otg_enabled == enable) {
+		mutex_unlock(&manta_bat_charger_detect_lock);
+		return 0;
+	}
+
 	value.intval = enable ? 1 : 0;
 	ret = manta_bat_smb347_usb->set_property(manta_bat_smb347_usb,
 						 POWER_SUPPLY_PROP_USB_OTG,
@@ -199,6 +207,10 @@ int manta_bat_otg_enable(bool enable)
 	if (ret)
 		pr_err("%s: failed to set smb347-usb OTG mode\n",
 		       __func__);
+	else
+		manta_bat_otg_enabled = enable;
+
+	mutex_unlock(&manta_bat_charger_detect_lock);
 	return ret;
 }
 
@@ -350,7 +362,8 @@ static void change_charger_status(void)
 	}
 
 	if (exynos5_manta_get_revision() > MANTA_REV_ALPHA) {
-		usb_connected.intval = gpio_get_value(GPIO_OTG_VBUS_SENSE);
+		if (!manta_bat_otg_enabled)
+			usb_connected.intval = gpio_get_value(GPIO_OTG_VBUS_SENSE);
 		pogo_connected.intval = gpio_get_value(GPIO_VBUS_POGO_5V);
 
 		if (manta_bat_smb347_usb &&
