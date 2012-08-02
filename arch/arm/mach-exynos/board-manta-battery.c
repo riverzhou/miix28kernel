@@ -646,14 +646,12 @@ static int manta_power_debug_dump(struct seq_file *s, void *unused)
 			gpio_get_value(GPIO_TA_INT));
 	}
 
-	seq_printf(s, "usb=%s type=%s; pogo=%s type=%s; selected=%s\n",
-		   manta_bat_usb_online ? "online" : "offline",
+	seq_printf(s, "usb: type=%s; pogo: type=%s\n",
+		   manta_bat_otg_enabled ? "otg" :
 		   charge_source_str(
 			   manta_bat_charge_source[CHARGE_CONNECTOR_USB]),
-		   manta_bat_pogo_online ? "online" : "offline",
 		   charge_source_str(
-			   manta_bat_charge_source[CHARGE_CONNECTOR_POGO]),
-		   charge_source_str(charge_source));
+			   manta_bat_charge_source[CHARGE_CONNECTOR_POGO]));
 	return 0;
 }
 
