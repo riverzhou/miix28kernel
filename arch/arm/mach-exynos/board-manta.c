@@ -260,6 +260,13 @@ static struct i2c_board_info i2c_devs0[] __initdata = {
 	},
 };
 
+struct s3c2410_platform_i2c i2c0_data __initdata = {
+	.flags		= 0,
+	.slave_addr	= 0x10,
+	.frequency	= 100*1000,
+	.sda_delay	= 100,
+};
+
 /* I2C1 */
 static struct i2c_board_info i2c_devs1[] __initdata = {
 	{
@@ -554,7 +561,7 @@ static void __init manta_machine_init(void)
 	exynos_ion_set_platdata();
 	manta_dwmci_init();
 
-	s3c_i2c0_set_platdata(NULL);
+	s3c_i2c0_set_platdata(&i2c0_data);
 	s3c_i2c1_set_platdata(NULL);
 	s3c_i2c2_set_platdata(NULL);
 	s3c_i2c3_set_platdata(NULL);
