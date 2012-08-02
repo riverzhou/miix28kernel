@@ -350,25 +350,29 @@ static void change_charger_status(void)
 	}
 
 	if (exynos5_manta_get_revision() > MANTA_REV_ALPHA) {
-		if (manta_bat_smb347_usb) {
-			usb_connected.intval = gpio_get_value(GPIO_OTG_VBUS_SENSE);
-			ret = manta_bat_smb347_usb->set_property(manta_bat_smb347_usb,
-					POWER_SUPPLY_PROP_ONLINE,
-					&usb_connected);
+		usb_connected.intval = gpio_get_value(GPIO_OTG_VBUS_SENSE);
+		pogo_connected.intval = gpio_get_value(GPIO_VBUS_POGO_5V);
+
+		if (manta_bat_smb347_usb &&
+		    usb_connected.intval != manta_bat_usb_online) {
+			ret = manta_bat_smb347_usb->set_property(
+				manta_bat_smb347_usb,
+				POWER_SUPPLY_PROP_ONLINE,
+				&usb_connected);
 			if (ret)
 				pr_err("%s: failed to change smb347-usb online\n",
-					__func__);
+				       __func__);
 		}
 
-		if (manta_bat_smb347_mains) {
-			pogo_connected.intval = gpio_get_value(GPIO_VBUS_POGO_5V);
+		if (manta_bat_smb347_mains &&
+		    pogo_connected.intval != manta_bat_pogo_online) {
 			ret = manta_bat_smb347_mains->set_property(
-					manta_bat_smb347_mains,
-					POWER_SUPPLY_PROP_ONLINE,
-					&pogo_connected);
+				manta_bat_smb347_mains,
+				POWER_SUPPLY_PROP_ONLINE,
+				&pogo_connected);
 			if (ret)
 				pr_err("%s: failed to change smb347-mains online\n",
-					__func__);
+				       __func__);
 		}
 	}
 
