@@ -91,6 +91,13 @@ config SND_SOC_SAMSUNG_MANTA_WM1811
 # For support ALP audio
 source "sound/soc/samsung/srp_alp/Kconfig"
 
+config SND_SOC_SAMSUNG_MANTA_SPDIF
+	tristate "SoC S/PDIF Audio support for MANTA"
+	depends on SND_SOC_SAMSUNG && MACH_MANTA
+	select SND_SAMSUNG_SPDIF
+	help
+	  This adds support spdif for manta.
+
 config SND_SOC_SAMSUNG_SMDK2443_WM9710
 	tristate "SoC AC97 Audio support for SMDK2443 - WM9710"
 	depends on SND_SOC_SAMSUNG && MACH_SMDK2443
