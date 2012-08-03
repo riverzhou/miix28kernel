@@ -24,6 +24,7 @@
 #include <plat/gpio-cfg.h>
 
 #include <linux/platform_data/max17047_fuelgauge.h>
+#include <linux/platform_data/ds2784_fuelgauge.h>
 #include <linux/platform_data/bq24191_charger.h>
 #include <linux/power/smb347-charger.h>
 #include <linux/platform_data/android_battery.h>
@@ -63,6 +64,7 @@ static struct power_supply *manta_bat_smb347_usb;
 static struct power_supply *manta_bat_smb347_battery;
 
 static struct max17047_fg_callbacks *fg_callbacks;
+static struct ds2784_fg_callbacks *ds2784_fg_callbacks;
 static struct bq24191_chg_callbacks *chg_callbacks;
 static struct android_bat_callbacks *bat_callbacks;
 
@@ -80,14 +82,29 @@ static void max17047_fg_register_callbacks(struct max17047_fg_callbacks *ptr)
 		fg_callbacks->get_temperature = NULL;
 }
 
+static void ds2784_fg_register_callbacks(struct ds2784_fg_callbacks *prt)
+{
+	ds2784_fg_callbacks = prt;
+}
+
 static void max17047_fg_unregister_callbacks(void)
 {
 	fg_callbacks = NULL;
 }
 
+static void ds2784_fg_unregister_callbacks(void)
+{
+	ds2784_fg_callbacks = NULL;
+}
+
 static struct max17047_platform_data max17047_fg_pdata = {
 	.register_callbacks = max17047_fg_register_callbacks,
 	.unregister_callbacks = max17047_fg_unregister_callbacks,
+};
+
+static struct ds2784_platform_data ds2784_fg_pdata = {
+	.register_callbacks = ds2784_fg_register_callbacks,
+	.unregister_callbacks = ds2784_fg_unregister_callbacks,
 };
 
 static void bq24191_chg_register_callbacks(struct bq24191_chg_callbacks *ptr)
@@ -548,32 +565,68 @@ static void manta_bat_set_charging_current(int charge_source)
 
 static int manta_bat_get_capacity(void)
 {
-	if (fg_callbacks && fg_callbacks->get_capacity)
-		return fg_callbacks->get_capacity(fg_callbacks);
+	int hw_rev = exynos5_manta_get_revision();
+
+	if (hw_rev >= MANTA_REV_BETA) {
+		if (ds2784_fg_callbacks && ds2784_fg_callbacks->get_capacity)
+			return ds2784_fg_callbacks->
+				get_capacity(ds2784_fg_callbacks);
+	} else {
+		if (fg_callbacks && fg_callbacks->get_capacity)
+			return fg_callbacks->get_capacity(fg_callbacks);
+	}
+
 	return -ENXIO;
 }
 
 static int manta_bat_get_temperature(int *temp_now)
 {
-	if (fg_callbacks && fg_callbacks->get_temperature)
-		return fg_callbacks->get_temperature(fg_callbacks,
+	int hw_rev = exynos5_manta_get_revision();
+
+	if (hw_rev >= MANTA_REV_BETA) {
+		if (ds2784_fg_callbacks && ds2784_fg_callbacks->get_temperature)
+			return ds2784_fg_callbacks->
+				get_temperature(ds2784_fg_callbacks, temp_now);
+	} else {
+		if (fg_callbacks && fg_callbacks->get_temperature)
+			return fg_callbacks->get_temperature(fg_callbacks,
 						     temp_now);
+	}
+
 	return -ENXIO;
 }
 
 static int manta_bat_get_voltage_now(void)
 {
-	if (fg_callbacks && fg_callbacks->get_voltage_now)
-		return fg_callbacks->get_voltage_now(fg_callbacks);
+	int hw_rev = exynos5_manta_get_revision();
+
+	if (hw_rev >= MANTA_REV_BETA) {
+		if (ds2784_fg_callbacks && ds2784_fg_callbacks->get_voltage_now)
+			return ds2784_fg_callbacks->
+				get_voltage_now(ds2784_fg_callbacks);
+	} else {
+		if (fg_callbacks && fg_callbacks->get_voltage_now)
+			return fg_callbacks->get_voltage_now(fg_callbacks);
+	}
+
 	return -ENXIO;
 }
 
 static int manta_bat_get_current_now(int *i_current)
 {
 	int ret = -ENXIO;
+	int hw_rev = exynos5_manta_get_revision();
 
-	if (fg_callbacks && fg_callbacks->get_current_now)
-		ret = fg_callbacks->get_current_now(fg_callbacks, i_current);
+	if (hw_rev >= MANTA_REV_BETA) {
+		if (ds2784_fg_callbacks && ds2784_fg_callbacks->get_current_now)
+			return ds2784_fg_callbacks->
+				get_current_now(ds2784_fg_callbacks, i_current);
+	} else {
+		if (fg_callbacks && fg_callbacks->get_current_now)
+			ret = fg_callbacks->get_current_now(fg_callbacks,
+								i_current);
+	}
+
 	return ret;
 }
 
@@ -695,6 +748,13 @@ static struct i2c_board_info i2c_devs2_common[] __initdata = {
 	},
 };
 
+static struct i2c_board_info i2c_devs2_beta[] __initdata = {
+	{
+		I2C_BOARD_INFO("ds2784", 0x30 >> 1),
+		.platform_data  = &ds2784_fg_pdata,
+	},
+};
+
 static struct i2c_board_info i2c_devs2_lunchbox[] __initdata = {
 	{
 		I2C_BOARD_INFO("bq24191-charger", 0x6a),
@@ -718,7 +778,11 @@ void __init exynos5_manta_battery_init(void)
 	platform_add_devices(manta_battery_devices,
 		ARRAY_SIZE(manta_battery_devices));
 
-	i2c_register_board_info(2, i2c_devs2_common,
+	if (hw_rev >= MANTA_REV_BETA)
+		i2c_register_board_info(2, i2c_devs2_beta,
+				ARRAY_SIZE(i2c_devs2_beta));
+	else
+		i2c_register_board_info(2, i2c_devs2_common,
 				ARRAY_SIZE(i2c_devs2_common));
 
 	if (hw_rev  >= MANTA_REV_PRE_ALPHA)
