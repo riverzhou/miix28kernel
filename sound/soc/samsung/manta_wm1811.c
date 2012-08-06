@@ -21,6 +21,8 @@
 #include <linux/platform_device.h>
 #include <linux/slab.h>
 
+#include <linux/mfd/wm8994/registers.h>
+
 #include <sound/jack.h>
 #include <sound/pcm.h>
 #include <sound/pcm_params.h>
@@ -275,6 +277,26 @@ static int manta_late_probe(struct snd_soc_card *card)
 	return 0;
 }
 
+static int manta_card_suspend_post(struct snd_soc_card *card)
+{
+	struct snd_soc_codec *codec = card->rtd->codec;
+
+	snd_soc_update_bits(codec, WM8994_AIF1_MASTER_SLAVE,
+					WM8994_AIF1_TRI_MASK, WM8994_AIF1_TRI);
+
+	return 0;
+}
+
+static int manta_card_resume_pre(struct snd_soc_card *card)
+{
+	struct snd_soc_codec *codec = card->rtd->codec;
+
+	snd_soc_update_bits(codec, WM8994_AIF1_MASTER_SLAVE,
+					WM8994_AIF1_TRI_MASK, 0);
+
+	return 0;
+}
+
 static struct snd_soc_card manta = {
 	.name = "Manta-I2S",
 	.owner = THIS_MODULE,
@@ -291,6 +313,9 @@ static struct snd_soc_card manta = {
 	.num_dapm_routes = ARRAY_SIZE(manta_paths),
 
 	.late_probe = manta_late_probe,
+
+	.suspend_post = manta_card_suspend_post,
+	.resume_pre = manta_card_resume_pre,
 };
 
 static int __devinit snd_manta_probe(struct platform_device *pdev)
