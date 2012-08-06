@@ -39,12 +39,10 @@ static struct sleep_save exynos5_clock_save[] = {
 	SAVE_ITEM(EXYNOS5_CLKSRC_MASK_MAUDIO),
 	SAVE_ITEM(EXYNOS5_CLKSRC_MASK_PERIC0),
 	SAVE_ITEM(EXYNOS5_CLKSRC_MASK_PERIC1),
-	SAVE_ITEM(EXYNOS5_CLKSRC_MASK_ISP),
+	SAVE_ITEM(EXYNOS5_CLKGATE_IP_CORE),
 	SAVE_ITEM(EXYNOS5_CLKGATE_IP_SYSRGT),
 	SAVE_ITEM(EXYNOS5_CLKGATE_IP_ACP),
-	SAVE_ITEM(EXYNOS5_CLKGATE_IP_ISP0),
-	SAVE_ITEM(EXYNOS5_CLKGATE_IP_ISP1),
-	SAVE_ITEM(EXYNOS5_CLKGATE_SCLK_ISP),
+	SAVE_ITEM(EXYNOS5_CLKGATE_IP_SYSLFT),
 	SAVE_ITEM(EXYNOS5_CLKGATE_IP_GSCL),
 	SAVE_ITEM(EXYNOS5_CLKGATE_IP_DISP1),
 	SAVE_ITEM(EXYNOS5_CLKGATE_IP_MFC),
@@ -55,10 +53,8 @@ static struct sleep_save exynos5_clock_save[] = {
 	SAVE_ITEM(EXYNOS5_CLKGATE_IP_PERIS),
 	SAVE_ITEM(EXYNOS5_CLKGATE_IP_CDREX),
 	SAVE_ITEM(EXYNOS5_CLKGATE_BLOCK),
+	SAVE_ITEM(EXYNOS5_CLKGATE_BUS_SYSLFT),
 	SAVE_ITEM(EXYNOS5_CLKDIV_ACP),
-	SAVE_ITEM(EXYNOS5_CLKDIV_ISP0),
-	SAVE_ITEM(EXYNOS5_CLKDIV_ISP1),
-	SAVE_ITEM(EXYNOS5_CLKDIV_ISP2),
 	SAVE_ITEM(EXYNOS5_CLKDIV_TOP0),
 	SAVE_ITEM(EXYNOS5_CLKDIV_TOP1),
 	SAVE_ITEM(EXYNOS5_CLKDIV_GSCL),
@@ -75,7 +71,6 @@ static struct sleep_save exynos5_clock_save[] = {
 	SAVE_ITEM(EXYNOS5_CLKDIV_PERIC3),
 	SAVE_ITEM(EXYNOS5_CLKDIV_PERIC4),
 	SAVE_ITEM(EXYNOS5_CLKDIV_PERIC5),
-	SAVE_ITEM(EXYNOS5_SCLK_DIV_ISP),
 	SAVE_ITEM(EXYNOS5_CLKDIV2_RATIO0),
 	SAVE_ITEM(EXYNOS5_CLKDIV2_RATIO1),
 	SAVE_ITEM(EXYNOS5_CLKDIV4_RATIO),
@@ -89,7 +84,6 @@ static struct sleep_save exynos5_clock_save[] = {
 	SAVE_ITEM(EXYNOS5_CLKSRC_FSYS),
 	SAVE_ITEM(EXYNOS5_CLKSRC_PERIC0),
 	SAVE_ITEM(EXYNOS5_CLKSRC_PERIC1),
-	SAVE_ITEM(EXYNOS5_SCLK_SRC_ISP),
 	SAVE_ITEM(EXYNOS5_EPLL_CON0),
 	SAVE_ITEM(EXYNOS5_EPLL_CON1),
 	SAVE_ITEM(EXYNOS5_EPLL_CON2),
@@ -269,6 +263,11 @@ static int exynos5_clk_ip_isp0_ctrl(struct clk *clk, int enable)
 static int exynos5_clk_ip_isp1_ctrl(struct clk *clk, int enable)
 {
 	return s5p_gatectrl(EXYNOS5_CLKGATE_IP_ISP1, clk, enable);
+}
+
+static int exynos5_clk_bus_syslft_ctrl(struct clk *clk, int enable)
+{
+	return s5p_gatectrl(EXYNOS5_CLKGATE_BUS_SYSLFT, clk, enable);
 }
 
 static int exynos5_clk_clkout_ctrl(struct clk *clk, int enable)
@@ -1129,6 +1128,10 @@ static struct clk exynos5_init_clocks_off[] = {
 		.devname	= "s3c64xx-spi.2",
 		.enable		= exynos5_clk_ip_peric_ctrl,
 		.ctrlbit	= (1 << 18),
+	}, {
+		.name		= "efclk",
+		.enable		= exynos5_clk_bus_syslft_ctrl,
+		.ctrlbit	= (1 << 16),
 	}
 };
 
