@@ -926,4 +926,4 @@ static int __init exynos5_manta_battery_late_init(void)
 	return 0;
 }
 
-device_initcall(exynos5_manta_battery_late_init);
+late_initcall(exynos5_manta_battery_late_init);
