@@ -71,6 +71,8 @@ void __init exynos5_manta_input_init(void)
 	s3c_gpio_setpull(GPIO_TOUCH_CHG, S3C_GPIO_PULL_NONE);
 	s5p_register_gpio_interrupt(GPIO_TOUCH_CHG);
 
+	s5p_gpio_set_pd_cfg(GPIO_TOUCH_CHG, S5P_GPIO_PD_PREV_STATE);
+	s5p_gpio_set_pd_pull(GPIO_TOUCH_CHG, S5P_GPIO_PD_UPDOWN_DISABLE);
 	s5p_gpio_set_pd_cfg(GPIO_TOUCH_RESET, S5P_GPIO_PD_PREV_STATE);
 	s5p_gpio_set_pd_cfg(GPIO_TOUCH_EN_XVDD, S5P_GPIO_PD_PREV_STATE);
 	s5p_gpio_set_pd_cfg(GPIO_TOUCH_EN_BOOSTER, S5P_GPIO_PD_PREV_STATE);
