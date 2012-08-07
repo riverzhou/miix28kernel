@@ -247,14 +247,14 @@ static void exynos5_setup_wlan_cfg_gpio(int width)
 	for (gpio = EXYNOS5_GPC2(0); gpio < EXYNOS5_GPC2(2); gpio++) {
 		s3c_gpio_cfgpin(gpio, S3C_GPIO_SFN(2));
 		s3c_gpio_setpull(gpio, S3C_GPIO_PULL_NONE);
-		s5p_gpio_set_drvstr(gpio, S5P_GPIO_DRVSTR_LV3);
+		s5p_gpio_set_drvstr(gpio, S5P_GPIO_DRVSTR_LV2);
 	}
 
 	for (gpio = EXYNOS5_GPC2(3); gpio <= EXYNOS5_GPC2(6); gpio++) {
 		/* Data pin GPC2[3:6] to special-function 2 */
 		s3c_gpio_cfgpin(gpio, S3C_GPIO_SFN(2));
 		s3c_gpio_setpull(gpio, S3C_GPIO_PULL_NONE);
-		s5p_gpio_set_drvstr(gpio, S5P_GPIO_DRVSTR_LV3);
+		s5p_gpio_set_drvstr(gpio, S5P_GPIO_DRVSTR_LV2);
 	}
 }
 
@@ -264,9 +264,10 @@ static struct dw_mci_board exynos_wlan_pdata __initdata = {
 	.quirks			= DW_MCI_QUIRK_HIGHSPEED |
 				  DW_MCI_QUIRK_IDMAC_DTO,
 	.bus_hz			= 50 * 1000 * 1000,
-	.max_bus_hz		= 50 * 1000 * 1000,
-	.caps			= MMC_CAP_UHS_SDR50 |
+	.max_bus_hz		= 200 * 1000 * 1000,
+	.caps			= MMC_CAP_UHS_SDR104 |
 				  MMC_CAP_4_BIT_DATA | MMC_CAP_SD_HIGHSPEED,
+	.caps2			= MMC_CAP2_BROKEN_VOLTAGE,
 	.pm_caps		= MMC_PM_KEEP_POWER | MMC_PM_IGNORE_PM_NOTIFY,
 	.fifo_depth		= 0x80,
 	.detect_delay_ms	= 0,
@@ -277,6 +278,7 @@ static struct dw_mci_board exynos_wlan_pdata __initdata = {
 	.ext_cd_cleanup		= exynos5_manta_wlan_ext_cd_cleanup,
 	.sdr_timing		= 0x03040002,
 	.ddr_timing		= 0x03030002,
+	.clk_drv 		= 2,
 };
 
 static struct platform_device *manta_wlan_devs[] __initdata = {
