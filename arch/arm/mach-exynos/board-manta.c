@@ -258,6 +258,9 @@ static struct i2c_board_info i2c_devs0[] __initdata = {
 	{
 		I2C_BOARD_INFO("exynos_hdcp", (0x74 >> 1)),
 	},
+	{
+		I2C_BOARD_INFO("exynos_edid", (0xA0 >> 1)),
+	},
 };
 
 struct s3c2410_platform_i2c i2c0_data __initdata = {
