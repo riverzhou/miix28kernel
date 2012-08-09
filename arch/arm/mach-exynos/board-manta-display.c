@@ -150,6 +150,7 @@ static struct video_info manta_dp_config = {
 
 static void manta_backlight_on(void)
 {
+	usleep_range(97000, 97000);
 	gpio_set_value(GPIO_LED_BL_RST, 1);
 }
 
