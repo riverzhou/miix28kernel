@@ -221,6 +221,8 @@ void __init exynos5_manta_display_init(void)
 	gpio_request_one(GPIO_LCD_EN, GPIOF_OUT_INIT_LOW, "LCD_EN");
 	/* LED_BACKLIGHT_RESET: XCI1RGB_5 => GPG0_5 */
 	gpio_request_one(GPIO_LED_BL_RST, GPIOF_OUT_INIT_LOW, "LED_BL_RST");
+	s5p_gpio_set_pd_cfg(GPIO_LED_BL_RST, S5P_GPIO_PD_PREV_STATE);
+	s5p_gpio_set_pd_pull(GPIO_LED_BL_RST, S5P_GPIO_PD_UPDOWN_DISABLE);
 
 	samsung_bl_set(&manta_bl_gpio_info, &manta_bl_data);
 	s5p_fimd1_set_platdata(&manta_lcd1_pdata);
