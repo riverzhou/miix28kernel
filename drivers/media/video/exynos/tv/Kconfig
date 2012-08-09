@@ -28,6 +28,7 @@ config VIDEO_EXYNOS_HDMI
 	depends on VIDEO_EXYNOS_TV
 	depends on SWITCH
 	select VIDEO_EXYNOS_HDMIPHY
+	select FB_MODE_HELPERS
 	help
 	  Say Y here if you want support for the HDMI output
 	  interface in S5P Samsung SoC. The driver can be compiled

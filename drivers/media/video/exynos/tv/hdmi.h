@@ -371,6 +371,11 @@ int hdcp_prepare(struct hdmi_device *hdev);
 int hdcp_i2c_read(struct hdmi_device *hdev, u8 offset, int bytes, u8 *buf);
 int hdcp_i2c_write(struct hdmi_device *hdev, u8 offset, int bytes, u8 *buf);
 
+/** EDID functions */
+int edid_update(struct hdmi_device *hdev);
+u32 edid_enum_presets(struct hdmi_device *hdev, int index);
+u32 edid_preferred_preset(struct hdmi_device *hdev);
+
 static inline
 void hdmi_write(struct hdmi_device *hdev, u32 reg_id, u32 value)
 {
