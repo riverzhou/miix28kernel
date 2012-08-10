@@ -232,7 +232,7 @@ static struct snd_soc_dai_link manta_dai[] = {
 		.stream_name = "Media secondary",
 		.cpu_dai_name = "samsung-i2s.4",
 		.codec_dai_name = "wm8994-aif1",
-#ifdef CONFIG_SND_SAMSUNG_ALP
+#ifdef CONFIG_SND_SAMSUNG_USE_IDMA
 		.platform_name = "samsung-idma",
 #else
 		.platform_name = "samsung-audio",
