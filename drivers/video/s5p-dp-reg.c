@@ -72,6 +72,64 @@ void s5p_dp_lane_swap(struct s5p_dp_device *dp, bool enable)
 	writel(reg, dp->reg_base + S5P_DP_LANE_MAP);
 }
 
+void s5p_dp_init_analog_param(struct s5p_dp_device *dp)
+{
+	u32 reg;
+	struct s5p_dp_platdata *pdata = dp->dev->platform_data;
+	struct analog_param *analog_param = pdata->analog_param;
+
+	reg = TX_TERMINAL_CTRL_50_OHM;
+	writel(reg, dp->reg_base + S5P_DP_ANALOG_CTL_1);
+
+	reg = SEL_24M | TX_DVDD_BIT_1_0625V;
+	writel(reg, dp->reg_base + S5P_DP_ANALOG_CTL_2);
+
+	reg = DRIVE_DVDD_BIT_1_0625V | VCO_BIT_600_MICRO;
+	writel(reg, dp->reg_base + S5P_DP_ANALOG_CTL_3);
+
+	if (!analog_param) {
+		reg = PD_RING_OSC | AUX_TERMINAL_CTRL_50_OHM |
+			TX_CUR1_2X | TX_CUR_8_MA;
+		writel(reg, dp->reg_base + S5P_DP_PLL_FILTER_CTL_1);
+
+		reg = CH3_AMP_400_MV | CH2_AMP_400_MV |
+			CH1_AMP_400_MV | CH0_AMP_400_MV;
+		writel(reg, dp->reg_base + S5P_DP_TX_AMP_TUNING_CTL);
+	} else {
+		int tx_amp;
+
+		reg = PD_RING_OSC | TX_CUR1_2X | TX_CUR_8_MA;
+		switch (analog_param->aux_tx_terminal_resistor) {
+		case AUX_TX_37_5_OHM:
+			reg |= AUX_TERMINAL_CTRL_37_5_OHM;
+			break;
+		case AUX_TX_45_OHM:
+			reg |= AUX_TERMINAL_CTRL_45_OHM;
+			break;
+		case AUX_TX_50_OHM:
+			reg |= AUX_TERMINAL_CTRL_50_OHM;
+			break;
+		case AUX_TX_65_OHM:
+			reg |= AUX_TERMINAL_CTRL_65_OHM;
+			break;
+		}
+		writel(reg, dp->reg_base + S5P_DP_PLL_FILTER_CTL_1);
+
+		tx_amp = analog_param->tx_amplitude;
+		if (tx_amp < 200000 || tx_amp > 500000) {
+			dev_warn(dp->dev,
+				 "TX amp out of range, defaulting to 400mV\n");
+			tx_amp = 400000;
+		}
+
+		tx_amp = ((tx_amp - 400000) / 12500) & 0x1f;
+
+		reg = (tx_amp << CH3_AMP_SHIFT) | (tx_amp << CH2_AMP_SHIFT) |
+			(tx_amp << CH1_AMP_SHIFT) | (tx_amp << CH0_AMP_SHIFT);
+		writel(reg, dp->reg_base + S5P_DP_TX_AMP_TUNING_CTL);
+	}
+}
+
 void s5p_dp_init_interrupt(struct s5p_dp_device *dp)
 {
 	/* Set interrupt pin assertion polarity as high */
@@ -118,8 +176,6 @@ void s5p_dp_reset(struct s5p_dp_device *dp)
 
 	s5p_dp_lane_swap(dp, 0);
 
-	writel(0x75, dp->reg_base + S5P_DP_PLL_FILTER_CTL_1);
-
 	writel(0x0, dp->reg_base + S5P_DP_SYS_CTL_1);
 	writel(0x40, dp->reg_base + S5P_DP_SYS_CTL_2);
 	writel(0x0, dp->reg_base + S5P_DP_SYS_CTL_3);
@@ -143,6 +199,7 @@ void s5p_dp_reset(struct s5p_dp_device *dp)
 
 	writel(0x00000101, dp->reg_base + S5P_DP_SOC_GENERAL_CTL);
 
+	s5p_dp_init_analog_param(dp);
 	s5p_dp_init_interrupt(dp);
 }
 
