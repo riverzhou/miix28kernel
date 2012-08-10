@@ -17,10 +17,13 @@
 #include <linux/platform_device.h>
 #include <linux/clk.h>
 #include <linux/gpio.h>
+#include <linux/spi/spi.h>
 
+#include <plat/s3c64xx-spi.h>
 #include <plat/cpu.h>
 #include <plat/devs.h>
 
+#include <mach/spi-clocks.h>
 #include <mach/gpio.h>
 #include <mach/sysmmu.h>
 
@@ -208,7 +211,28 @@ static struct exynos5_fimc_is_sensor_info s5k6a3 = {
 };
 #endif
 
+static struct s3c64xx_spi_csinfo spi1_csi[] = {
+	[0] = {
+		.line           = EXYNOS5_GPA2(5),
+		.set_level      = gpio_set_value,
+		.fb_delay       = 0x2,
+	},
+};
+
+static struct spi_board_info spi1_board_info[] __initdata = {
+	{
+		.modalias               = "fimc_is_spi",
+		.platform_data          = NULL,
+		.max_speed_hz           = 10 * 1000 * 1000,
+		.bus_num                = 1,
+		.chip_select            = 0,
+		.mode                   = SPI_MODE_0,
+		.controller_data        = &spi1_csi[0],
+	}
+};
+
 static struct platform_device *camera_devices[] __initdata = {
+	&s3c64xx_device_spi1,
 	&exynos5_device_fimc_is,
 };
 
@@ -224,6 +248,20 @@ void __init exynos5_manta_camera_init(void)
 	manta_camera_sysmmu_init();
 	platform_add_devices(camera_devices, ARRAY_SIZE(camera_devices));
 
+	/* SPI */
+	exynos_spi_clock_setup(&s3c64xx_device_spi1.dev, 1);
+
+	if (!exynos_spi_cfg_cs(spi1_csi[0].line, 1)) {
+		s3c64xx_spi1_set_platdata(&s3c64xx_spi1_pdata,
+			EXYNOS_SPI_SRCCLK_SCLK, ARRAY_SIZE(spi1_csi));
+
+		spi_register_board_info(spi1_board_info,
+			ARRAY_SIZE(spi1_board_info));
+	} else {
+		pr_err("%s: Error requesting gpio for SPI-CH1 CS\n", __func__);
+	}
+
+	/* FIMC-IS-MC */
 	dev_set_name(&exynos5_device_fimc_is.dev, "s5p-mipi-csis.0");
 	clk_add_alias("gscl_wrap0", FIMC_IS_MODULE_NAME, "gscl_wrap0",
 			&exynos5_device_fimc_is.dev);
