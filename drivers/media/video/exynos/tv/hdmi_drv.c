@@ -42,7 +42,7 @@ MODULE_DESCRIPTION("Samsung HDMI");
 MODULE_LICENSE("GPL");
 
 /* default preset configured on probe */
-#define HDMI_DEFAULT_PRESET V4L2_DV_1080P60
+#define HDMI_DEFAULT_PRESET V4L2_DV_720P60
 
 /* I2C module and id for HDMIPHY */
 static struct i2c_board_info hdmiphy_info = {
@@ -275,7 +275,7 @@ static int hdmi_s_power(struct v4l2_subdev *sd, int on)
 #endif
 
 		disable_irq(hdev->ext_irq);
-		cancel_work_sync(&hdev->hpd_work_ext);
+		cancel_delayed_work_sync(&hdev->hpd_work_ext);
 
 		s5p_v4l2_int_src_hdmi_hpd();
 		hdmi_hpd_enable(hdev, 1);
@@ -394,11 +394,15 @@ static int hdmi_s_mbus_fmt(struct v4l2_subdev *sd,
 }
 
 static int hdmi_enum_dv_presets(struct v4l2_subdev *sd,
-	struct v4l2_dv_enum_preset *preset)
+	struct v4l2_dv_enum_preset *enum_preset)
 {
-	if (preset->index >= hdmi_pre_cnt)
+	struct hdmi_device *hdev = sd_to_hdmi_dev(sd);
+	u32 preset = edid_enum_presets(hdev, enum_preset->index);
+
+	if (preset == V4L2_DV_INVALID)
 		return -EINVAL;
-	return v4l_fill_dv_preset_info(hdmi_conf[preset->index].preset, preset);
+
+	return v4l_fill_dv_preset_info(preset, enum_preset);
 }
 
 static const struct v4l2_subdev_core_ops hdmi_sd_core_ops = {
@@ -623,19 +627,51 @@ static void hdmi_entity_info_print(struct hdmi_device *hdev)
 irqreturn_t hdmi_irq_handler_ext(int irq, void *dev_data)
 {
 	struct hdmi_device *hdev = dev_data;
-	queue_work(system_nrt_wq, &hdev->hpd_work_ext);
+	queue_delayed_work(system_nrt_wq, &hdev->hpd_work_ext, 0);
 
 	return IRQ_HANDLED;
+}
+
+static void hdmi_hpd_changed(struct hdmi_device *hdev, int state)
+{
+	struct device *dev = hdev->dev;
+	struct platform_device *pdev = to_platform_device(dev);
+	struct s5p_hdmi_platdata *pdata = pdev->dev.platform_data;
+	u32 preset;
+	int ret;
+
+	if (state == switch_get_state(&hdev->hpd_switch))
+		return;
+
+	if (pdata->ls_enable)
+		pdata->ls_enable(pdev, state);
+
+	if (state) {
+		ret = edid_update(hdev);
+		if (ret == -ENODEV) {
+			pdata->ls_enable(pdev, 0);
+			return;
+		}
+
+		preset = edid_preferred_preset(hdev);
+		if (preset == V4L2_DV_INVALID)
+			preset = HDMI_DEFAULT_PRESET;
+
+		hdev->cur_preset = preset;
+		hdev->cur_conf = hdmi_preset2conf(preset);
+	}
+
+	switch_set_state(&hdev->hpd_switch, state);
 }
 
 static void hdmi_hpd_work_ext(struct work_struct *work)
 {
 	int state;
 	struct hdmi_device *hdev = container_of(work, struct hdmi_device,
-						hpd_work_ext);
+						hpd_work_ext.work);
 
 	state = s5p_v4l2_hpd_read_gpio();
-	switch_set_state(&hdev->hpd_switch, state);
+	hdmi_hpd_changed(hdev, state);
 
 	dev_info(hdev->dev, "%s (ext)\n", state ? "plugged" : "unplugged");
 }
@@ -647,7 +683,7 @@ static void hdmi_hpd_work(struct work_struct *work)
 						hpd_work);
 
 	state = hdmi_hpd_status(hdev);
-	switch_set_state(&hdev->hpd_switch, state);
+	hdmi_hpd_changed(hdev, state);
 
 	dev_info(hdev->dev, "%s (int)\n", state ? "plugged" : "unplugged");
 }
@@ -711,7 +747,7 @@ static int __devinit hdmi_probe(struct platform_device *pdev)
 	hdmi_dev->int_irq = res->start;
 
 	INIT_WORK(&hdmi_dev->hpd_work, hdmi_hpd_work);
-	INIT_WORK(&hdmi_dev->hpd_work_ext, hdmi_hpd_work_ext);
+	INIT_DELAYED_WORK(&hdmi_dev->hpd_work_ext, hdmi_hpd_work_ext);
 
 	/* setting v4l2 name to prevent WARN_ON in v4l2_device_register */
 	strlcpy(hdmi_dev->v4l2_dev.name, dev_name(dev),
@@ -776,11 +812,6 @@ static int __devinit hdmi_probe(struct platform_device *pdev)
 		goto fail_ext;
 	}
 
-	if (s5p_v4l2_hpd_read_gpio())
-		switch_set_state(&hdmi_dev->hpd_switch, 1);
-	else
-		switch_set_state(&hdmi_dev->hpd_switch, 0);
-
 	hdmi_dev->cur_preset = HDMI_DEFAULT_PRESET;
 	/* FIXME: missing fail preset is not supported */
 	hdmi_dev->cur_conf = hdmi_preset2conf(hdmi_dev->cur_preset);
@@ -805,6 +836,9 @@ static int __devinit hdmi_probe(struct platform_device *pdev)
 	ret = hdcp_prepare(hdmi_dev);
 	if (ret)
 		goto fail_irq;
+
+	queue_delayed_work(system_nrt_wq, &hdmi_dev->hpd_work_ext,
+					  msecs_to_jiffies(1000));
 
 	dev_info(dev, "probe sucessful\n");
 

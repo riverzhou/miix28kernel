@@ -312,7 +312,7 @@ struct hdmi_device {
 
 	/* HPD releated */
 	struct work_struct hpd_work;
-	struct work_struct hpd_work_ext;
+	struct delayed_work hpd_work_ext;
 	struct switch_dev hpd_switch;
 
 	/* choose DVI or HDMI mode */
