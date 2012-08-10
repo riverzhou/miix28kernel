@@ -197,17 +197,17 @@ static struct platform_device exynos_device_md2 = {
 /* HDMI */
 static void manta_hdmiphy_enable(struct platform_device *pdev, int en)
 {
-	if (en) {
-		gpio_set_value(GPIO_HDMI_LS_EN, 1);
-		s5p_hdmiphy_enable(pdev, 1);
-	} else {
-		s5p_hdmiphy_enable(pdev, 0);
-		gpio_set_value(GPIO_HDMI_LS_EN, 0);
-	}
+	s5p_hdmiphy_enable(pdev, en ? 1 : 0);
+}
+
+static void manta_ls_enable(struct platform_device *pdev, int en)
+{
+	gpio_set_value(GPIO_HDMI_LS_EN, en ? 1 : 0);
 }
 
 static struct s5p_hdmi_platdata hdmi_platdata __initdata = {
 	.hdmiphy_enable = manta_hdmiphy_enable,
+	.ls_enable = manta_ls_enable,
 };
 
 static struct platform_device *manta_display_devices[] __initdata = {
