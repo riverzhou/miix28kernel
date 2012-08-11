@@ -11,12 +11,12 @@
  * or (at your option) any later version
  */
 
+#include "hdmi.h"
 #include <linux/delay.h>
 #include <linux/pm_runtime.h>
 #include <plat/devs.h>
 #include <plat/tv-core.h>
 
-#include "hdmi.h"
 #include "regs-hdmi-5250.h"
 
 static const struct hdmi_preset_conf hdmi_conf_480p60 = {
@@ -80,6 +80,7 @@ static const struct hdmi_preset_conf hdmi_conf_480p60 = {
 		.code = V4L2_MBUS_FMT_FIXED, /* means RGB888 */
 		.field = V4L2_FIELD_NONE,
 	},
+	.vic = 3,
 };
 
 static const struct hdmi_preset_conf hdmi_conf_720p60 = {
@@ -143,6 +144,7 @@ static const struct hdmi_preset_conf hdmi_conf_720p60 = {
 		.code = V4L2_MBUS_FMT_FIXED, /* means RGB888 */
 		.field = V4L2_FIELD_NONE,
 	},
+	.vic = 4,
 };
 
 static const struct hdmi_preset_conf hdmi_conf_1080i60 = {
@@ -206,6 +208,7 @@ static const struct hdmi_preset_conf hdmi_conf_1080i60 = {
 		.code = V4L2_MBUS_FMT_FIXED, /* means RGB888 */
 		.field = V4L2_FIELD_INTERLACED,
 	},
+	.vic = 5,
 };
 
 static const struct hdmi_preset_conf hdmi_conf_1080p60 = {
@@ -263,6 +266,7 @@ static const struct hdmi_preset_conf hdmi_conf_1080p60 = {
 		.code = V4L2_MBUS_FMT_FIXED, /* means RGB888 */
 		.field = V4L2_FIELD_NONE,
 	},
+	.vic = 16,
 };
 
 static const struct hdmi_preset_conf hdmi_conf_576p50 = {
@@ -320,6 +324,7 @@ static const struct hdmi_preset_conf hdmi_conf_576p50 = {
 		.code = V4L2_MBUS_FMT_FIXED, /* means RGB888 */
 		.field = V4L2_FIELD_NONE,
 	},
+	.vic = 18,
 };
 
 static const struct hdmi_preset_conf hdmi_conf_720p50 = {
@@ -383,6 +388,7 @@ static const struct hdmi_preset_conf hdmi_conf_720p50 = {
 		.code = V4L2_MBUS_FMT_FIXED, /* means RGB888 */
 		.field = V4L2_FIELD_NONE,
 	},
+	.vic = 19,
 };
 
 static const struct hdmi_preset_conf hdmi_conf_1080i50 = {
@@ -446,6 +452,7 @@ static const struct hdmi_preset_conf hdmi_conf_1080i50 = {
 		.code = V4L2_MBUS_FMT_FIXED, /* means RGB888 */
 		.field = V4L2_FIELD_INTERLACED,
 	},
+	.vic = 20,
 };
 
 static const struct hdmi_preset_conf hdmi_conf_1080p50 = {
@@ -509,6 +516,7 @@ static const struct hdmi_preset_conf hdmi_conf_1080p50 = {
 		.code = V4L2_MBUS_FMT_FIXED, /* means RGB888 */
 		.field = V4L2_FIELD_NONE,
 	},
+	.vic = 31,
 };
 
 static const struct hdmi_preset_conf hdmi_conf_1080p30 = {
@@ -572,6 +580,7 @@ static const struct hdmi_preset_conf hdmi_conf_1080p30 = {
 		.code = V4L2_MBUS_FMT_FIXED, /* means RGB888 */
 		.field = V4L2_FIELD_NONE,
 	},
+	.vic = 34,
 };
 
 static const struct hdmi_preset_conf hdmi_conf_1080p24 = {
@@ -635,6 +644,7 @@ static const struct hdmi_preset_conf hdmi_conf_1080p24 = {
 		.code = V4L2_MBUS_FMT_FIXED, /* means RGB888 */
 		.field = V4L2_FIELD_NONE,
 	},
+	.vic = 32,
 };
 
 static const struct hdmi_preset_conf hdmi_conf_1080p25 = {
@@ -698,6 +708,7 @@ static const struct hdmi_preset_conf hdmi_conf_1080p25 = {
 		.code = V4L2_MBUS_FMT_FIXED, /* means RGB888 */
 		.field = V4L2_FIELD_NONE,
 	},
+	.vic = 33,
 };
 
 static const struct hdmi_preset_conf hdmi_conf_480p59_94 = {
@@ -761,6 +772,7 @@ static const struct hdmi_preset_conf hdmi_conf_480p59_94 = {
 		.code = V4L2_MBUS_FMT_FIXED, /* means RGB888 */
 		.field = V4L2_FIELD_NONE,
 	},
+	.vic = 3,
 };
 
 static const struct hdmi_preset_conf hdmi_conf_720p59_94 = {
@@ -824,6 +836,7 @@ static const struct hdmi_preset_conf hdmi_conf_720p59_94 = {
 		.code = V4L2_MBUS_FMT_FIXED, /* means RGB888 */
 		.field = V4L2_FIELD_NONE,
 	},
+	.vic = 4,
 };
 
 static const struct hdmi_preset_conf hdmi_conf_1080i59_94 = {
@@ -887,6 +900,7 @@ static const struct hdmi_preset_conf hdmi_conf_1080i59_94 = {
 		.code = V4L2_MBUS_FMT_FIXED, /* means RGB888 */
 		.field = V4L2_FIELD_INTERLACED,
 	},
+	.vic = 5,
 };
 
 static const struct hdmi_preset_conf hdmi_conf_1080p59_94 = {
@@ -950,6 +964,7 @@ static const struct hdmi_preset_conf hdmi_conf_1080p59_94 = {
 		.code = V4L2_MBUS_FMT_FIXED, /* means RGB888 */
 		.field = V4L2_FIELD_NONE,
 	},
+	.vic = 16,
 };
 
 static const struct hdmi_preset_conf hdmi_conf_720p60_sb_half = {
@@ -1013,6 +1028,7 @@ static const struct hdmi_preset_conf hdmi_conf_720p60_sb_half = {
 		.code = V4L2_MBUS_FMT_FIXED, /* means RGB888 */
 		.field = V4L2_FIELD_NONE,
 	},
+	.vic = 4,
 };
 
 static const struct hdmi_preset_conf hdmi_conf_720p60_tb = {
@@ -1076,6 +1092,7 @@ static const struct hdmi_preset_conf hdmi_conf_720p60_tb = {
 		.code = V4L2_MBUS_FMT_FIXED, /* means RGB888 */
 		.field = V4L2_FIELD_NONE,
 	},
+	.vic = 4,
 };
 
 static const struct hdmi_preset_conf hdmi_conf_720p59_94_sb_half = {
@@ -1139,6 +1156,7 @@ static const struct hdmi_preset_conf hdmi_conf_720p59_94_sb_half = {
 		.code = V4L2_MBUS_FMT_FIXED, /* means RGB888 */
 		.field = V4L2_FIELD_NONE,
 	},
+	.vic = 4,
 };
 
 static const struct hdmi_preset_conf hdmi_conf_720p59_94_tb = {
@@ -1202,6 +1220,7 @@ static const struct hdmi_preset_conf hdmi_conf_720p59_94_tb = {
 		.code = V4L2_MBUS_FMT_FIXED, /* means RGB888 */
 		.field = V4L2_FIELD_NONE,
 	},
+	.vic = 4,
 };
 
 static const struct hdmi_preset_conf hdmi_conf_720p50_sb_half = {
@@ -1265,6 +1284,7 @@ static const struct hdmi_preset_conf hdmi_conf_720p50_sb_half = {
 		.code = V4L2_MBUS_FMT_FIXED, /* means RGB888 */
 		.field = V4L2_FIELD_NONE,
 	},
+	.vic = 19,
 };
 
 static const struct hdmi_preset_conf hdmi_conf_720p50_tb = {
@@ -1328,6 +1348,7 @@ static const struct hdmi_preset_conf hdmi_conf_720p50_tb = {
 		.code = V4L2_MBUS_FMT_FIXED, /* means RGB888 */
 		.field = V4L2_FIELD_NONE,
 	},
+	.vic = 19,
 };
 
 static const struct hdmi_preset_conf hdmi_conf_1080p24_fp = {
@@ -1391,6 +1412,7 @@ static const struct hdmi_preset_conf hdmi_conf_1080p24_fp = {
 		.code = V4L2_MBUS_FMT_FIXED, /* means RGB888 */
 		.field = V4L2_FIELD_NONE,
 	},
+	.vic = 32,
 };
 
 static const struct hdmi_preset_conf hdmi_conf_1080p24_sb_half = {
@@ -1454,6 +1476,7 @@ static const struct hdmi_preset_conf hdmi_conf_1080p24_sb_half = {
 		.code = V4L2_MBUS_FMT_FIXED, /* means RGB888 */
 		.field = V4L2_FIELD_NONE,
 	},
+	.vic = 32,
 };
 
 static const struct hdmi_preset_conf hdmi_conf_1080p24_tb = {
@@ -1517,6 +1540,7 @@ static const struct hdmi_preset_conf hdmi_conf_1080p24_tb = {
 		.code = V4L2_MBUS_FMT_FIXED, /* means RGB888 */
 		.field = V4L2_FIELD_NONE,
 	},
+	.vic = 32,
 };
 
 static const struct hdmi_preset_conf hdmi_conf_1080p23_98_fp = {
@@ -1580,6 +1604,7 @@ static const struct hdmi_preset_conf hdmi_conf_1080p23_98_fp = {
 		.code = V4L2_MBUS_FMT_FIXED, /* means RGB888 */
 		.field = V4L2_FIELD_NONE,
 	},
+	.vic = 32,
 };
 
 static const struct hdmi_preset_conf hdmi_conf_1080p23_98_sb_half = {
@@ -1643,6 +1668,7 @@ static const struct hdmi_preset_conf hdmi_conf_1080p23_98_sb_half = {
 		.code = V4L2_MBUS_FMT_FIXED, /* means RGB888 */
 		.field = V4L2_FIELD_NONE,
 	},
+	.vic = 32,
 };
 
 static const struct hdmi_preset_conf hdmi_conf_1080p23_98_tb = {
@@ -1706,6 +1732,7 @@ static const struct hdmi_preset_conf hdmi_conf_1080p23_98_tb = {
 		.code = V4L2_MBUS_FMT_FIXED, /* means RGB888 */
 		.field = V4L2_FIELD_NONE,
 	},
+	.vic = 32,
 };
 
 static const struct hdmi_preset_conf hdmi_conf_1080i60_sb_half = {
@@ -1769,6 +1796,7 @@ static const struct hdmi_preset_conf hdmi_conf_1080i60_sb_half = {
 		.code = V4L2_MBUS_FMT_FIXED, /* means RGB888 */
 		.field = V4L2_FIELD_INTERLACED,
 	},
+	.vic = 5,
 };
 
 static const struct hdmi_preset_conf hdmi_conf_1080i59_94_sb_half = {
@@ -1832,6 +1860,7 @@ static const struct hdmi_preset_conf hdmi_conf_1080i59_94_sb_half = {
 		.code = V4L2_MBUS_FMT_FIXED, /* means RGB888 */
 		.field = V4L2_FIELD_INTERLACED,
 	},
+	.vic = 5,
 };
 
 static const struct hdmi_preset_conf hdmi_conf_1080i50_sb_half = {
@@ -1895,6 +1924,7 @@ static const struct hdmi_preset_conf hdmi_conf_1080i50_sb_half = {
 		.code = V4L2_MBUS_FMT_FIXED, /* means RGB888 */
 		.field = V4L2_FIELD_INTERLACED,
 	},
+	.vic = 20,
 };
 
 static const struct hdmi_preset_conf hdmi_conf_1080p60_sb_half = {
@@ -1958,6 +1988,7 @@ static const struct hdmi_preset_conf hdmi_conf_1080p60_sb_half = {
 		.code = V4L2_MBUS_FMT_FIXED, /* means RGB888 */
 		.field = V4L2_FIELD_NONE,
 	},
+	.vic = 16,
 };
 
 static const struct hdmi_preset_conf hdmi_conf_1080p60_tb = {
@@ -2021,6 +2052,7 @@ static const struct hdmi_preset_conf hdmi_conf_1080p60_tb = {
 		.code = V4L2_MBUS_FMT_FIXED, /* means RGB888 */
 		.field = V4L2_FIELD_NONE,
 	},
+	.vic = 16,
 };
 
 static const struct hdmi_preset_conf hdmi_conf_1080p30_sb_half = {
@@ -2084,6 +2116,7 @@ static const struct hdmi_preset_conf hdmi_conf_1080p30_sb_half = {
 		.code = V4L2_MBUS_FMT_FIXED, /* means RGB888 */
 		.field = V4L2_FIELD_NONE,
 	},
+	.vic = 34,
 };
 
 static const struct hdmi_preset_conf hdmi_conf_1080p30_tb = {
@@ -2147,6 +2180,7 @@ static const struct hdmi_preset_conf hdmi_conf_1080p30_tb = {
 		.code = V4L2_MBUS_FMT_FIXED, /* means RGB888 */
 		.field = V4L2_FIELD_NONE,
 	},
+	.vic = 34,
 };
 
 static const struct hdmi_3d_info info_2d = {
@@ -2252,12 +2286,11 @@ void hdmi_reg_init(struct hdmi_device *hdev)
 	/* disable bluescreen */
 	hdmi_write_mask(hdev, HDMI_CON_0, 0, HDMI_BLUE_SCR_EN);
 	/* enable AVI packet every vsync, fixes purple line problem */
-	hdmi_writeb(hdev, HDMI_AVI_CON, 0x02);
+	hdmi_writeb(hdev, HDMI_AVI_CON, HDMI_AVI_CON_EVERY_VSYNC);
 	/* RGB888 is default output format of HDMI,
 	 * look to CEA-861-D, table 7 for more detail */
 	hdmi_writeb(hdev, HDMI_AVI_BYTE(1), 0 << 5);
 	hdmi_write_mask(hdev, HDMI_CON_1, 2, 3 << 5);
-
 }
 
 void hdmi_set_dvi_mode(struct hdmi_device *hdev)
@@ -2486,7 +2519,20 @@ void hdmi_reg_infoframe(struct hdmi_device *hdev,
 	const struct hdmi_3d_info *info = hdmi_preset2info(hdev->cur_preset);
 	u32 hdr_sum;
 	u8 chksum;
+	u32 aspect_ratio;
+	u32 vic;
+
 	dev_dbg(dev, "%s: InfoFrame type = 0x%x\n", __func__, infoframe->type);
+
+	/* Packets must NOT be transferred in case of DVI mode
+	 * DVI mode doesn't allow Data Island Period. If any packet is tranferred,
+	 * It makes Data Island Period */
+	if (hdev->dvi_mode) {
+		hdmi_writeb(hdev, HDMI_VSI_CON, HDMI_VSI_CON_DO_NOT_TRANSMIT);
+		hdmi_writeb(hdev, HDMI_AVI_CON, HDMI_AVI_CON_DO_NOT_TRANSMIT);
+		hdmi_write(hdev, HDMI_AUI_CON, HDMI_AUI_CON_NO_TRAN);
+		return;
+	}
 
 	switch (infoframe->type) {
 	case HDMI_PACKET_TYPE_VSI:
@@ -2517,11 +2563,42 @@ void hdmi_reg_infoframe(struct hdmi_device *hdev,
 		hdmi_writeb(hdev, HDMI_AVI_HEADER0, infoframe->type);
 		hdmi_writeb(hdev, HDMI_AVI_HEADER1, infoframe->ver);
 		hdmi_writeb(hdev, HDMI_AVI_HEADER2, infoframe->len);
-		hdmi_writeb(hdev, HDMI_AVI_BYTE(1), hdev->output_fmt << 5);
 		hdr_sum = infoframe->type + infoframe->ver + infoframe->len;
+		hdmi_writeb(hdev, HDMI_AVI_BYTE(1), hdev->output_fmt << 5 |
+				AVI_ACTIVE_FORMAT_VALID);
+		if (hdev->aspect == HDMI_ASPECT_RATIO_4_3 &&
+				(hdev->cur_preset == V4L2_DV_480P59_94 ||
+				 hdev->cur_preset == V4L2_DV_480P60)) {
+			aspect_ratio = AVI_PIC_ASPECT_RATIO_4_3;
+			/* 2 : 480P59.94/60Hz 4:3 aspect ratio */
+			vic = 2;
+		} else if (hdev->aspect == HDMI_ASPECT_RATIO_4_3 &&
+				hdev->cur_preset == V4L2_DV_576P50) {
+			aspect_ratio = AVI_PIC_ASPECT_RATIO_4_3;
+			/* 17 : 576P50Hz 4:3 aspect ratio */
+			vic = 17;
+		} else {
+			aspect_ratio = AVI_PIC_ASPECT_RATIO_16_9;
+			vic = hdev->cur_conf->vic;
+		}
+
+		hdmi_writeb(hdev, HDMI_AVI_BYTE(2), aspect_ratio |
+				AVI_SAME_AS_PIC_ASPECT_RATIO);
+		dev_dbg(dev, "VIC code = %d\n", vic);
+		hdmi_writeb(hdev, HDMI_AVI_BYTE(4), vic);
 		chksum = hdmi_chksum(hdev, HDMI_AVI_BYTE(1), infoframe->len, hdr_sum);
 		dev_dbg(dev, "AVI checksum = 0x%x\n", chksum);
 		hdmi_writeb(hdev, HDMI_AVI_CHECK_SUM, chksum);
+		break;
+	case HDMI_PACKET_TYPE_AUI:
+		hdmi_write(hdev, HDMI_AUI_CON, HDMI_AUI_CON_TRANS_EVERY_VSYNC);
+		hdmi_writeb(hdev, HDMI_AUI_HEADER0, infoframe->type);
+		hdmi_writeb(hdev, HDMI_AUI_HEADER1, infoframe->ver);
+		hdmi_writeb(hdev, HDMI_AUI_HEADER2, infoframe->len);
+		hdr_sum = infoframe->type + infoframe->ver + infoframe->len;
+		chksum = hdmi_chksum(hdev, HDMI_AUI_BYTE(1), infoframe->len, hdr_sum);
+		dev_dbg(dev, "AUI checksum = 0x%x\n", chksum);
+		hdmi_writeb(hdev, HDMI_AUI_CHECK_SUM, chksum);
 		break;
 	default:
 		break;
@@ -2532,6 +2609,11 @@ void hdmi_reg_set_acr(struct hdmi_device *hdev)
 {
 	u32 n, cts;
 	int sample_rate = hdev->sample_rate;
+
+	if (hdev->dvi_mode) {
+		hdmi_write(hdev, HDMI_ACR_CON, HDMI_ACR_CON_TX_MODE_NO_TX);
+		return;
+	}
 
 	if (sample_rate == 32000) {
 		n = 4096;
@@ -2696,12 +2778,11 @@ void hdmi_reg_i2s_audio_init(struct hdmi_device *hdev)
 void hdmi_audio_enable(struct hdmi_device *hdev, int on)
 {
 	if (on) {
-		hdmi_write(hdev, HDMI_AUI_CON, HDMI_AUI_CON_TRANS_EVERY_VSYNC);
+		if (hdev->dvi_mode)
+			return;
 		hdmi_write_mask(hdev, HDMI_CON_0, ~0, HDMI_ASP_ENABLE);
-	} else {
-		hdmi_write(hdev, HDMI_AUI_CON, HDMI_AUI_CON_NO_TRAN);
+	} else
 		hdmi_write_mask(hdev, HDMI_CON_0, 0, HDMI_ASP_ENABLE);
-	}
 }
 
 void hdmi_bluescreen_enable(struct hdmi_device *hdev, int on)
@@ -2766,6 +2847,13 @@ void hdmi_phy_sw_reset(struct hdmi_device *hdev)
 	hdmi_write_mask(hdev, HDMI_PHY_RSTOUT, ~0, HDMI_PHY_SW_RSTOUT);
 	mdelay(10);
 	hdmi_write_mask(hdev, HDMI_PHY_RSTOUT,  0, HDMI_PHY_SW_RSTOUT);
+}
+
+void hdmi_sw_reset(struct hdmi_device *hdev)
+{
+	hdmi_write_mask(hdev, HDMI_CORE_RSTOUT, 0, HDMI_CORE_SW_RSTOUT);
+	mdelay(10);
+	hdmi_write_mask(hdev, HDMI_CORE_RSTOUT, ~0, HDMI_CORE_SW_RSTOUT);
 }
 
 void hdmi_dumpregs(struct hdmi_device *hdev, char *prefix)
@@ -2925,7 +3013,8 @@ void hdmi_dumpregs(struct hdmi_device *hdev, char *prefix)
 	DUMPREG(HDMI_AVI_HEADER1);
 	DUMPREG(HDMI_AVI_HEADER2);
 	DUMPREG(HDMI_AVI_CHECK_SUM);
-	DUMPREG(HDMI_AVI_BYTE(1));
+	for (i = 1; i < 6; ++i)
+		DUMPREG(HDMI_AVI_BYTE(i));
 
 	DUMPREG(HDMI_VSI_CON);
 	DUMPREG(HDMI_VSI_HEADER0);
@@ -2933,6 +3022,8 @@ void hdmi_dumpregs(struct hdmi_device *hdev, char *prefix)
 	DUMPREG(HDMI_VSI_HEADER2);
 	for (i = 0; i < 7; ++i)
 		DUMPREG(HDMI_VSI_DATA(i));
+	DUMPREG(HDMI_AUI_CON);
+	DUMPREG(HDMI_ACR_CON);
 
 #undef DUMPREG
 }

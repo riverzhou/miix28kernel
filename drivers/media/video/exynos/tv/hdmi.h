@@ -29,10 +29,17 @@
 
 #define INFOFRAME_CNT          2
 
-#define HDMI_VSI_VERSION       0x01;
-#define HDMI_AVI_VERSION       0x02;
-#define HDMI_VSI_LENGTH                0x05;
-#define HDMI_AVI_LENGTH                0x0d;
+#define HDMI_VSI_VERSION	0x01
+#define HDMI_AVI_VERSION	0x02
+#define HDMI_AUI_VERSION	0x01
+#define HDMI_VSI_LENGTH		0x05
+#define HDMI_AVI_LENGTH		0x0d
+#define HDMI_AUI_LENGTH		0x0a
+
+#define AVI_ACTIVE_FORMAT_VALID		(1 << 4)
+#define AVI_PIC_ASPECT_RATIO_4_3	(1 << 4)
+#define AVI_PIC_ASPECT_RATIO_16_9	(2 << 4)
+#define AVI_SAME_AS_PIC_ASPECT_RATIO	8
 
 /* HDMI audio configuration value */
 #define DEFAULT_SAMPLE_RATE	44100
@@ -84,13 +91,20 @@ enum HDMI_PACKET_TYPE {
 	/** Vendor-Specific InfoFrame */
 	HDMI_PACKET_TYPE_VSI = HDMI_PACKET_TYPE_INFOFRAME + 1,
 	/** Auxiliary Video information InfoFrame */
-	HDMI_PACKET_TYPE_AVI = HDMI_PACKET_TYPE_INFOFRAME + 2
+	HDMI_PACKET_TYPE_AVI = HDMI_PACKET_TYPE_INFOFRAME + 2,
+	/** Audio information InfoFrame */
+	HDMI_PACKET_TYPE_AUI = HDMI_PACKET_TYPE_INFOFRAME + 4
 };
 
 enum HDMI_AUDIO_CODEC {
 	HDMI_AUDIO_PCM,
 	HDMI_AUDIO_AC3,
 	HDMI_AUDIO_MP3
+};
+
+enum HDMI_ASPECT_RATIO {
+	HDMI_ASPECT_RATIO_16_9,
+	HDMI_ASPECT_RATIO_4_3
 };
 
 enum HDCP_EVENT {
@@ -227,6 +241,7 @@ struct hdmi_preset_conf {
 	struct hdmi_core_regs core;
 	struct hdmi_tg_regs tg;
 	struct v4l2_mbus_framefmt mbus_fmt;
+	u8 vic;
 };
 
 struct hdmi_driver_data {
@@ -287,6 +302,8 @@ struct hdmi_device {
 	enum HDMI_AUDIO_CODEC audio_codec;
 	/** HDMI output format */
 	enum HDMI_OUTPUT_FMT output_fmt;
+	/** Aspect ratio information */
+	enum HDMI_ASPECT_RATIO aspect;
 
 	/** HDCP information */
 	struct hdcp_info hdcp_info;
@@ -341,6 +358,7 @@ void hdmi_set_int_mask(struct hdmi_device *hdev, u8 mask, int en);
 void hdmi_sw_hpd_enable(struct hdmi_device *hdev, int en);
 void hdmi_sw_hpd_plug(struct hdmi_device *hdev, int en);
 void hdmi_phy_sw_reset(struct hdmi_device *hdev);
+void hdmi_sw_reset(struct hdmi_device *hdev);
 void hdmi_dumpregs(struct hdmi_device *hdev, char *prefix);
 void hdmi_set_3d_info(struct hdmi_device *hdev);
 void hdmi_set_dvi_mode(struct hdmi_device *hdev);

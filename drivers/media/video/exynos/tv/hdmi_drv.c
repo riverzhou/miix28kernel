@@ -35,6 +35,7 @@
 #include <media/v4l2-dev.h>
 #include <media/v4l2-device.h>
 #include <media/exynos_mc.h>
+#include "regs-hdmi-5250.h"
 
 MODULE_AUTHOR("Tomasz Stanislawski, <t.stanislaws@samsung.com>");
 MODULE_DESCRIPTION("Samsung HDMI");
@@ -116,6 +117,13 @@ static int hdmi_set_infoframe(struct hdmi_device *hdev)
 	infoframe.len = HDMI_AVI_LENGTH;
 	hdmi_reg_infoframe(hdev, &infoframe);
 
+	if (hdev->audio_enable) {
+		infoframe.type = HDMI_PACKET_TYPE_AUI;
+		infoframe.ver = HDMI_AUI_VERSION;
+		infoframe.len = HDMI_AUI_LENGTH;
+		hdmi_reg_infoframe(hdev, &infoframe);
+	}
+
 	return 0;
 }
 
@@ -130,6 +138,7 @@ static int hdmi_streamon(struct hdmi_device *hdev)
 	struct device *dev = hdev->dev;
 	struct hdmi_resources *res = &hdev->res;
 	int ret, tries;
+	u32 val0, val1, val2;
 
 	dev_dbg(dev, "%s\n", __func__);
 
@@ -179,6 +188,14 @@ static int hdmi_streamon(struct hdmi_device *hdev)
 	/* enable HDMI and timing generator */
 	hdmi_enable(hdev, 1);
 	hdmi_tg_enable(hdev, 1);
+
+	mdelay(5);
+	val0 = hdmi_read(hdev, HDMI_ACR_MCTS0);
+	val1 = hdmi_read(hdev, HDMI_ACR_MCTS1);
+	val2 = hdmi_read(hdev, HDMI_ACR_MCTS2);
+	dev_dbg(dev, "HDMI_ACR_MCTS0 : 0x%08x\n", val0);
+	dev_dbg(dev, "HDMI_ACR_MCTS1 : 0x%08x\n", val1);
+	dev_dbg(dev, "HDMI_ACR_MCTS2 : 0x%08x\n", val2);
 
 	/* start HDCP if enabled */
 	if (hdev->hdcp_info.hdcp_enable) {
@@ -299,6 +316,9 @@ int hdmi_s_ctrl(struct v4l2_subdev *sd, struct v4l2_control *ctrl)
 	case V4L2_CID_TV_SET_DVI_MODE:
 		hdev->dvi_mode = ctrl->value;
 		break;
+	case V4L2_CID_TV_SET_ASPECT_RATIO:
+		hdev->aspect = ctrl->value;
+		break;
 	default:
 		dev_err(dev, "invalid control id\n");
 		ret = -EINVAL;
@@ -314,7 +334,6 @@ int hdmi_g_ctrl(struct v4l2_subdev *sd, struct v4l2_control *ctrl)
 	struct device *dev = hdev->dev;
 
 	ctrl->value = switch_get_state(&hdev->hpd_switch);
-
 	dev_dbg(dev, "HDMI cable is %s\n", ctrl->value ?
 			"connected" : "disconnected");
 
@@ -442,8 +461,9 @@ static int hdmi_runtime_resume(struct device *dev)
 	if (pdata->hdmiphy_enable)
 		pdata->hdmiphy_enable(pdev, 1);
 	hdmi_resource_poweron(&hdev->res);
-
+	hdmi_sw_reset(hdev);
 	hdmi_phy_sw_reset(hdev);
+
 	ret = v4l2_subdev_call(hdev->phy_sd, core, s_power, 1);
 	if (ret) {
 		dev_err(dev, "failed to turn on hdmiphy\n");
@@ -770,6 +790,9 @@ static int __devinit hdmi_probe(struct platform_device *pdev)
 	hdmi_dev->sample_rate = DEFAULT_SAMPLE_RATE;
 	hdmi_dev->bits_per_sample = DEFAULT_BITS_PER_SAMPLE;
 	hdmi_dev->audio_codec = DEFAULT_AUDIO_CODEC;
+
+	/* default aspect ratio is 16:9 */
+	hdmi_dev->aspect = HDMI_ASPECT_RATIO_16_9;
 
 	/* register hdmi subdev as entity */
 	ret = hdmi_register_entity(hdmi_dev);
