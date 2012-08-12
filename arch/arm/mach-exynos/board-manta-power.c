@@ -398,12 +398,15 @@ static struct platform_device *mxt_fixed_regulator_devices[] __initdata = {
 	&mxt_xvdd_regulator_device,
 };
 
+/* Always reboot to the bootloader. Let the bootloader
+ * figure out if we should truly power-off or charging.
+ */
 static void manta_power_off(void)
 {
 	local_irq_disable();
 
-	writel(readl(EXYNOS_PS_HOLD_CONTROL) & ~BIT(8),
-		EXYNOS_PS_HOLD_CONTROL);
+	writel(REBOOT_MODE_LPM, EXYNOS_INFORM2); /* Enter lpm mode */
+	writel(REBOOT_MODE_PREFIX | REBOOT_MODE_NONE, EXYNOS_INFORM3);
 
 	exynos5_restart(0, 0);
 }
