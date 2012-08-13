@@ -1130,6 +1130,8 @@ mali_error kbase_platform_init(struct kbase_device *kbdev)
 	}
 #endif /* CONFIG_REGULATOR */
 
+	/* HACK: set gpu frequency to 450 MHz */
+	kbase_platform_dvfs_set_level(kbdev, 5);
 
 #ifdef CONFIG_MALI_T6XX_DVFS
 	kbase_platform_dvfs_init(kbdev);
