@@ -183,6 +183,8 @@
 /* Define for MXT_GEN_COMMAND_T6 */
 #define MXT_BOOT_VALUE		0xa5
 #define MXT_BACKUP_VALUE	0x55
+#define MXT_DISABLE_EVENT_VALUE	0x33
+
 #define MXT_BACKUP_TIME		25	/* msec */
 #define MXT_RESET_TIME		300	/* msec */
 
@@ -1204,6 +1206,12 @@ static int mxt_initialize(struct mxt_fw_info *fw_info)
 
 	/* Make the report id table infomation */
 	mxt_make_reportid_table(data);
+
+	/* Stop the event handler before backup memory */
+	mxt_write_object(data, MXT_GEN_COMMAND_T6,
+			MXT_COMMAND_BACKUPNV,
+			MXT_DISABLE_EVENT_VALUE);
+	msleep(MXT_BACKUP_TIME);
 
 	/* Check register init values */
 	if (fw_info->cfg_raw_data) {
