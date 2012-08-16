@@ -172,6 +172,16 @@ static struct platform_device manta_i2s_device = {
 	.id	= -1,
 };
 
+static struct platform_device manta_spdif_device = {
+	.name	= "manta-spdif",
+	.id	= -1,
+};
+
+static struct platform_device manta_spdif_dit_device = {
+	.name	= "spdif-dit",
+	.id	= -1,
+};
+
 static struct platform_device *manta_audio_devices[] __initdata = {
 	&vbatt_device,
 	&samsung_asoc_dma,
@@ -181,34 +191,85 @@ static struct platform_device *manta_audio_devices[] __initdata = {
 	&exynos5_device_pcm0,
 	&exynos5_device_spdif,
 	&manta_i2s_device,
+	&manta_spdif_device,
+	&manta_spdif_dit_device,
 };
 
 static void manta_audio_setup_clocks(void)
 {
+	struct clk *fout_epll, *mout_epll;
+	struct clk *sclk_audio, *sclk_spdif;
 	struct clk *xxti;
 	int ret;
+
+	fout_epll = clk_get(NULL, "fout_epll");
+	if (IS_ERR(fout_epll)) {
+		pr_err("%s:cannot get fout_epll clock\n", __func__);
+		return;
+	}
+
+	mout_epll = clk_get(NULL, "mout_epll");
+	if (IS_ERR(mout_epll)) {
+		pr_err("%s: cannot get mout_epll clock\n", __func__);
+		goto out1;
+	}
+
+	sclk_audio = clk_get(NULL, "sclk_audio");
+	if (IS_ERR(sclk_audio)) {
+		pr_err("%s: cannot get sclk_audio clock\n", __func__);
+		goto out2;
+	}
+
+	sclk_spdif = clk_get(NULL, "sclk_spdif");
+	if (IS_ERR(sclk_spdif)) {
+		pr_err("%s: cannot get sclk_spdif clock\n", __func__);
+		goto out3;
+	}
 
 	xxti = clk_get(NULL, "xxti");
 	if (IS_ERR(xxti)) {
 		pr_err("%s: cannot get xxti clock\n", __func__);
-		return;
+		goto out4;
 	}
 
 	clkout = clk_get(NULL, "clkout");
 	if (IS_ERR(clkout)) {
 		pr_err("%s: cannot get clkout\n", __func__);
-		clk_put(xxti);
-		return;
+		goto out5;
 	}
 
+	clk_set_parent(mout_epll, fout_epll);
+	clk_set_parent(sclk_audio, mout_epll);
+	clk_set_parent(sclk_spdif, sclk_audio);
 	clk_set_parent(clkout, xxti);
 	clk_add_alias("system_clk", "manta-i2s", "clkout", NULL);
-	clk_put(xxti);
 
 	ret = gpio_request(GPIO_ES305_CLK_EN, "ES305 clk_en");
-	if (ret < 0)
+	if (ret < 0) {
 		pr_err("%s: error requesting ES305 clk_en gpio\n", __func__);
+		goto out6;
+	}
 	gpio_direction_output(GPIO_ES305_CLK_EN, 0);
+
+	clk_put(fout_epll);
+	clk_put(mout_epll);
+	clk_put(sclk_audio);
+	clk_put(sclk_spdif);
+	clk_put(xxti);
+
+	return;
+out6:
+	clk_put(clkout);
+out5:
+	clk_put(xxti);
+out4:
+	clk_put(sclk_spdif);
+out3:
+	clk_put(sclk_audio);
+out2:
+	clk_put(mout_epll);
+out1:
+	clk_put(fout_epll);
 }
 
 void __init exynos5_manta_audio_init(void)
