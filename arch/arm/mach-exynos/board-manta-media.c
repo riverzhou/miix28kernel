@@ -70,11 +70,6 @@ void __init exynos5_manta_media_init(void)
 			 sizeof(exynos_gsc3_default_data),
 			 &exynos5_device_gsc3);
 
-	exynos5_gsc_set_parent_clock("mout_aclk_300_gscl_mid", "mout_mpll_user");
-	exynos5_gsc_set_parent_clock("mout_aclk_300_gscl", "mout_aclk_300_gscl_mid");
-	exynos5_gsc_set_parent_clock("aclk_300_gscl", "dout_aclk_300_gscl");
-	exynos5_gsc_set_clock_rate("dout_aclk_300_gscl", 310000000);
-
 	platform_add_devices(media_devices, ARRAY_SIZE(media_devices));
 }
 

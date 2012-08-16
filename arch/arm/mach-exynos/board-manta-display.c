@@ -81,15 +81,6 @@ static void manta_fimd_gpio_setup_24bpp(void)
 	/* basic fimd init */
 	exynos5_fimd1_gpio_setup_24bpp();
 
-	/* MPLL => FIMD Bus clock */
-	reg = __raw_readl(EXYNOS5_CLKSRC_TOP0);
-	reg = (reg & ~(0x3<<14)) | (0x0<<14);
-	__raw_writel(reg, EXYNOS5_CLKSRC_TOP0);
-
-	reg = __raw_readl(EXYNOS5_CLKDIV_TOP0);
-	reg = (reg & ~(0x7<<28)) | (0x2<<28);
-	__raw_writel(reg, EXYNOS5_CLKDIV_TOP0);
-
 	/* Reference clcok selection for DPTX_PHY: pad_osc_clk_24M */
 	reg = __raw_readl(S3C_VA_SYS + 0x04d4);
 	reg = (reg & ~(0x1 << 0)) | (0x0 << 0);
