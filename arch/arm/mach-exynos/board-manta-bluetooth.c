@@ -41,6 +41,8 @@
 
 static struct rfkill *bt_rfkill;
 
+static DEFINE_MUTEX(manta_bt_wlan_sync);
+
 struct gpio_init_data {
 	uint num;
 	uint cfg;
@@ -90,17 +92,30 @@ void __init exynos5_manta_bt_init(void)
 	platform_add_devices(manta_bt_devs, ARRAY_SIZE(manta_bt_devs));
 }
 
+void bt_wlan_lock(void)
+{
+	mutex_lock(&manta_bt_wlan_sync);
+}
+
+void bt_wlan_unlock(void)
+{
+	mutex_unlock(&manta_bt_wlan_sync);
+}
+
 static int bcm43241_bt_rfkill_set_power(void *data, bool blocked)
 {
 	/* rfkill_ops callback. Turn transmitter on when blocked is false */
+	bt_wlan_lock();
+	msleep(300);
 	if (!blocked) {
 		pr_info("[BT] Bluetooth Power On.\n");
 		gpio_set_value(GPIO_BTREG_ON, 1);
-		msleep(50);
 	} else {
 		pr_info("[BT] Bluetooth Power Off.\n");
 		gpio_set_value(GPIO_BTREG_ON, 0);
 	}
+	msleep(50);
+	bt_wlan_unlock();
 	return 0;
 }
 

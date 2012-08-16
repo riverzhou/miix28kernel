@@ -35,6 +35,9 @@
 #define GPIO_WLAN_PMENA		EXYNOS5_GPV1(0)
 #define GPIO_WLAN_IRQ		EXYNOS5_GPX2(5)
 
+extern void bt_wlan_lock(void);
+extern void bt_wlan_unlock(void);
+
 static struct resource manta_wifi_resources[] = {
 	[0] = {
 		.name	= "bcmdhd_wlan_irq",
@@ -79,13 +82,21 @@ static int manta_wifi_power(int on)
 {
 	int ret = 0;
 
+	bt_wlan_lock();
 	pr_debug("%s: %d\n", __func__, on);
 
-	msleep(200);
+	if (on)
+		msleep(600);
+	else
+		msleep(50);
 	gpio_set_value(GPIO_WLAN_PMENA, on);
-	msleep(500);
+	if (on)
+		msleep(500);
+	else
+		msleep(50);
 
 	manta_wifi_power_state = on;
+	bt_wlan_unlock();
 	return ret;
 }
 
