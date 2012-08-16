@@ -121,7 +121,7 @@ struct fg_status {
 	int current_avg_uA;
 	int charge_uAh;
 
-	u16 temp_C;		/* units of 0.1 C */
+	short temp_C;		/* units of 0.1 C */
 
 	u8 percentage;		/* battery percentage */
 	u8 charge_source;
@@ -328,8 +328,11 @@ static int ds2784_get_temperature(struct ds2784_fg_callbacks *ptr,
 	ds2784_data = container_of(ptr, struct ds2784_data, callbacks);
 
 	ds2784_read_data(ds2784_data, DS2784_REG_TEMP_MSB, 2);
-	n = (((ds2784_data->raw_data[DS2784_REG_TEMP_MSB] << 8) |
-			(ds2784_data->raw_data[DS2784_REG_TEMP_LSB])) >> 5);
+	n = (ds2784_data->raw_data[DS2784_REG_TEMP_MSB] << 8 |
+	     ds2784_data->raw_data[DS2784_REG_TEMP_LSB]) >> 5;
+
+	if (ds2784_data->raw_data[DS2784_REG_TEMP_MSB] & (1 << 7))
+		n |= 0xf800;
 
 	ds2784_data->status.temp_C = (n * 10) / 8;
 	pr_debug("%s: temp : %d\n", __func__,
@@ -355,12 +358,14 @@ static int ds2784_read_status(struct ds2784_data *data)
 	ds2784_read_data(data, start, count);
 	ds2784_parse_data(data->raw_data, &data->status);
 
-	pr_debug("batt: %3d%%, %d mV, %d mA (%d avg), %d.%d C, %d mAh\n",
+	pr_debug("batt: %3d%%, %d mV, %d mA (%d avg), %s%d.%d C, %d mAh\n",
 			data->status.percentage,
 			data->status.voltage_uV / 1000,
 			data->status.current_uA / 1000,
 			data->status.current_avg_uA / 1000,
-			data->status.temp_C / 10, data->status.temp_C % 10,
+			data->status.temp_C < 0 ? "-" : "",
+			abs(data->status.temp_C) / 10,
+			abs(data->status.temp_C) % 10,
 			data->status.charge_uAh / 1000);
 
 	return ret;
