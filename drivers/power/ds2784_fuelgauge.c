@@ -263,7 +263,10 @@ static int ds2784_get_soc(struct ds2784_fg_callbacks *ptr)
 
 	ds2784_read_data(ds2784_data, DS2784_REG_RARC, 1);
 
-	ds2784_data->status.percentage =
+	if (ds2784_data->raw_data[DS2784_REG_RARC] == 0xff)
+		ds2784_data->status.percentage = 42;
+	else
+		ds2784_data->status.percentage =
 			ds2784_data->raw_data[DS2784_REG_RARC];
 
 	pr_debug("%s: level : %d\n", __func__,
@@ -279,10 +282,17 @@ static int ds2784_get_vcell(struct ds2784_fg_callbacks *ptr)
 	ds2784_data = container_of(ptr, struct ds2784_data, callbacks);
 
 	ds2784_read_data(ds2784_data, DS2784_REG_VOLT_MSB, 2);
-	n = (((ds2784_data->raw_data[DS2784_REG_VOLT_MSB] << 8) |
-		(ds2784_data->raw_data[DS2784_REG_VOLT_LSB])) >> 5);
 
-	ds2784_data->status.voltage_uV = n * 4886;
+	if (ds2784_data->raw_data[DS2784_REG_VOLT_LSB] == 0xff &&
+	    ds2784_data->raw_data[DS2784_REG_VOLT_MSB] == 0xff) {
+		ds2784_data->status.voltage_uV = 4242000;
+	} else {
+		n = (((ds2784_data->raw_data[DS2784_REG_VOLT_MSB] << 8) |
+		      (ds2784_data->raw_data[DS2784_REG_VOLT_LSB])) >> 5);
+
+		ds2784_data->status.voltage_uV = n * 4886;
+	}
+
 	pr_debug("%s: voltage : %d\n", __func__,
 			ds2784_data->status.voltage_uV);
 
