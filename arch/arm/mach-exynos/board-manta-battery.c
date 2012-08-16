@@ -463,13 +463,13 @@ static struct smb347_charger_platform_data smb347_chg_pdata = {
 	.use_usb = true,
 	.enable_control = SMB347_CHG_ENABLE_PIN_ACTIVE_LOW,
 	.usb_mode_pin_ctrl = false,
-	.max_charge_current = 2000000,
-	.max_charge_voltage = 4200000,
+	.max_charge_current = 2500000,
+	.max_charge_voltage = 4300000,
 	.pre_charge_current = 200000,
-	.termination_current = 150000,
+	.termination_current = 250000,
 	.pre_to_fast_voltage = 2600000,
-	.mains_current_limit = 1800000,
-	.usb_hc_current_limit = 1500000,
+	.mains_current_limit = 2000000,
+	.usb_hc_current_limit = 1800000,
 	.irq_gpio = GPIO_TA_nCHG_ALPHA,
 	.en_gpio = GPIO_TA_EN,
 	.supplied_to = exynos5_manta_supplicant,
@@ -520,7 +520,7 @@ static void exynos5_manta_set_mains_current(void)
 
 	value.intval =
 		manta_bat_charge_source[CHARGE_CONNECTOR_POGO] ==
-		   CHARGE_SOURCE_USB ? 500000 : 1800000;
+		   CHARGE_SOURCE_USB ? 500000 : 2000000;
 
 	ret = manta_bat_smb347_mains->set_property(manta_bat_smb347_mains,
 					 POWER_SUPPLY_PROP_CURRENT_MAX,
@@ -686,8 +686,8 @@ static struct android_bat_platform_data android_battery_pdata = {
 	.get_current_now = manta_bat_get_current_now,
 
 	.temp_high_threshold = 500000,	/* 50c */
-	.temp_high_recovery = 420000,	/* 42c */
-	.temp_low_recovery = 20000,		/* 2c */
+	.temp_high_recovery = 430000,	/* 43c */
+	.temp_low_recovery = 30000,		/* 3c */
 	.temp_low_threshold = 0,		/* 0c */
 };
 
