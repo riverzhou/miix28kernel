@@ -27,6 +27,7 @@
 #include <plat/cpu.h>
 #include <plat/clock.h>
 #include <plat/devs.h>
+#include <plat/bts.h>
 
 /*
  * Exynos specific wrapper around the generic power domain
@@ -119,9 +120,11 @@ static int exynos_pd_power(struct generic_pm_domain *domain, bool power_on)
 	}
 
 	/* Disable all the clocks of IPs in power domain */
-	if (power_on)
+	if (power_on) {
+		bts_initialize(pd->pd.name);
 		list_for_each_entry(pclk, &pd->list, node)
 			clk_disable(pclk->clk);
+	}
 
 	return ret;
 
@@ -369,15 +372,15 @@ static void __init exynos5_add_device_to_pd(struct exynos_pm_dev **pm_dev, int s
 	for (i = 0; i < size; i++) {
 		tdev = pm_dev[i];
 
+		if (!tdev->con_id)
+			continue;
+
 		pclk = kzalloc(sizeof(struct exynos_pm_clk), GFP_KERNEL);
 
 		if (!pclk) {
 			pr_err("Unable to create new exynos_pm_clk\n");
 			continue;
 		}
-
-		if (!tdev->con_id)
-			continue;
 
 		clk = clk_get(&tdev->pdev->dev, tdev->con_id);
 
