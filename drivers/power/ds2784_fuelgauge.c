@@ -25,6 +25,7 @@
 #include <linux/platform_device.h>
 #include <linux/gpio.h>
 #include <linux/spinlock.h>
+#include <linux/debugfs.h>
 #include <linux/platform_data/ds2784_fuelgauge.h>
 
 #define DS2784_REG_PORT                 0x00
@@ -111,7 +112,7 @@
 #define DS2483_PTR_CODE_DATA		0xE1
 #define DS2483_PTR_CODE_CONFIG		0xC3
 
-#define DS2784_DATA_SIZE		0x80
+#define DS2784_DATA_SIZE		0xB2
 
 struct fg_status {
 	int timestamp;
@@ -141,6 +142,7 @@ struct ds2784_data {
 	char	raw_data[DS2784_DATA_SIZE];	/* raw DS2784 data */
 	struct	fg_status	status;
 	struct	mutex		access_lock;
+	struct dentry		*dentry;
 };
 
 static int write_i2c(struct i2c_client *client, int w1, int w2, int len)
@@ -371,6 +373,43 @@ static int ds2784_read_status(struct ds2784_data *data)
 	return ret;
 }
 
+static int ds2784_debugfs_show(struct seq_file *s, void *unused)
+{
+	struct ds2784_data *data = s->private;
+	u8 reg;
+
+	ds2784_read_data(data, 0x00, 0x1c);
+	ds2784_read_data(data, 0x20, 0x10);
+	ds2784_read_data(data, 0x60, 0x20);
+	ds2784_read_data(data, 0xb0, 0x02);
+
+	for (reg = 0x0; reg <= 0xb1; reg++) {
+		if ((reg >= 0x1c && reg <= 0x1f) ||
+		    (reg >= 0x38 && reg <= 0x5f) ||
+		    (reg >= 0x90 && reg <= 0xaf))
+			continue;
+
+		if (!(reg & 0x7))
+			seq_printf(s, "\n0x%02x:", reg);
+
+		seq_printf(s, "\t0x%02x", data->raw_data[reg]);
+	}
+	seq_printf(s, "\n");
+	return 0;
+}
+
+static int ds2784_debugfs_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, ds2784_debugfs_show, inode->i_private);
+}
+
+static const struct file_operations ds2784_debugfs_fops = {
+	.open		= ds2784_debugfs_open,
+	.read		= seq_read,
+	.llseek		= seq_lseek,
+	.release	= single_release,
+};
+
 static int ds2784_probe(struct i2c_client *client,
 			   const struct i2c_device_id *id)
 {
@@ -404,6 +443,9 @@ static int ds2784_probe(struct i2c_client *client,
 	if (ds2784_data->pdata->register_callbacks)
 		ds2784_data->pdata->register_callbacks(&ds2784_data->callbacks);
 
+	ds2784_data->dentry =
+		debugfs_create_file("ds2784", S_IRUSR, NULL, ds2784_data,
+				    &ds2784_debugfs_fops);
 	return 0;
 
 err_exit:
@@ -416,6 +458,7 @@ static int ds2784_remove(struct i2c_client *client)
 	struct ds2784_data *ds2784_data;
 
 	ds2784_data = i2c_get_clientdata(client);
+	debugfs_remove(ds2784_data->dentry);
 	kfree(ds2784_data);
 
 	return 0;
