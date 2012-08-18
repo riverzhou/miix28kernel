@@ -473,6 +473,7 @@ static struct smb347_charger_platform_data smb347_chg_pdata = {
 	.usb_mode_pin_ctrl = false,
 	.max_charge_current = 2500000,
 	.max_charge_voltage = 4300000,
+	.disable_automatic_recharge = true,
 	.pre_charge_current = 200000,
 	.termination_current = 250000,
 	.pre_to_fast_voltage = 2600000,
