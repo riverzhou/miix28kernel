@@ -27,6 +27,7 @@ struct ds2784_fg_callbacks {
 struct ds2784_platform_data {
 	void (*register_callbacks)(struct ds2784_fg_callbacks *);
 	void (*unregister_callbacks)(void);
+	void *w1_slave;
 };
 
 #endif

@@ -15,18 +15,20 @@
 
 #include <linux/kernel.h>
 #include <linux/module.h>
-#include <linux/fs.h>
 #include <linux/slab.h>
 #include <linux/init.h>
-#include <linux/list.h>
 #include <linux/i2c.h>
-#include <linux/delay.h>
 #include <linux/io.h>
 #include <linux/platform_device.h>
 #include <linux/gpio.h>
 #include <linux/spinlock.h>
 #include <linux/debugfs.h>
 #include <linux/platform_data/ds2784_fuelgauge.h>
+
+#include "../w1/w1.h"
+
+#define W1_DS2784_READ_DATA		0x69
+#define W1_DS2784_WRITE_DATA		0x6C
 
 #define DS2784_REG_PORT                 0x00
 #define DS2784_REG_STS                  0x01
@@ -114,7 +116,7 @@
 
 #define DS2784_DATA_SIZE		0xB2
 
-struct fg_status {
+struct fuelgauge_status {
 	int timestamp;
 
 	int voltage_uV;		/* units of uV */
@@ -133,266 +135,172 @@ struct fg_status {
 	u8 charge_mode;
 };
 
-struct ds2784_data {
-	struct	i2c_client	*client;
-	struct	device		*ds2784_dev;
-	struct	ds2784_platform_data *pdata;
-	struct	ds2784_fg_callbacks callbacks;
-	struct	delayed_work	work;
-	char	raw_data[DS2784_DATA_SIZE];	/* raw DS2784 data */
-	struct	fg_status	status;
-	struct	mutex		access_lock;
+struct ds2784_info {
+	struct	device			*dev;
+	struct	ds2784_platform_data	*pdata;
+	struct	ds2784_fg_callbacks	callbacks;
+	struct	delayed_work		work;
+	char				raw[DS2784_DATA_SIZE];
+	struct	fuelgauge_status	status;
+	struct	w1_slave *w1_slave;
 	struct dentry		*dentry;
 };
 
-static int write_i2c(struct i2c_client *client, int w1, int w2, int len)
+static int w1_ds2784_io(struct w1_slave *sl, char *buf, int addr,
+				size_t count, int io)
 {
-	char buf[10];
-	int ret;
+	if (!sl)
+		return 0;
 
-	buf[0] = w1;
-	buf[1] = w2;
+	mutex_lock(&sl->master->mutex);
 
-	ret = i2c_master_send(client, buf, len);
-	if (ret < 0)
-		dev_err(&client->dev, "i2c_master_send failed\n");
-
-	return ret;
-}
-
-static int read_i2c(struct i2c_client *client, int len)
-{
-	char buf[10] = {0, };
-	int ret;
-
-	ret = i2c_master_recv(client, buf, len);
-	if (ret < 0)
-		dev_err(&client->dev, "i2c_master_recv failed\n");
-
-	return ret;
-}
-
-static int ds2784_read_byte(struct i2c_client *client, char *buf)
-{
-	int ret;
-
-	ret = i2c_master_recv(client, buf, 1);
-
-	return ret;
-}
-
-static int ds2784_read_data(struct ds2784_data *data, int start, int count)
-{
-	int i;
-
-	mutex_lock(&data->access_lock);
-
-	write_i2c(data->client, DS2483_CMD_1WIRE_RESET, 0, 1);
-	mdelay(5);
-	read_i2c(data->client, 1);
-	write_i2c(data->client,
-		DS2483_CMD_1WIRE_WRITE_BYTE, DS2483_CMD_SKIP_ROM, 2);
-	mdelay(5);
-	read_i2c(data->client, 1);
-	write_i2c(data->client,
-		DS2483_CMD_1WIRE_WRITE_BYTE, DS2784_READ_DATA, 2);
-	mdelay(5);
-	read_i2c(data->client, 1);
-	write_i2c(data->client, DS2483_CMD_1WIRE_WRITE_BYTE, start, 2);
-	mdelay(5);
-	read_i2c(data->client, 1);
-
-	for (i = 0; i < count; i++) {
-		write_i2c(data->client, DS2483_CMD_1WIRE_READ_BYTE, 0, 1);
-		mdelay(5);
-		read_i2c(data->client, 1);
-		write_i2c(data->client,
-			DS2483_CMD_SET_READ_PTR, DS2483_PTR_CODE_DATA, 2);
-		ds2784_read_byte(data->client, &data->raw_data[start + i]);
-		pr_debug("%s: raw_data[%d] : 0x%x\n",
-			__func__, start + i, data->raw_data[start + i]);
-		read_i2c(data->client, 1);
+	if (addr > DS2784_DATA_SIZE || addr < 0) {
+		count = 0;
+		goto out;
 	}
-	mutex_unlock(&data->access_lock);
+	if (addr + count > DS2784_DATA_SIZE)
+		count = DS2784_DATA_SIZE - addr;
 
-	return 1;
+	if (!w1_reset_select_slave(sl)) {
+		if (!io) {
+			w1_write_8(sl->master, W1_DS2784_READ_DATA);
+			w1_write_8(sl->master, addr);
+			count = w1_read_block(sl->master, buf, count);
+		} else {
+			w1_write_8(sl->master, W1_DS2784_WRITE_DATA);
+			w1_write_8(sl->master, addr);
+			w1_write_block(sl->master, buf, count);
+		}
+	}
+
+out:
+	mutex_unlock(&sl->master->mutex);
+
+	return count;
 }
 
-static void ds2784_parse_data(u8 *raw, struct fg_status *s)
+static int w1_ds2784_read(struct w1_slave *sl, char *buf,
+				int addr, size_t count)
 {
-	short n;
+	return w1_ds2784_io(sl, buf, addr, count, 0);
+}
 
-	/* Get status reg */
-	s->status_reg = raw[DS2784_REG_STS];
-
-	/* Get Level */
-	s->percentage = raw[DS2784_REG_RARC];
-
-	/* Get Voltage: Unit=4.886mV, range is 0V to 4.99V */
-	n = (((raw[DS2784_REG_VOLT_MSB] << 8) |
-				(raw[DS2784_REG_VOLT_LSB])) >> 5);
-
-	s->voltage_uV = n * 4886;
-
-	/* Get Current: Unit= 1.5625uV x Rsnsp(67)=104.68 */
-	n = ((raw[DS2784_REG_CURR_MSB]) << 8) |
-		raw[DS2784_REG_CURR_LSB];
-	s->current_uA = ((n * 15625) / 10000) * 67;
-
-	n = ((raw[DS2784_REG_AVG_CURR_MSB]) << 8) |
-		raw[DS2784_REG_AVG_CURR_LSB];
-	s->current_avg_uA = ((n * 15625) / 10000) * 67;
-
-	/* Get Temperature:
-	 * 11 bit signed result in Unit=0.125 degree C.
-	 * Convert to integer tenths of degree C.
-	 */
-	n = ((raw[DS2784_REG_TEMP_MSB] << 8) |
-			(raw[DS2784_REG_TEMP_LSB])) >> 5;
-
-	s->temp_C = (n * 10) / 8;
-
-	/* RAAC is in units of 1.6mAh */
-	s->charge_uAh = ((raw[DS2784_REG_RAAC_MSB] << 8) |
-			raw[DS2784_REG_RAAC_LSB]) * 1600;
+static int w1_ds2784_write(struct w1_slave *sl, char *buf,
+				int addr, size_t count)
+{
+	return w1_ds2784_io(sl, buf, addr, count, 1);
 }
 
 static int ds2784_get_soc(struct ds2784_fg_callbacks *ptr)
 {
-	struct ds2784_data *ds2784_data;
+	struct ds2784_info *di;
+	int ret;
 
-	ds2784_data = container_of(ptr, struct ds2784_data, callbacks);
+	di = container_of(ptr, struct ds2784_info, callbacks);
 
-	ds2784_read_data(ds2784_data, DS2784_REG_RARC, 1);
+	ret = w1_ds2784_read(di->w1_slave,
+			di->raw + DS2784_REG_RARC, DS2784_REG_RARC, 1);
 
-	if (ds2784_data->raw_data[DS2784_REG_RARC] == 0xff)
-		ds2784_data->status.percentage = 42;
+	if (di->raw[DS2784_REG_RARC] == 0xff)
+		di->status.percentage = 42;
 	else
-		ds2784_data->status.percentage =
-			ds2784_data->raw_data[DS2784_REG_RARC];
+		di->status.percentage =	di->raw[DS2784_REG_RARC];
 
-	pr_debug("%s: level : %d\n", __func__,
-			ds2784_data->status.percentage);
-	return ds2784_data->status.percentage;
+	pr_debug("%s: level : %d\n", __func__, di->status.percentage);
+	return di->status.percentage;
 }
 
 static int ds2784_get_vcell(struct ds2784_fg_callbacks *ptr)
 {
-	struct ds2784_data *ds2784_data;
+	struct ds2784_info *di;
 	short n;
+	int ret;
 
-	ds2784_data = container_of(ptr, struct ds2784_data, callbacks);
+	di = container_of(ptr, struct ds2784_info, callbacks);
 
-	ds2784_read_data(ds2784_data, DS2784_REG_VOLT_MSB, 2);
+	ret = w1_ds2784_read(di->w1_slave,
+			di->raw + DS2784_REG_VOLT_MSB, DS2784_REG_VOLT_MSB, 2);
 
-	if (ds2784_data->raw_data[DS2784_REG_VOLT_LSB] == 0xff &&
-	    ds2784_data->raw_data[DS2784_REG_VOLT_MSB] == 0xff) {
-		ds2784_data->status.voltage_uV = 4242000;
+	if (di->raw[DS2784_REG_VOLT_LSB] == 0xff &&
+			di->raw[DS2784_REG_VOLT_MSB] == 0xff) {
+		di->status.voltage_uV = 4242000;
 	} else {
-		n = (((ds2784_data->raw_data[DS2784_REG_VOLT_MSB] << 8) |
-		      (ds2784_data->raw_data[DS2784_REG_VOLT_LSB])) >> 5);
+		n = (((di->raw[DS2784_REG_VOLT_MSB] << 8) |
+			(di->raw[DS2784_REG_VOLT_LSB])) >> 5);
 
-		ds2784_data->status.voltage_uV = n * 4886;
+		di->status.voltage_uV = n * 4886;
 	}
 
-	pr_debug("%s: voltage : %d\n", __func__,
-			ds2784_data->status.voltage_uV);
+	pr_debug("%s: voltage : %d\n", __func__, di->status.voltage_uV);
 
-	return ds2784_data->status.voltage_uV;
+	return di->status.voltage_uV;
 }
 
 static int ds2784_get_current(struct ds2784_fg_callbacks *ptr,
 			int *i_current)
 {
-	struct ds2784_data *ds2784_data;
+	struct ds2784_info *di;
 	short n;
+	int ret;
 
-	ds2784_data = container_of(ptr, struct ds2784_data, callbacks);
+	di = container_of(ptr, struct ds2784_info, callbacks);
 
-	ds2784_read_data(ds2784_data, DS2784_REG_CURR_MSB, 2);
-	n = ((ds2784_data->raw_data[DS2784_REG_CURR_MSB] << 8) |
-			(ds2784_data->raw_data[DS2784_REG_CURR_LSB]));
+	ret = w1_ds2784_read(di->w1_slave,
+			di->raw + DS2784_REG_CURR_MSB, DS2784_REG_CURR_MSB, 2);
+	n = ((di->raw[DS2784_REG_CURR_MSB] << 8) |
+			(di->raw[DS2784_REG_CURR_LSB]));
 
-	ds2784_data->status.current_uA = ((n * 15625) / 1000) * 67;
-	pr_debug("%s: current : %d\n", __func__,
-			ds2784_data->status.current_uA);
+	di->status.current_uA = ((n * 15625) / 1000) * 67;
+	pr_debug("%s: current : %d\n", __func__, di->status.current_uA);
 
-	*i_current = ds2784_data->status.current_uA / 10000;
+	*i_current = di->status.current_uA / 10000;
 	return 0;
 }
 
 static int ds2784_get_temperature(struct ds2784_fg_callbacks *ptr,
 			int *temp_now)
 {
-	struct ds2784_data *ds2784_data;
+	struct ds2784_info *di;
 	short n;
+	int ret;
 
-	ds2784_data = container_of(ptr, struct ds2784_data, callbacks);
+	di = container_of(ptr, struct ds2784_info, callbacks);
 
-	ds2784_read_data(ds2784_data, DS2784_REG_TEMP_MSB, 2);
-	n = (ds2784_data->raw_data[DS2784_REG_TEMP_MSB] << 8 |
-	     ds2784_data->raw_data[DS2784_REG_TEMP_LSB]) >> 5;
+	ret = w1_ds2784_read(di->w1_slave,
+			di->raw + DS2784_REG_TEMP_MSB, DS2784_REG_TEMP_MSB, 2);
+	n = (((di->raw[DS2784_REG_TEMP_MSB] << 8) |
+			(di->raw[DS2784_REG_TEMP_LSB])) >> 5);
 
-	if (ds2784_data->raw_data[DS2784_REG_TEMP_MSB] & (1 << 7))
+	if (di->raw[DS2784_REG_TEMP_MSB] & (1 << 7))
 		n |= 0xf800;
 
-	ds2784_data->status.temp_C = (n * 10) / 8;
-	pr_debug("%s: temp : %d\n", __func__,
-			ds2784_data->status.temp_C);
+	di->status.temp_C = (n * 10) / 8;
+	pr_debug("%s: temp : %d\n", __func__, di->status.temp_C);
 
-	*temp_now = ds2784_data->status.temp_C * 1000;
+	*temp_now = di->status.temp_C * 1000;
 	return 0;
-}
-
-static int ds2784_read_status(struct ds2784_data *data)
-{
-	int ret = 0;
-	int start, count;
-
-	if (data->raw_data[DS2784_REG_RSNSP] == 0x0) {
-		start = 0;
-		count = DS2784_DATA_SIZE;
-	} else {
-		start = DS2784_REG_PORT;
-		count = DS2784_REG_CURR_LSB - start + 1;
-	}
-
-	ds2784_read_data(data, start, count);
-	ds2784_parse_data(data->raw_data, &data->status);
-
-	pr_debug("batt: %3d%%, %d mV, %d mA (%d avg), %s%d.%d C, %d mAh\n",
-			data->status.percentage,
-			data->status.voltage_uV / 1000,
-			data->status.current_uA / 1000,
-			data->status.current_avg_uA / 1000,
-			data->status.temp_C < 0 ? "-" : "",
-			abs(data->status.temp_C) / 10,
-			abs(data->status.temp_C) % 10,
-			data->status.charge_uAh / 1000);
-
-	return ret;
 }
 
 static int ds2784_debugfs_show(struct seq_file *s, void *unused)
 {
-	struct ds2784_data *data = s->private;
+	struct ds2784_info *di = s->private;
 	u8 reg;
 
-	ds2784_read_data(data, 0x00, 0x1c);
-	ds2784_read_data(data, 0x20, 0x10);
-	ds2784_read_data(data, 0x60, 0x20);
-	ds2784_read_data(data, 0xb0, 0x02);
+	w1_ds2784_read(di->w1_slave, di->raw, 0x00, 0x1C);
+	w1_ds2784_read(di->w1_slave, di->raw + 0x20, 0x20, 0x10);
+	w1_ds2784_read(di->w1_slave, di->raw + 0x60, 0x60, 0x20);
+	w1_ds2784_read(di->w1_slave, di->raw + 0xb0, 0xb0, 0x02);
 
 	for (reg = 0x0; reg <= 0xb1; reg++) {
 		if ((reg >= 0x1c && reg <= 0x1f) ||
-		    (reg >= 0x38 && reg <= 0x5f) ||
-		    (reg >= 0x90 && reg <= 0xaf))
-			continue;
+			(reg >= 0x38 && reg <= 0x5f) ||
+			(reg >= 0x90 && reg <= 0xaf))
+				continue;
 
 		if (!(reg & 0x7))
 			seq_printf(s, "\n0x%02x:", reg);
 
-		seq_printf(s, "\t0x%02x", data->raw_data[reg]);
+		seq_printf(s, "\t0x%02x", di->raw[reg]);
 	}
 	seq_printf(s, "\n");
 	return 0;
@@ -404,91 +312,61 @@ static int ds2784_debugfs_open(struct inode *inode, struct file *file)
 }
 
 static const struct file_operations ds2784_debugfs_fops = {
-	.open		= ds2784_debugfs_open,
-	.read		= seq_read,
-	.llseek		= seq_lseek,
-	.release	= single_release,
+	.open = ds2784_debugfs_open,
+	.read = seq_read,
+	.llseek = seq_lseek,
+	.release = single_release,
 };
 
-static int ds2784_probe(struct i2c_client *client,
-			   const struct i2c_device_id *id)
+static int ds2784_probe(struct platform_device *pdev)
 {
-	int ret;
-	struct ds2784_data *ds2784_data;
+	struct ds2784_info *fg_info;
 
-	if (!i2c_check_functionality(client->adapter, I2C_FUNC_I2C)) {
-		dev_err(&client->dev, "need I2C_FUNC_I2C\n");
-		return -ENODEV;
+	fg_info = kzalloc(sizeof(*fg_info), GFP_KERNEL);
+	if (fg_info == NULL) {
+		pr_err("%s:failed to allocate memory for module data\n",
+			__func__);
+		return -ENOMEM;
 	}
 
-	ds2784_data = kzalloc(sizeof(*ds2784_data), GFP_KERNEL);
-	if (ds2784_data == NULL) {
-		dev_err(&client->dev,
-			"failed to allocate memory for module data\n");
-		ret = -ENOMEM;
-		goto err_exit;
-	}
+	platform_set_drvdata(pdev, fg_info);
 
-	ds2784_data->client = client;
-	ds2784_data->pdata = client->dev.platform_data;
+	fg_info->pdata = pdev->dev.platform_data;
 
-	i2c_set_clientdata(client, ds2784_data);
+	fg_info->w1_slave = fg_info->pdata->w1_slave;
 
-	mutex_init(&ds2784_data->access_lock);
+	fg_info->dev = &pdev->dev;
 
-	ds2784_data->callbacks.get_capacity = ds2784_get_soc;
-	ds2784_data->callbacks.get_voltage_now = ds2784_get_vcell;
-	ds2784_data->callbacks.get_current_now = ds2784_get_current;
-	ds2784_data->callbacks.get_temperature = ds2784_get_temperature;
-	if (ds2784_data->pdata->register_callbacks)
-		ds2784_data->pdata->register_callbacks(&ds2784_data->callbacks);
+	fg_info->callbacks.get_capacity = ds2784_get_soc;
+	fg_info->callbacks.get_voltage_now = ds2784_get_vcell;
+	fg_info->callbacks.get_current_now = ds2784_get_current;
+	fg_info->callbacks.get_temperature = ds2784_get_temperature;
+	if (fg_info->pdata->register_callbacks)
+		fg_info->pdata->register_callbacks(&fg_info->callbacks);
 
-	ds2784_data->dentry =
-		debugfs_create_file("ds2784", S_IRUGO, NULL, ds2784_data,
-				    &ds2784_debugfs_fops);
-	return 0;
-
-err_exit:
-	kfree(ds2784_data);
-	return ret;
-}
-
-static int ds2784_remove(struct i2c_client *client)
-{
-	struct ds2784_data *ds2784_data;
-
-	ds2784_data = i2c_get_clientdata(client);
-	debugfs_remove(ds2784_data->dentry);
-	kfree(ds2784_data);
-
+	fg_info->dentry =
+		debugfs_create_file("ds2784", S_IRUGO, NULL,
+				    fg_info, &ds2784_debugfs_fops);
 	return 0;
 }
 
 static const struct i2c_device_id ds2784_id[] = {
-	{"ds2784", 0},
+	{"ds2784-fuelgauge", 0},
 };
 
-static struct i2c_driver ds2784_driver = {
-	.id_table = ds2784_id,
+static struct platform_driver ds2784_driver = {
 	.probe = ds2784_probe,
-	.remove = ds2784_remove,
 	.driver = {
 		.owner = THIS_MODULE,
-		.name = "ds2784",
+		.name = "ds2784-fuelgauge",
 	},
 };
 
-static int __init ds2784_data_init(void)
+static int __init ds2784_fuelgauge_init(void)
 {
-	return i2c_add_driver(&ds2784_driver);
+	return platform_driver_register(&ds2784_driver);
 }
-module_init(ds2784_data_init);
-
-static void __exit ds2784_data_exit(void)
-{
-	i2c_del_driver(&ds2784_driver);
-}
-module_exit(ds2784_data_exit);
+module_init(ds2784_fuelgauge_init);
 
 MODULE_AUTHOR("Samsung");
 MODULE_DESCRIPTION("ds2784 driver");
