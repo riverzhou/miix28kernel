@@ -296,33 +296,32 @@ static struct max77686_platform_data manta_max77686_info = {
 			      EXYNOS5_GPV0(0),	/* GPIO_BUCK4_SEL, */
 			      },
 
-	/* for future work after DVS Table */
-	.buck2_voltage[0] = 1100000,	/* 1.1V */
-	.buck2_voltage[1] = 1100000,	/* 1.1V */
-	.buck2_voltage[2] = 1100000,	/* 1.1V */
-	.buck2_voltage[3] = 1100000,	/* 1.1V */
-	.buck2_voltage[4] = 1100000,	/* 1.1V */
-	.buck2_voltage[5] = 1100000,	/* 1.1V */
-	.buck2_voltage[6] = 1100000,	/* 1.1V */
-	.buck2_voltage[7] = 1100000,	/* 1.1V */
+	.buck2_voltage[0] = 1075000,	/* 1.075V */
+	.buck2_voltage[1] = 1075000,	/* 1.075V */
+	.buck2_voltage[2] = 1075000,	/* 1.075V */
+	.buck2_voltage[3] = 1075000,	/* 1.075V */
+	.buck2_voltage[4] = 1075000,	/* 1.075V */
+	.buck2_voltage[5] = 1075000,	/* 1.075V */
+	.buck2_voltage[6] = 1075000,	/* 1.075V */
+	.buck2_voltage[7] = 1075000,	/* 1.075V */
 
-	.buck3_voltage[0] = 1100000,	/* 1.1V */
-	.buck3_voltage[1] = 1100000,	/* 1.1V */
-	.buck3_voltage[2] = 1100000,	/* 1.1V */
-	.buck3_voltage[3] = 1100000,	/* 1.1V */
-	.buck3_voltage[4] = 1100000,	/* 1.1V */
-	.buck3_voltage[5] = 1100000,	/* 1.1V */
-	.buck3_voltage[6] = 1100000,	/* 1.1V */
-	.buck3_voltage[7] = 1100000,	/* 1.1V */
+	.buck3_voltage[0] = 1037500,	/* 1.0375V */
+	.buck3_voltage[1] = 1037500,	/* 1.0375V */
+	.buck3_voltage[2] = 1037500,	/* 1.0375V */
+	.buck3_voltage[3] = 1037500,	/* 1.0375V */
+	.buck3_voltage[4] = 1037500,	/* 1.0375V */
+	.buck3_voltage[5] = 1037500,	/* 1.0375V */
+	.buck3_voltage[6] = 1037500,	/* 1.0375V */
+	.buck3_voltage[7] = 1037500,	/* 1.0375V */
 
-	.buck4_voltage[0] = 1100000,	/* 1.1V */
-	.buck4_voltage[1] = 1100000,	/* 1.1V */
-	.buck4_voltage[2] = 1100000,	/* 1.1V */
-	.buck4_voltage[3] = 1100000,	/* 1.1V */
-	.buck4_voltage[4] = 1100000,	/* 1.1V */
-	.buck4_voltage[5] = 1100000,	/* 1.1V */
-	.buck4_voltage[6] = 1100000,	/* 1.1V */
-	.buck4_voltage[7] = 1100000,	/* 1.1V */
+	.buck4_voltage[0] = 1200000,	/* 1.2V */
+	.buck4_voltage[1] = 1200000,	/* 1.2V */
+	.buck4_voltage[2] = 1200000,	/* 1.2V */
+	.buck4_voltage[3] = 1200000,	/* 1.2V */
+	.buck4_voltage[4] = 1200000,	/* 1.2V */
+	.buck4_voltage[5] = 1200000,	/* 1.2V */
+	.buck4_voltage[6] = 1200000,	/* 1.2V */
+	.buck4_voltage[7] = 1200000,	/* 1.2V */
 
 	/* for RTC */
 	.wtsr_smpl = &wtsr_smpl_data,
