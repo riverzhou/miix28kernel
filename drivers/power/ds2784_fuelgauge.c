@@ -444,7 +444,7 @@ static int ds2784_probe(struct i2c_client *client,
 		ds2784_data->pdata->register_callbacks(&ds2784_data->callbacks);
 
 	ds2784_data->dentry =
-		debugfs_create_file("ds2784", S_IRUSR, NULL, ds2784_data,
+		debugfs_create_file("ds2784", S_IRUGO, NULL, ds2784_data,
 				    &ds2784_debugfs_fops);
 	return 0;
 
