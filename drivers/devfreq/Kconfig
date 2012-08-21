@@ -46,6 +46,11 @@ config DEVFREQ_GOV_PERFORMANCE
 	  the DEVFREQ framework returns the highest frequency available
 	  at any time.
 
+config DEVFREQ_GOV_PM_QOS
+	bool "PM QOS"
+	help
+	  Sets the frequency based on pm_qos throughput constraints.
+
 config DEVFREQ_GOV_POWERSAVE
 	bool "Powersave"
 	help
@@ -77,5 +82,15 @@ config ARM_EXYNOS4_BUS_DEVFREQ
 	  the operating frequencies and voltages with OPP support.
 	  To operate with optimal voltages, ASV support is required
 	  (CONFIG_EXYNOS_ASV).
+
+config ARM_EXYNOS5_BUS_DEVFREQ
+	bool "ARM Exynos5250 Memory Bus DEVFREQ Driver"
+	depends on SOC_EXYNOS5250
+	select ARCH_HAS_OPP
+	select DEVFREQ_GOV_SIMPLE_ONDEMAND
+	help
+	  This adds the DEVFREQ driver for Exynos5250 memory interface
+	  (vdd_mif). It reads PPMU counters of memory controllers and
+	  adjusts the operating frequencies and voltages with OPP support.
 
 endif # PM_DEVFREQ
