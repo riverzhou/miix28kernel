@@ -251,6 +251,8 @@ struct s3c_fb_win {
 	unsigned int		 index;
 #ifdef CONFIG_ION_EXYNOS
 	struct s3c_dma_buf_data	dma_buf_data;
+	struct fb_var_screeninfo prev_var;
+	struct fb_fix_screeninfo prev_fix;
 #endif
 
 	int			fps;
@@ -1390,27 +1392,30 @@ static unsigned int s3c_fb_map_ion_handle(struct s3c_fb *sfb,
 {
 	dma->dma_buf = dma_buf_get(fd);
 	if (IS_ERR_OR_NULL(dma->dma_buf)) {
-		dev_err(sfb->dev, "dma_buf_get() failed\n");
+		dev_err(sfb->dev, "dma_buf_get() failed: %ld\n",
+				PTR_ERR(dma->dma_buf));
 		goto err_share_dma_buf;
 	}
 
 	dma->attachment = dma_buf_attach(dma->dma_buf, sfb->dev);
 	if (IS_ERR_OR_NULL(dma->attachment)) {
-		dev_err(sfb->dev, "dma_buf_map_attach() failed\n");
+		dev_err(sfb->dev, "dma_buf_attach() failed: %ld\n",
+				PTR_ERR(dma->attachment));
 		goto err_buf_map_attach;
 	}
 
 	dma->sg_table = dma_buf_map_attachment(dma->attachment,
 			DMA_BIDIRECTIONAL);
 	if (IS_ERR_OR_NULL(dma->sg_table)) {
-		dev_err(sfb->dev, "dma_buf_map_attachment() failed\n");
+		dev_err(sfb->dev, "dma_buf_map_attachment() failed: %ld\n",
+				PTR_ERR(dma->sg_table));
 		goto err_buf_map_attachment;
 	}
 
 	dma->dma_addr = iovmm_map(&s5p_device_fimd1.dev, dma->sg_table->sgl, 0,
 			dma->dma_buf->size);
-	if (!dma->dma_addr) {
-		dev_err(sfb->dev, "iovmm_map() failed\n");
+	if (!dma->dma_addr || IS_ERR_VALUE(dma->dma_addr)) {
+		dev_err(sfb->dev, "iovmm_map() failed: %d\n", dma->dma_addr);
 		goto err_iovmm_map;
 	}
 
@@ -1431,12 +1436,16 @@ err_share_dma_buf:
 static void s3c_fb_free_dma_buf(struct s3c_fb *sfb,
 		struct s3c_dma_buf_data *dma)
 {
+	if (!dma->dma_addr)
+		return;
+
 	iovmm_unmap(sfb->dev, dma->dma_addr);
 	dma_buf_unmap_attachment(dma->attachment, dma->sg_table,
 			DMA_BIDIRECTIONAL);
 	dma_buf_detach(dma->dma_buf, dma->attachment);
 	dma_buf_put(dma->dma_buf);
 	ion_free(sfb->fb_ion_client, dma->ion_handle);
+	memset(dma, 0, sizeof(struct s3c_dma_buf_data));
 }
 
 static u32 s3c_fb_red_length(int format)
@@ -1568,8 +1577,8 @@ static int s3c_fb_set_win_buffer(struct s3c_fb *sfb, struct s3c_fb_win *win,
 		struct s3c_fb_win_config *win_config, struct s3c_reg_data *regs)
 {
 	struct ion_handle *handle;
-	struct fb_fix_screeninfo prev_fix = win->fbinfo->fix;
 	struct fb_var_screeninfo prev_var = win->fbinfo->var;
+	struct s3c_dma_buf_data dma_buf_data;
 	unsigned short win_no = win->index;
 	int ret;
 	size_t buf_size, window_size;
@@ -1589,6 +1598,12 @@ static int s3c_fb_set_win_buffer(struct s3c_fb *sfb, struct s3c_fb_win *win,
 
 	if (win_no == 0 && win_config->blending != S3C_FB_BLENDING_NONE) {
 		dev_err(sfb->dev, "blending not allowed on window 0\n");
+		return -EINVAL;
+	}
+
+	if (win_config->w == 0 || win_config->h == 0) {
+		dev_err(sfb->dev, "window is size 0 (w = %u, h = %u)\n",
+				win_config->w, win_config->h);
 		return -EINVAL;
 	}
 
@@ -1613,36 +1628,42 @@ static int s3c_fb_set_win_buffer(struct s3c_fb *sfb, struct s3c_fb_win *win,
 		dev_err(sfb->dev, "stride shorter than buffer width (stride = %u, width = %u, bpp = %u)\n",
 				win_config->stride, win_config->w,
 				win->fbinfo->var.bits_per_pixel);
-		return -EINVAL;
+		ret = -EINVAL;
+		goto err_invalid;
 	}
 
 	if (!s3c_fb_validate_x_alignment(sfb, win_config->x, win_config->w,
-			win->fbinfo->var.bits_per_pixel))
-		return -EINVAL;
+			win->fbinfo->var.bits_per_pixel)) {
+		ret = -EINVAL;
+		goto err_invalid;
+	}
 
 	handle = ion_import_dma_buf(sfb->fb_ion_client, win_config->fd);
 	if (IS_ERR(handle)) {
 		dev_err(sfb->dev, "failed to import fd\n");
 		ret = PTR_ERR(handle);
-		goto err_import;
+		goto err_invalid;
 	}
 
-	buf_size = s3c_fb_map_ion_handle(sfb, &regs->dma_buf_data[win_no],
-			handle, win_config->fd);
+	buf_size = s3c_fb_map_ion_handle(sfb, &dma_buf_data, handle,
+			win_config->fd);
 	if (!buf_size) {
 		ret = -ENOMEM;
+		ion_free(sfb->fb_ion_client, handle);
 		goto err_invalid;
 	}
-	window_size = win_config->stride * win_config->h;
+	window_size = win_config->stride * (win_config->h - 1) +
+			win_config->w * win->fbinfo->var.bits_per_pixel / 8;
 	if (win_config->offset + window_size > buf_size) {
-		dev_err(sfb->dev, "window goes past end of buffer (window_size = %u, offset = %u, buf_size = %u)\n",
-				window_size,
-				win_config->offset, buf_size);
+		dev_err(sfb->dev, "window goes past end of buffer (width = %u, height = %u, stride = %u, offset = %u, buf_size = %u)\n",
+				win_config->w, win_config->h,
+				win_config->stride, win_config->offset,
+				buf_size);
 		ret = -EINVAL;
-		goto err_invalid;
+		goto err_offset;
 	}
 
-	win->fbinfo->fix.smem_start = regs->dma_buf_data[win_no].dma_addr
+	win->fbinfo->fix.smem_start = dma_buf_data.dma_addr
 			+ win_config->offset;
 	win->fbinfo->fix.smem_len = window_size;
 	win->fbinfo->var.xres = win_config->w;
@@ -1659,6 +1680,7 @@ static int s3c_fb_set_win_buffer(struct s3c_fb *sfb, struct s3c_fb_win *win,
 			win->fbinfo->var.xres_virtual);
 	win->fbinfo->fix.ypanstep = fb_panstep(win_config->h, win_config->h);
 
+	regs->dma_buf_data[win_no] = dma_buf_data;
 	regs->vidw_buf_start[win_no] = win->fbinfo->fix.smem_start;
 	regs->vidw_buf_end[win_no] = regs->vidw_buf_start[win_no] +
 			window_size;
@@ -1707,10 +1729,9 @@ static int s3c_fb_set_win_buffer(struct s3c_fb *sfb, struct s3c_fb_win *win,
 
 	return 0;
 
+err_offset:
+	s3c_fb_free_dma_buf(sfb, &dma_buf_data);
 err_invalid:
-	ion_free(sfb->fb_ion_client, handle);
-err_import:
-	win->fbinfo->fix = prev_fix;
 	win->fbinfo->var = prev_var;
 	return ret;
 }
@@ -1746,9 +1767,14 @@ static int s3c_fb_set_win_config(struct s3c_fb *sfb,
 
 	regs = kzalloc(sizeof(struct s3c_reg_data), GFP_KERNEL);
 	if (!regs) {
-		dev_err(sfb->dev, "could not allocate s3c_reg_data");
+		dev_err(sfb->dev, "could not allocate s3c_reg_data\n");
 		ret = -ENOMEM;
 		goto err;
+	}
+
+	for (i = 0; i < sfb->variant.nr_windows; i++) {
+		sfb->windows[i]->prev_fix = sfb->windows[i]->fbinfo->fix;
+		sfb->windows[i]->prev_var = sfb->windows[i]->fbinfo->var;
 	}
 
 	for (i = 0; i < sfb->variant.nr_windows && !ret; i++) {
@@ -1803,10 +1829,13 @@ static int s3c_fb_set_win_config(struct s3c_fb *sfb,
 	}
 
 	if (ret) {
-		for (i = 0; i < sfb->variant.nr_windows; i++)
-			if (regs->dma_buf_data[i].dma_addr)
-				s3c_fb_free_dma_buf(sfb,
-						&regs->dma_buf_data[i]);
+		for (i = 0; i < sfb->variant.nr_windows; i++) {
+			sfb->windows[i]->fbinfo->fix =
+					sfb->windows[i]->prev_fix;
+			sfb->windows[i]->fbinfo->var =
+					sfb->windows[i]->prev_var;
+			s3c_fb_free_dma_buf(sfb, &regs->dma_buf_data[i]);
+		}
 		put_unused_fd(fd);
 		kfree(regs);
 	} else {
@@ -1908,11 +1937,8 @@ static void s3c_fb_update_regs(struct s3c_fb *sfb, struct s3c_reg_data *regs)
 	pm_runtime_put_sync(sfb->dev);
 	sw_sync_timeline_inc(sfb->timeline, 1);
 
-	for (i = 0; i < sfb->variant.nr_windows; i++) {
-		struct s3c_dma_buf_data *dma = &old_dma_bufs[i];
-		if (dma->dma_addr)
-			s3c_fb_free_dma_buf(sfb, dma);
-	}
+	for (i = 0; i < sfb->variant.nr_windows; i++)
+		s3c_fb_free_dma_buf(sfb, &old_dma_bufs[i]);
 }
 
 static void s3c_fb_update_regs_handler(struct kthread_work *work)
@@ -2227,10 +2253,7 @@ err_share_dma_buf:
 static void s3c_fb_free_memory(struct s3c_fb *sfb, struct s3c_fb_win *win)
 {
 #if defined(CONFIG_ION_EXYNOS)
-	if (win->dma_buf_data.dma_addr) {
-		s3c_fb_free_dma_buf(sfb, &win->dma_buf_data);
-		memset(&win->dma_buf_data, 0, sizeof(win->dma_buf_data));
-	}
+	s3c_fb_free_dma_buf(sfb, &win->dma_buf_data);
 #else
 	struct fb_info *fbi = win->fbinfo;
 
