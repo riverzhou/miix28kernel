@@ -148,6 +148,8 @@ static void charger_gpio_init(void)
 
 	s3c_gpio_cfgpin(GPIO_TA_EN, S3C_GPIO_OUTPUT);
 	s3c_gpio_setpull(GPIO_TA_EN, S3C_GPIO_PULL_NONE);
+	s5p_gpio_set_pd_cfg(GPIO_TA_EN, S5P_GPIO_PD_PREV_STATE);
+	s5p_gpio_set_pd_pull(GPIO_TA_EN, S5P_GPIO_PD_UPDOWN_DISABLE);
 	gpio_set_value(GPIO_TA_EN, 0);
 
 	s3c_gpio_cfgpin(GPIO_USB_SEL1, S3C_GPIO_OUTPUT);
