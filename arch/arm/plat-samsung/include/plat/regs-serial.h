@@ -265,6 +265,8 @@ struct s3c2410_uartcfg {
 	unsigned long	   ucon;	 /* value of ucon for port */
 	unsigned long	   ulcon;	 /* value of ulcon for port */
 	unsigned long	   ufcon;	 /* value of ufcon for port */
+
+	void (*wake_peer)(struct uart_port *);
 };
 
 /* s3c24xx_uart_devs
