@@ -245,15 +245,22 @@ static int ds2784_get_current(struct ds2784_fg_callbacks *ptr,
 
 	di = container_of(ptr, struct ds2784_info, callbacks);
 
+	if (!di->raw[DS2784_REG_RSNSP]) {
+		ret = w1_ds2784_read(di->w1_slave, di->raw + DS2784_REG_RSNSP,
+				     DS2784_REG_RSNSP, 1);
+		if (ret < 0)
+			dev_err(di->dev, "error %d reading RSNSP\n", ret);
+	}
+
 	ret = w1_ds2784_read(di->w1_slave,
 			di->raw + DS2784_REG_CURR_MSB, DS2784_REG_CURR_MSB, 2);
 	n = ((di->raw[DS2784_REG_CURR_MSB] << 8) |
 			(di->raw[DS2784_REG_CURR_LSB]));
 
-	di->status.current_uA = ((n * 15625) / 1000) * 67;
+	di->status.current_uA = (n * 15625) / 10000 * di->raw[DS2784_REG_RSNSP];
 	pr_debug("%s: current : %d\n", __func__, di->status.current_uA);
 
-	*i_current = di->status.current_uA / 10000;
+	*i_current = di->status.current_uA / 1000;
 	return 0;
 }
 
