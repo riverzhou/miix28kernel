@@ -102,6 +102,11 @@ void __init exynos5_manta_bt_init(void)
 		s5p_gpio_set_drvstr(gpio, manta_init_bt_gpios[i].drv);
 	}
 
+	s5p_gpio_set_pd_cfg(GPIO_BTREG_ON, S5P_GPIO_PD_PREV_STATE);
+	s5p_gpio_set_pd_pull(GPIO_BTREG_ON, S5P_GPIO_PD_UPDOWN_DISABLE);
+	s5p_gpio_set_pd_cfg(GPIO_BT_WAKE, S5P_GPIO_PD_PREV_STATE);
+	s5p_gpio_set_pd_pull(GPIO_BT_WAKE, S5P_GPIO_PD_UPDOWN_DISABLE);
+
 	platform_add_devices(manta_bt_devs, ARRAY_SIZE(manta_bt_devs));
 }
 
@@ -123,9 +128,11 @@ static int bcm43241_bt_rfkill_set_power(void *data, bool blocked)
 	if (!blocked) {
 		pr_info("[BT] Bluetooth Power On.\n");
 		gpio_set_value(GPIO_BTREG_ON, 1);
+		s3c_gpio_setpull(GPIO_BT_HOST_WAKE, S3C_GPIO_PULL_NONE);
 	} else {
 		pr_info("[BT] Bluetooth Power Off.\n");
 		gpio_set_value(GPIO_BTREG_ON, 0);
+		s3c_gpio_setpull(GPIO_BT_HOST_WAKE, S3C_GPIO_PULL_DOWN);
 	}
 	msleep(50);
 	bt_wlan_unlock();
