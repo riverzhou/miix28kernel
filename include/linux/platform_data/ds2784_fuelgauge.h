@@ -17,16 +17,7 @@
 #ifndef __DS2784_BATTERY_H_
 #define __DS2784_BATTERY_H_
 
-struct ds2784_fg_callbacks {
-	int (*get_capacity) (struct ds2784_fg_callbacks *callbacks);
-	int (*get_voltage_now) (struct ds2784_fg_callbacks *callbacks);
-	int (*get_current_now) (struct ds2784_fg_callbacks *, int *);
-	int (*get_temperature) (struct ds2784_fg_callbacks *, int *);
-};
-
 struct ds2784_platform_data {
-	void (*register_callbacks)(struct ds2784_fg_callbacks *);
-	void (*unregister_callbacks)(void);
 	void *w1_slave;
 };
 

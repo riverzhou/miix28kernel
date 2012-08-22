@@ -22,6 +22,7 @@
 #include <linux/platform_device.h>
 #include <linux/gpio.h>
 #include <linux/spinlock.h>
+#include <linux/power_supply.h>
 #include <linux/debugfs.h>
 #include <linux/platform_data/ds2784_fuelgauge.h>
 
@@ -138,11 +139,12 @@ struct fuelgauge_status {
 struct ds2784_info {
 	struct	device			*dev;
 	struct	ds2784_platform_data	*pdata;
-	struct	ds2784_fg_callbacks	callbacks;
+	struct power_supply		bat;
 	struct	delayed_work		work;
 	char				raw[DS2784_DATA_SIZE];
 	struct	fuelgauge_status	status;
 	struct	w1_slave *w1_slave;
+	bool				inited;
 	struct dentry		*dentry;
 };
 
@@ -191,15 +193,15 @@ static int w1_ds2784_write(struct w1_slave *sl, char *buf,
 	return w1_ds2784_io(sl, buf, addr, count, 1);
 }
 
-static int ds2784_get_soc(struct ds2784_fg_callbacks *ptr)
+static int ds2784_get_soc(struct ds2784_info *di, int *soc)
 {
-	struct ds2784_info *di;
 	int ret;
-
-	di = container_of(ptr, struct ds2784_info, callbacks);
 
 	ret = w1_ds2784_read(di->w1_slave,
 			di->raw + DS2784_REG_RARC, DS2784_REG_RARC, 1);
+
+	if (ret < 0)
+		return ret;
 
 	if (di->raw[DS2784_REG_RARC] == 0xff)
 		di->status.percentage = 42;
@@ -207,19 +209,20 @@ static int ds2784_get_soc(struct ds2784_fg_callbacks *ptr)
 		di->status.percentage =	di->raw[DS2784_REG_RARC];
 
 	pr_debug("%s: level : %d\n", __func__, di->status.percentage);
-	return di->status.percentage;
+	*soc = di->status.percentage;
+	return 0;
 }
 
-static int ds2784_get_vcell(struct ds2784_fg_callbacks *ptr)
+static int ds2784_get_vcell(struct ds2784_info *di, int *vcell)
 {
-	struct ds2784_info *di;
 	short n;
 	int ret;
 
-	di = container_of(ptr, struct ds2784_info, callbacks);
+	ret = w1_ds2784_read(di->w1_slave, di->raw + DS2784_REG_VOLT_MSB,
+			     DS2784_REG_VOLT_MSB, 2);
 
-	ret = w1_ds2784_read(di->w1_slave,
-			di->raw + DS2784_REG_VOLT_MSB, DS2784_REG_VOLT_MSB, 2);
+	if (ret < 0)
+		return ret;
 
 	if (di->raw[DS2784_REG_VOLT_LSB] == 0xff &&
 			di->raw[DS2784_REG_VOLT_MSB] == 0xff) {
@@ -232,18 +235,14 @@ static int ds2784_get_vcell(struct ds2784_fg_callbacks *ptr)
 	}
 
 	pr_debug("%s: voltage : %d\n", __func__, di->status.voltage_uV);
-
-	return di->status.voltage_uV;
+	*vcell = di->status.voltage_uV;
+	return 0;
 }
 
-static int ds2784_get_current(struct ds2784_fg_callbacks *ptr,
-			int *i_current)
+static int ds2784_get_current_now(struct ds2784_info *di, int *i_current)
 {
-	struct ds2784_info *di;
 	short n;
 	int ret;
-
-	di = container_of(ptr, struct ds2784_info, callbacks);
 
 	if (!di->raw[DS2784_REG_RSNSP]) {
 		ret = w1_ds2784_read(di->w1_slave, di->raw + DS2784_REG_RSNSP,
@@ -254,6 +253,10 @@ static int ds2784_get_current(struct ds2784_fg_callbacks *ptr,
 
 	ret = w1_ds2784_read(di->w1_slave,
 			di->raw + DS2784_REG_CURR_MSB, DS2784_REG_CURR_MSB, 2);
+
+	if (ret < 0)
+		return ret;
+
 	n = ((di->raw[DS2784_REG_CURR_MSB] << 8) |
 			(di->raw[DS2784_REG_CURR_LSB]));
 
@@ -264,17 +267,17 @@ static int ds2784_get_current(struct ds2784_fg_callbacks *ptr,
 	return 0;
 }
 
-static int ds2784_get_temperature(struct ds2784_fg_callbacks *ptr,
-			int *temp_now)
+static int ds2784_get_temperature(struct ds2784_info *di, int *temp_now)
 {
-	struct ds2784_info *di;
 	short n;
 	int ret;
 
-	di = container_of(ptr, struct ds2784_info, callbacks);
-
 	ret = w1_ds2784_read(di->w1_slave,
 			di->raw + DS2784_REG_TEMP_MSB, DS2784_REG_TEMP_MSB, 2);
+
+	if (ret < 0)
+		return ret;
+
 	n = (((di->raw[DS2784_REG_TEMP_MSB] << 8) |
 			(di->raw[DS2784_REG_TEMP_LSB])) >> 5);
 
@@ -284,9 +287,60 @@ static int ds2784_get_temperature(struct ds2784_fg_callbacks *ptr,
 	di->status.temp_C = (n * 10) / 8;
 	pr_debug("%s: temp : %d\n", __func__, di->status.temp_C);
 
-	*temp_now = di->status.temp_C * 1000;
+	*temp_now = di->status.temp_C;
 	return 0;
 }
+
+static int ds2784_get_property(struct power_supply *psy,
+	enum power_supply_property psp,
+	union power_supply_propval *val)
+{
+	int ret = 0;
+	struct ds2784_info *di = container_of(psy, struct ds2784_info, bat);
+
+	if (!di->inited)
+		return -ENODEV;
+
+	switch (psp) {
+	case POWER_SUPPLY_PROP_VOLTAGE_NOW:
+		ret = ds2784_get_vcell(di, &val->intval);
+		break;
+
+	case POWER_SUPPLY_PROP_TEMP:
+		ret = ds2784_get_temperature(di, &val->intval);
+		break;
+
+	case POWER_SUPPLY_PROP_MODEL_NAME:
+		val->strval = "DS2784";
+		break;
+
+	case POWER_SUPPLY_PROP_MANUFACTURER:
+		val->strval = "Maxim/Dallas";
+		break;
+
+	case POWER_SUPPLY_PROP_CURRENT_NOW:
+		ret = ds2784_get_current_now(di, &val->intval);
+		break;
+
+	case POWER_SUPPLY_PROP_CAPACITY:
+		ret = ds2784_get_soc(di, &val->intval);
+		break;
+
+	default:
+		ret = -EINVAL;
+	}
+
+	return ret;
+}
+
+static enum power_supply_property ds2784_props[] = {
+	POWER_SUPPLY_PROP_VOLTAGE_NOW,
+	POWER_SUPPLY_PROP_TEMP,
+	POWER_SUPPLY_PROP_MODEL_NAME,
+	POWER_SUPPLY_PROP_MANUFACTURER,
+	POWER_SUPPLY_PROP_CURRENT_NOW,
+	POWER_SUPPLY_PROP_CAPACITY,
+};
 
 static int ds2784_debugfs_show(struct seq_file *s, void *unused)
 {
@@ -325,55 +379,61 @@ static const struct file_operations ds2784_debugfs_fops = {
 	.release = single_release,
 };
 
-static int ds2784_probe(struct platform_device *pdev)
+static int __devinit ds2784_probe(struct platform_device *pdev)
 {
-	struct ds2784_info *fg_info;
+	struct ds2784_info *di;
+	int ret;
 
-	fg_info = kzalloc(sizeof(*fg_info), GFP_KERNEL);
-	if (fg_info == NULL) {
+	di = kzalloc(sizeof(*di), GFP_KERNEL);
+	if (!di) {
 		pr_err("%s:failed to allocate memory for module data\n",
 			__func__);
 		return -ENOMEM;
 	}
 
-	platform_set_drvdata(pdev, fg_info);
+	platform_set_drvdata(pdev, di);
+	di->pdata = pdev->dev.platform_data;
+	di->w1_slave = di->pdata->w1_slave;
+	di->dev = &pdev->dev;
+	di->bat.name		= dev_name(&pdev->dev);
+	di->bat.type		= POWER_SUPPLY_TYPE_BATTERY;
+	di->bat.properties	= ds2784_props;
+	di->bat.num_properties	= ARRAY_SIZE(ds2784_props);
+	di->bat.get_property	= ds2784_get_property;
 
-	fg_info->pdata = pdev->dev.platform_data;
+	ret = power_supply_register(&pdev->dev, &di->bat);
+	if (ret) {
+		dev_err(di->dev, "failed to register battery power supply\n");
+		kfree(di);
+		return ret;
+	}
 
-	fg_info->w1_slave = fg_info->pdata->w1_slave;
-
-	fg_info->dev = &pdev->dev;
-
-	fg_info->callbacks.get_capacity = ds2784_get_soc;
-	fg_info->callbacks.get_voltage_now = ds2784_get_vcell;
-	fg_info->callbacks.get_current_now = ds2784_get_current;
-	fg_info->callbacks.get_temperature = ds2784_get_temperature;
-	if (fg_info->pdata->register_callbacks)
-		fg_info->pdata->register_callbacks(&fg_info->callbacks);
-
-	fg_info->dentry =
-		debugfs_create_file("ds2784", S_IRUGO, NULL,
-				    fg_info, &ds2784_debugfs_fops);
+	di->dentry = debugfs_create_file("ds2784", S_IRUGO, NULL, di,
+					 &ds2784_debugfs_fops);
+	di->inited = true;
 	return 0;
 }
 
-static const struct i2c_device_id ds2784_id[] = {
-	{"ds2784-fuelgauge", 0},
-};
+static int __devexit ds2784_remove(struct platform_device *pdev)
+{
+	struct ds2784_info *di = platform_get_drvdata(pdev);
+
+	power_supply_unregister(&di->bat);
+	debugfs_remove(di->dentry);
+	kfree(di);
+	return 0;
+}
 
 static struct platform_driver ds2784_driver = {
 	.probe = ds2784_probe,
+	.remove   = __devexit_p(ds2784_remove),
 	.driver = {
 		.owner = THIS_MODULE,
 		.name = "ds2784-fuelgauge",
 	},
 };
 
-static int __init ds2784_fuelgauge_init(void)
-{
-	return platform_driver_register(&ds2784_driver);
-}
-module_init(ds2784_fuelgauge_init);
+module_platform_driver(ds2784_driver);
 
 MODULE_AUTHOR("Samsung");
 MODULE_DESCRIPTION("ds2784 driver");
