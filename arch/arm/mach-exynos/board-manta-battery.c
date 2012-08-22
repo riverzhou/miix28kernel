@@ -65,9 +65,9 @@ static bool manta_bat_chg_enable_synced;
 static struct power_supply *manta_bat_smb347_mains;
 static struct power_supply *manta_bat_smb347_usb;
 static struct power_supply *manta_bat_smb347_battery;
+static struct power_supply *manta_bat_ds2784_battery;
 
 static struct max17047_fg_callbacks *fg_callbacks;
-static struct ds2784_fg_callbacks *ds2784_fg_callbacks;
 static struct bq24191_chg_callbacks *chg_callbacks;
 static struct android_bat_callbacks *bat_callbacks;
 
@@ -78,6 +78,20 @@ static struct wakeup_source manta_bat_vbus_ws;
 static DEFINE_MUTEX(manta_bat_charger_detect_lock);
 static DEFINE_MUTEX(manta_bat_adc_lock);
 
+static inline int manta_bat_get_ds2784(void) {
+	if (!manta_bat_ds2784_battery)
+		manta_bat_ds2784_battery =
+			power_supply_get_by_name("ds2784-fuelgauge");
+
+	if (!manta_bat_ds2784_battery) {
+		pr_err("%s: failed to get ds2784-fuelgauge power supply\n",
+		       __func__);
+		return -ENODEV;
+	}
+
+	return 0;
+}
+
 static void max17047_fg_register_callbacks(struct max17047_fg_callbacks *ptr)
 {
 	fg_callbacks = ptr;
@@ -85,19 +99,9 @@ static void max17047_fg_register_callbacks(struct max17047_fg_callbacks *ptr)
 		fg_callbacks->get_temperature = NULL;
 }
 
-static void ds2784_fg_register_callbacks(struct ds2784_fg_callbacks *prt)
-{
-	ds2784_fg_callbacks = prt;
-}
-
 static void max17047_fg_unregister_callbacks(void)
 {
 	fg_callbacks = NULL;
-}
-
-static void ds2784_fg_unregister_callbacks(void)
-{
-	ds2784_fg_callbacks = NULL;
 }
 
 static struct max17047_platform_data max17047_fg_pdata = {
@@ -566,65 +570,96 @@ static void manta_bat_set_charging_current(int charge_source)
 static int manta_bat_get_capacity(void)
 {
 	int hw_rev = exynos5_manta_get_revision();
+	union power_supply_propval soc;
+	int ret = -ENXIO;
 
 	if (hw_rev >= MANTA_REV_BETA) {
-		if (ds2784_fg_callbacks && ds2784_fg_callbacks->get_capacity)
-			return ds2784_fg_callbacks->
-				get_capacity(ds2784_fg_callbacks);
+		if (manta_bat_get_ds2784())
+			return ret;
+
+		ret = manta_bat_ds2784_battery->get_property(
+			manta_bat_ds2784_battery, POWER_SUPPLY_PROP_CAPACITY,
+			&soc);
+
+		if (ret >= 0)
+			ret = soc.intval;
 	} else {
 		if (fg_callbacks && fg_callbacks->get_capacity)
-			return fg_callbacks->get_capacity(fg_callbacks);
+			ret = fg_callbacks->get_capacity(fg_callbacks);
 	}
 
-	return -ENXIO;
+	return ret;
 }
 
 static int manta_bat_get_temperature(int *temp_now)
 {
 	int hw_rev = exynos5_manta_get_revision();
+	union power_supply_propval temp;
+	int ret = -ENXIO;
 
 	if (hw_rev >= MANTA_REV_BETA) {
-		if (ds2784_fg_callbacks && ds2784_fg_callbacks->get_temperature)
-			return ds2784_fg_callbacks->
-				get_temperature(ds2784_fg_callbacks, temp_now);
+		if (manta_bat_get_ds2784())
+			return ret;
+
+		ret = manta_bat_ds2784_battery->get_property(
+			manta_bat_ds2784_battery, POWER_SUPPLY_PROP_TEMP,
+			&temp);
+
+		if (ret >= 0)
+			*temp_now = temp.intval * 1000;
 	} else {
 		if (fg_callbacks && fg_callbacks->get_temperature)
-			return fg_callbacks->get_temperature(fg_callbacks,
-						     temp_now);
+			ret = fg_callbacks->get_temperature(fg_callbacks,
+							    temp_now);
 	}
 
-	return -ENXIO;
+	return ret;
 }
 
 static int manta_bat_get_voltage_now(void)
 {
 	int hw_rev = exynos5_manta_get_revision();
+	union power_supply_propval vcell;
+	int ret = -ENXIO;
 
 	if (hw_rev >= MANTA_REV_BETA) {
-		if (ds2784_fg_callbacks && ds2784_fg_callbacks->get_voltage_now)
-			return ds2784_fg_callbacks->
-				get_voltage_now(ds2784_fg_callbacks);
+		if (manta_bat_get_ds2784())
+			return ret;
+
+		ret = manta_bat_ds2784_battery->get_property(
+			manta_bat_ds2784_battery, POWER_SUPPLY_PROP_VOLTAGE_NOW,
+			&vcell);
+
+		if (ret >= 0)
+			ret = vcell.intval;
 	} else {
 		if (fg_callbacks && fg_callbacks->get_voltage_now)
-			return fg_callbacks->get_voltage_now(fg_callbacks);
+			ret = fg_callbacks->get_voltage_now(fg_callbacks);
 	}
 
-	return -ENXIO;
+	return ret;
 }
 
 static int manta_bat_get_current_now(int *i_current)
 {
-	int ret = -ENXIO;
 	int hw_rev = exynos5_manta_get_revision();
+	union power_supply_propval inow;
+	int ret = -ENXIO;
 
 	if (hw_rev >= MANTA_REV_BETA) {
-		if (ds2784_fg_callbacks && ds2784_fg_callbacks->get_current_now)
-			return ds2784_fg_callbacks->
-				get_current_now(ds2784_fg_callbacks, i_current);
+		if (manta_bat_get_ds2784())
+			return ret;
+
+		ret = manta_bat_ds2784_battery->get_property(
+			manta_bat_ds2784_battery, POWER_SUPPLY_PROP_CURRENT_NOW,
+			&inow);
+
+		if (ret >= 0)
+			*i_current = inow.intval;
 	} else {
 		if (fg_callbacks && fg_callbacks->get_current_now)
 			ret = fg_callbacks->get_current_now(fg_callbacks,
-								i_current);
+							    i_current);
 	}
 
 	return ret;
@@ -785,8 +820,6 @@ static int w1_ds2784_add_slave(struct w1_slave *sl)
 	p->pdev.id = -1;
 	p->pdev.dev.platform_data = &p->pdata;
 	p->pdata.w1_slave = sl;
-	p->pdata.register_callbacks = ds2784_fg_register_callbacks;
-	p->pdata.unregister_callbacks = ds2784_fg_unregister_callbacks;
 
 	platform_device_register(&p->pdev);
 
