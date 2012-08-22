@@ -24,7 +24,6 @@
 #include <plat/gpio-cfg.h>
 
 #include <linux/platform_data/max17047_fuelgauge.h>
-#include <linux/platform_data/ds2784_fuelgauge.h>
 #include <linux/platform_data/bq24191_charger.h>
 #include <linux/power/smb347-charger.h>
 #include <linux/platform_data/android_battery.h>
@@ -32,7 +31,6 @@
 #include "board-manta.h"
 
 #include <linux/slab.h>
-#include <../../../drivers/w1/w1.h>
 
 #define TA_ADC_LOW		700
 #define TA_ADC_HIGH		1750
@@ -817,43 +815,6 @@ static struct i2c_board_info i2c_devs2_prealpha[] __initdata = {
 	},
 };
 
-static int w1_ds2784_add_slave(struct w1_slave *sl)
-{
-	struct dd {
-		struct platform_device pdev;
-		struct ds2784_platform_data pdata;
-	} *p;
-
-	p = kzalloc(sizeof(struct dd), GFP_KERNEL);
-	if (!p) {
-		pr_err("%s: out of memory\n", __func__);
-		return -ENOMEM;
-	}
-
-	p->pdev.name = "ds2784-fuelgauge";
-	p->pdev.id = -1;
-	p->pdev.dev.platform_data = &p->pdata;
-	p->pdata.w1_slave = sl;
-
-	platform_device_register(&p->pdev);
-
-	return 0;
-}
-
-static struct w1_family_ops w1_ds2784_fops = {
-	.add_slave = w1_ds2784_add_slave,
-};
-
-static struct w1_family w1_ds2784_family = {
-	.fid = W1_FAMILY_DS2780,
-	.fops = &w1_ds2784_fops,
-};
-
-int __init ds2784_fuelgauge_init(void)
-{
-	return w1_register_family(&w1_ds2784_family);
-}
-
 void __init exynos5_manta_battery_init(void)
 {
 	int hw_rev = exynos5_manta_get_revision();
@@ -889,9 +850,6 @@ void __init exynos5_manta_battery_init(void)
 					       NULL,
 					       &manta_power_adc_debug_fops)))
 		pr_err("failed to create manta-power-adc debugfs entry\n");
-
-	if (hw_rev >= MANTA_REV_BETA)
-		ds2784_fuelgauge_init();
 }
 
 static void exynos5_manta_power_changed(struct power_supply *psy)
