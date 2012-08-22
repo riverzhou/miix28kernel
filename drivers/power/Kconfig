@@ -97,6 +97,17 @@ config BATTERY_DS2782
 	  Say Y here to enable support for the DS2782/DS2786 standalone battery
 	  gas-gauge.
 
+config FUELGAUGE_DS2784
+	tristate "MAXIM DS2784 Fuel Gauge"
+	select W1
+	select W1_SLAVE_DS2784
+	help
+	  Say Y to enable support for the DS2784 fuel gauge chip.
+
+	  This fuel gauge chip is used to monitor remaining battery
+	  capacity, and possibly protect against charging errors, for
+	  Li+ batteries.
+
 config BATTERY_PMU
 	tristate "Apple PMU battery"
 	depends on PPC32 && ADB_PMU
@@ -213,12 +224,6 @@ config BATTERY_ANDROID
 	  kernel log reporting and other debugging features, common board
 	  battery file glue logic for battery/case temperature sensors,
 	  etc.
-
-config FUELGAUGE_DS2784
-	tristate "MAXIM DS2784 Fuel Gauge"
-	depends on I2C
-	help
-	  Say Y to enable DS2784 Fuel gauge system
 
 config BATTERY_Z2
 	tristate "Z2 battery driver"

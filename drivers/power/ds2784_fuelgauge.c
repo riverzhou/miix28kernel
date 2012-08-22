@@ -24,98 +24,9 @@
 #include <linux/spinlock.h>
 #include <linux/power_supply.h>
 #include <linux/debugfs.h>
-#include <linux/platform_data/ds2784_fuelgauge.h>
 
 #include "../w1/w1.h"
-
-#define W1_DS2784_READ_DATA		0x69
-#define W1_DS2784_WRITE_DATA		0x6C
-
-#define DS2784_REG_PORT                 0x00
-#define DS2784_REG_STS                  0x01
-#define DS2784_REG_RAAC_MSB             0x02
-#define DS2784_REG_RAAC_LSB             0x03
-#define DS2784_REG_RSAC_MSB             0x04
-#define DS2784_REG_RSAC_LSB             0x05
-#define DS2784_REG_RARC                 0x06
-#define DS2784_REG_RSRC                 0x07
-#define DS2784_REG_AVG_CURR_MSB         0x08
-#define DS2784_REG_AVG_CURR_LSB         0x09
-#define DS2784_REG_TEMP_MSB             0x0A
-#define DS2784_REG_TEMP_LSB             0x0B
-#define DS2784_REG_VOLT_MSB             0x0C
-#define DS2784_REG_VOLT_LSB             0x0D
-#define DS2784_REG_CURR_MSB             0x0E
-#define DS2784_REG_CURR_LSB             0x0F
-#define DS2784_REG_ACCUMULATE_CURR_MSB  0x10
-#define DS2784_REG_ACCUMULATE_CURR_LSB  0x11
-#define DS2784_REG_ACCUMULATE_CURR_LSB1 0x12
-#define DS2784_REG_ACCUMULATE_CURR_LSB2 0x13
-#define DS2784_REG_AGE_SCALAR           0x14
-#define DS2784_REG_SPECIALL_FEATURE     0x15
-#define DS2784_REG_FULL_MSB             0x16
-#define DS2784_REG_FULL_LSB             0x17
-#define DS2784_REG_ACTIVE_EMPTY_MSB     0x18
-#define DS2784_REG_ACTIVE_EMPTY_LSB     0x19
-#define DS2784_REG_STBY_EMPTY_MSB       0x1A
-#define DS2784_REG_STBY_EMPTY_LSB       0x1B
-#define DS2784_REG_EEPROM               0x1F
-#define DS2784_REG_MFG_GAIN_RSGAIN_MSB  0xB0
-#define DS2784_REG_MFG_GAIN_RSGAIN_LSB  0xB1
-
-#define DS2784_REG_CTRL                 0x60
-#define DS2784_REG_ACCUMULATE_BIAS      0x61
-#define DS2784_REG_AGE_CAPA_MSB         0x62
-#define DS2784_REG_AGE_CAPA_LSB         0x63
-#define DS2784_REG_CHARGE_VOLT          0x64
-#define DS2784_REG_MIN_CHARGE_CURR      0x65
-#define DS2784_REG_ACTIVE_EMPTY_VOLT    0x66
-#define DS2784_REG_ACTIVE_EMPTY_CURR    0x67
-#define DS2784_REG_ACTIVE_EMPTY_40      0x68
-#define DS2784_REG_RSNSP                0x69
-#define DS2784_REG_FULL_40_MSB          0x6A
-#define DS2784_REG_FULL_40_LSB          0x6B
-#define DS2784_REG_FULL_SEG_4_SLOPE     0x6C
-#define DS2784_REG_FULL_SEG_3_SLOPE     0x6D
-#define DS2784_REG_FULL_SEG_2_SLOPE     0x6E
-#define DS2784_REG_FULL_SEG_1_SLOPE     0x6F
-#define DS2784_REG_AE_SEG_4_SLOPE       0x70
-#define DS2784_REG_AE_SEG_3_SLOPE       0x71
-#define DS2784_REG_AE_SEG_2_SLOPE       0x72
-#define DS2784_REG_AE_SEG_1_SLOPE       0x73
-#define DS2784_REG_SE_SEG_4_SLOPE       0x74
-#define DS2784_REG_SE_SEG_3_SLOPE       0x75
-#define DS2784_REG_SE_SEG_2_SLOPE       0x76
-#define DS2784_REG_SE_SEG_1_SLOPE       0x77
-#define DS2784_REG_RSGAIN_MSB           0x78
-#define DS2784_REG_RSGAIN_LSB           0x79
-#define DS2784_REG_RSTC                 0x7A
-#define DS2784_REG_CURR_OFFSET_BIAS     0x7B
-#define DS2784_REG_TBP34                0x7C
-#define DS2784_REG_TBP23                0x7D
-#define DS2784_REG_TBP12                0x7E
-#define DS2784_REG_PROTECTOR_THRESHOLD  0x7F
-#define DS2784_REG_USER_EEPROM_20       0x20
-
-#define DS2784_READ_DATA		0x69
-#define DS2784_WRITE_DATA		0x6C
-
-#define DS2483_CMD_RESET		0xF0
-#define DS2483_CMD_SET_READ_PTR		0xE1
-#define DS2483_CMD_CHANNEL_SELECT	0xC3
-#define DS2483_CMD_SKIP_ROM		0xCC
-#define DS2483_CMD_WRITE_CONFIG		0xD2
-#define DS2483_CMD_1WIRE_RESET		0xB4
-#define DS2483_CMD_1WIRE_SINGLE_BIT	0x87
-#define DS2483_CMD_1WIRE_WRITE_BYTE	0xA5
-#define DS2483_CMD_1WIRE_READ_BYTE	0x96
-#define DS2483_CMD_1WIRE_TRIPLET	0x78
-
-#define DS2483_PTR_CODE_STATUS		0xF0
-#define DS2483_PTR_CODE_DATA		0xE1
-#define DS2483_PTR_CODE_CONFIG		0xC3
-
-#define DS2784_DATA_SIZE		0xB2
+#include "../w1/slaves/w1_ds2784.h"
 
 struct fuelgauge_status {
 	int timestamp;
@@ -136,68 +47,27 @@ struct fuelgauge_status {
 };
 
 struct ds2784_info {
-	struct	device			*dev;
-	struct	ds2784_platform_data	*pdata;
+	struct device			*dev;
+	struct device			*w1_dev;
 	struct power_supply		bat;
-	struct	delayed_work		work;
+	struct delayed_work		work;
 	char				raw[DS2784_DATA_SIZE];
-	struct	fuelgauge_status	status;
-	struct	w1_slave *w1_slave;
+	struct fuelgauge_status		status;
 	bool				inited;
-	struct dentry		*dentry;
+	struct dentry			*dentry;
 };
 
-static int w1_ds2784_io(struct w1_slave *sl, char *buf, int addr,
-				size_t count, int io)
+static int ds2784_read(struct ds2784_info *di, char *buf, int addr,
+		       size_t count)
 {
-	if (!sl)
-		return 0;
-
-	mutex_lock(&sl->master->mutex);
-
-	if (addr > DS2784_DATA_SIZE || addr < 0) {
-		count = 0;
-		goto out;
-	}
-	if (addr + count > DS2784_DATA_SIZE)
-		count = DS2784_DATA_SIZE - addr;
-
-	if (!w1_reset_select_slave(sl)) {
-		if (!io) {
-			w1_write_8(sl->master, W1_DS2784_READ_DATA);
-			w1_write_8(sl->master, addr);
-			count = w1_read_block(sl->master, buf, count);
-		} else {
-			w1_write_8(sl->master, W1_DS2784_WRITE_DATA);
-			w1_write_8(sl->master, addr);
-			w1_write_block(sl->master, buf, count);
-		}
-	}
-
-out:
-	mutex_unlock(&sl->master->mutex);
-
-	return count;
-}
-
-static int w1_ds2784_read(struct w1_slave *sl, char *buf,
-				int addr, size_t count)
-{
-	return w1_ds2784_io(sl, buf, addr, count, 0);
-}
-
-static int w1_ds2784_write(struct w1_slave *sl, char *buf,
-				int addr, size_t count)
-{
-	return w1_ds2784_io(sl, buf, addr, count, 1);
+	return w1_ds2784_read(di->w1_dev, buf, addr, count);
 }
 
 static int ds2784_get_soc(struct ds2784_info *di, int *soc)
 {
 	int ret;
 
-	ret = w1_ds2784_read(di->w1_slave,
-			di->raw + DS2784_REG_RARC, DS2784_REG_RARC, 1);
+	ret = ds2784_read(di, di->raw + DS2784_REG_RARC, DS2784_REG_RARC, 1);
 
 	if (ret < 0)
 		return ret;
@@ -213,8 +83,8 @@ static int ds2784_get_vcell(struct ds2784_info *di, int *vcell)
 	short n;
 	int ret;
 
-	ret = w1_ds2784_read(di->w1_slave, di->raw + DS2784_REG_VOLT_MSB,
-			     DS2784_REG_VOLT_MSB, 2);
+	ret = ds2784_read(di, di->raw + DS2784_REG_VOLT_MSB,
+			  DS2784_REG_VOLT_MSB, 2);
 
 	if (ret < 0)
 		return ret;
@@ -234,13 +104,13 @@ static int ds2784_get_current(struct ds2784_info *di, bool avg, int *ival)
 	int ret;
 
 	if (!di->raw[DS2784_REG_RSNSP]) {
-		ret = w1_ds2784_read(di->w1_slave, di->raw + DS2784_REG_RSNSP,
-				     DS2784_REG_RSNSP, 1);
+		ret = ds2784_read(di, di->raw + DS2784_REG_RSNSP,
+				  DS2784_REG_RSNSP, 1);
 		if (ret < 0)
 			dev_err(di->dev, "error %d reading RSNSP\n", ret);
 	}
 
-	ret = w1_ds2784_read(di->w1_slave, di->raw + reg, reg, 2);
+	ret = ds2784_read(di, di->raw + reg, reg, 2);
 	if (ret < 0)
 		return ret;
 
@@ -265,8 +135,8 @@ static int ds2784_get_temperature(struct ds2784_info *di, int *temp_now)
 	short n;
 	int ret;
 
-	ret = w1_ds2784_read(di->w1_slave,
-			di->raw + DS2784_REG_TEMP_MSB, DS2784_REG_TEMP_MSB, 2);
+	ret = ds2784_read(di, di->raw + DS2784_REG_TEMP_MSB,
+			  DS2784_REG_TEMP_MSB, 2);
 
 	if (ret < 0)
 		return ret;
@@ -345,10 +215,10 @@ static int ds2784_debugfs_show(struct seq_file *s, void *unused)
 	struct ds2784_info *di = s->private;
 	u8 reg;
 
-	w1_ds2784_read(di->w1_slave, di->raw, 0x00, 0x1C);
-	w1_ds2784_read(di->w1_slave, di->raw + 0x20, 0x20, 0x10);
-	w1_ds2784_read(di->w1_slave, di->raw + 0x60, 0x60, 0x20);
-	w1_ds2784_read(di->w1_slave, di->raw + 0xb0, 0xb0, 0x02);
+	ds2784_read(di, di->raw, 0x00, 0x1C);
+	ds2784_read(di, di->raw + 0x20, 0x20, 0x10);
+	ds2784_read(di, di->raw + 0x60, 0x60, 0x20);
+	ds2784_read(di, di->raw + 0xb0, 0xb0, 0x02);
 
 	for (reg = 0x0; reg <= 0xb1; reg++) {
 		if ((reg >= 0x1c && reg <= 0x1f) ||
@@ -390,9 +260,8 @@ static int __devinit ds2784_probe(struct platform_device *pdev)
 	}
 
 	platform_set_drvdata(pdev, di);
-	di->pdata = pdev->dev.platform_data;
-	di->w1_slave = di->pdata->w1_slave;
-	di->dev = &pdev->dev;
+	di->dev			= &pdev->dev;
+	di->w1_dev		= pdev->dev.parent;
 	di->bat.name		= dev_name(&pdev->dev);
 	di->bat.type		= POWER_SUPPLY_TYPE_BATTERY;
 	di->bat.properties	= ds2784_props;
