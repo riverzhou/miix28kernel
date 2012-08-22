@@ -23,6 +23,9 @@
 #define AS3668_VMON_VBAT_3_15V			0x02
 #define AS3668_VMON_VBAT_3_3V			0x03
 
+#define AS3668_SHUTDOWN_ENABLE_ON		1
+#define AS3668_SHUTDOWN_ENABLE_OFF		0
+
 #define AS3668_PATTERN_START_SOURCE_SW		0
 #define AS3668_PATTERN_START_SOURCE_GPIO	1
 
@@ -63,6 +66,7 @@
 struct as3668_platform_data {
 	u8 led_array[AS3668_LED_NUM];
 	u16 vbat_monitor_voltage_index:2;
+	u16 shutdown_enable:1;
 	u16 pattern_start_source:1;
 	u16 pwm_source:1;
 	u16 gpio_input_invert:1;

@@ -454,8 +454,9 @@ static int __devinit as3668_initialize(struct i2c_client *client,
 		goto err_init;
 	}
 
-	ret = as3668_i2c_update_bits(client, AS3668_REG_OVERTEMP_CTRL, 0x60,
-			pdata->vbat_monitor_voltage_index << 5);
+	ret = as3668_i2c_update_bits(client, AS3668_REG_OVERTEMP_CTRL, 0x70,
+			pdata->vbat_monitor_voltage_index << 5 |
+			pdata->shutdown_enable << 4);
 	if (ret) {
 		pr_err("Can't update AS3668_REG_OVERTEMP_CTRL\n");
 		goto err_init;
