@@ -241,6 +241,7 @@ static void __init manta_gpio_power_init(void)
 static struct as3668_platform_data as3668_pdata = {
 	.led_array = {AS3668_RED, AS3668_GREEN, AS3668_BLUE, AS3668_WHITE},
 	.vbat_monitor_voltage_index = AS3668_VMON_VBAT_3_0V,
+	.shutdown_enable = AS3668_SHUTDOWN_ENABLE_OFF,
 	.pattern_start_source = AS3668_PATTERN_START_SOURCE_SW,
 	.pwm_source = AS3668_PWM_SOURCE_INTERNAL,
 	.gpio_input_invert = AS3668_GPIO_INPUT_NONINVERT,
