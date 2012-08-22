@@ -51,6 +51,9 @@
 #define GPIO_HDMI_DCDC_EN	EXYNOS5_GPA0(4)
 #define GPIO_HDMI_LS_EN		EXYNOS5_GPG0(7)
 
+extern phys_addr_t manta_bootloader_fb_start;
+extern phys_addr_t manta_bootloader_fb_size;
+
 static void manta_lcd_set_power(struct plat_lcd_data *pd,
 				unsigned int power)
 {
@@ -211,6 +214,8 @@ static struct platform_device *manta_display_devices[] __initdata = {
 
 void __init exynos5_manta_display_init(void)
 {
+	struct resource *res;
+
 	/* LCD_EN , XMMC2CDN => GPC2_2 */
 	gpio_request_one(GPIO_LCD_EN, GPIOF_OUT_INIT_LOW, "LCD_EN");
 	/* LED_BACKLIGHT_RESET: XCI1RGB_5 => GPG0_5 */
@@ -241,4 +246,14 @@ void __init exynos5_manta_display_init(void)
 
 	exynos5_fimd1_setup_clock(&s5p_device_fimd1.dev, "sclk_fimd",
 				  "mout_mpll_user", 267 * MHZ);
+
+	res = platform_get_resource(&s5p_device_fimd1, IORESOURCE_MEM, 1);
+	if (res) {
+		res->start = manta_bootloader_fb_start;
+		res->end = res->start + manta_bootloader_fb_size - 1;
+		pr_info("bootloader fb located at %8X-%8X\n", res->start,
+				res->end);
+	} else {
+		pr_err("failed to find bootloader fb resource\n");
+	}
 }

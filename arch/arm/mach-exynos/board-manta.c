@@ -13,9 +13,11 @@
 #include <linux/err.h>
 #include <linux/gpio.h>
 #include <linux/gpio_event.h>
+#include <linux/init.h>
 #include <linux/input.h>
 #include <linux/i2c.h>
 #include <linux/mmc/host.h>
+#include <linux/memblock.h>
 #include <linux/persistent_ram.h>
 #include <linux/platform_device.h>
 #include <linux/platform_data/exynos_usb3_drd.h>
@@ -58,6 +60,20 @@
 #include "resetreason.h"
 
 static int manta_hw_rev;
+phys_addr_t manta_bootloader_fb_start;
+phys_addr_t manta_bootloader_fb_size = 2560 * 1600 * 4;
+
+static int __init s3cfb_bootloaderfb_arg(char *options)
+{
+	char *p = options;
+
+	manta_bootloader_fb_start = memparse(p, &p);
+	pr_debug("bootloader framebuffer found at %8X\n",
+			manta_bootloader_fb_start);
+
+	return 0;
+}
+early_param("s3cfb.bootloaderfb", s3cfb_bootloaderfb_arg);
 
 static struct gpio manta_hw_rev_gpios[] = {
 	{EXYNOS5_GPV1(4), GPIOF_IN, "hw_rev0"},
@@ -409,6 +425,15 @@ static void __init exynos_reserve_mem(void)
 		"s5p-mfc-v6/a=b1;";
 
 	exynos_cma_region_reserve(regions, regions_secure, 0, map);
+
+	if (manta_bootloader_fb_start) {
+		int err = memblock_reserve(manta_bootloader_fb_start,
+				manta_bootloader_fb_size);
+		if (err)
+			pr_warn("failed to reserve old framebuffer location\n");
+	} else {
+		pr_warn("bootloader framebuffer start address not set\n");
+	}
 }
 
 static void exynos_dwmci0_cfg_gpio(int width)
