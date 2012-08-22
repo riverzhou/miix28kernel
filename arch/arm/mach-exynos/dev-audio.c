@@ -47,7 +47,7 @@ static int exynos_cfg_i2s_gpio(struct platform_device *pdev)
 	struct exynos_gpio_cfg exynos5_cfg[3] = {
 				{ EXYNOS5_GPZ(0),  7, S3C_GPIO_SFN(2) },
 				{ EXYNOS5_GPB0(0), 5, S3C_GPIO_SFN(2) },
-				{ EXYNOS5_GPB1(0), 5, S3C_GPIO_SFN(2) }
+				{ EXYNOS5_GPB1(0), 1, S3C_GPIO_SFN(2) }
 	};
 
 	if (pdev->id < 0 || pdev->id > 2) {
@@ -204,7 +204,7 @@ static int exynos_pcm_cfg_gpio(struct platform_device *pdev)
 	struct exynos_gpio_cfg exynos5_cfg[3] = {
 				{ EXYNOS5_GPZ(0),  5, S3C_GPIO_SFN(3) },
 				{ EXYNOS5_GPB0(0), 5, S3C_GPIO_SFN(3) },
-				{ EXYNOS5_GPB1(0), 5, S3C_GPIO_SFN(3) }
+				{ EXYNOS5_GPB1(0), 1, S3C_GPIO_SFN(3) }
 	};
 
 	if (pdev->id < 0 || pdev->id > 2) {
@@ -369,7 +369,7 @@ static int exynos_spdif_cfg_gpio(struct platform_device *pdev)
 {
 	/* configure GPIO for SPDIF port */
 	if (soc_is_exynos5250())
-		s3c_gpio_cfgpin_range(EXYNOS5_GPB1(0), 2, S3C_GPIO_SFN(4));
+		s3c_gpio_cfgpin_range(EXYNOS5_GPB1(0), 1, S3C_GPIO_SFN(4));
 
 	else /* EXYNOS4210, EXYNOS4212 and EXYNOS4412 */
 		s3c_gpio_cfgpin_range(EXYNOS4_GPC1(0), 2, S3C_GPIO_SFN(4));
