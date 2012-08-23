@@ -45,6 +45,8 @@
 #include <linux/dma-buf.h>
 #include <linux/exynos_ion.h>
 #include <linux/ion.h>
+#include <linux/highmem.h>
+#include <linux/memblock.h>
 #include <linux/sw_sync.h>
 #include <plat/devs.h>
 #include <plat/iovmm.h>
@@ -829,6 +831,18 @@ static void s3c_fb_configure_lcd(struct s3c_fb *sfb,
 	writel(data, sfb->regs + sfb->variant.vidtcon + 8);
 }
 
+static int s3c_fb_calc_bandwidth(u32 w, u32 h, u32 bits_per_pixel, int fps)
+{
+	unsigned int bw = w * h;
+	bw /= 1000;
+	bw *= DIV_ROUND_UP(bits_per_pixel, 8);
+	bw *= fps;
+	bw /= 1000;
+	bw *= 15;
+	bw /= 10;
+	return bw;
+}
+
 /**
  * s3c_fb_set_par() - framebuffer request to set new framebuffer state.
  * @info: The framebuffer to change.
@@ -845,6 +859,7 @@ static int s3c_fb_set_par(struct fb_info *info)
 	int win_no = win->index;
 	u32 data;
 	int old_wincon;
+	int bw;
 
 	dev_dbg(sfb->dev, "setting framebuffer parameters\n");
 
@@ -927,6 +942,15 @@ static int s3c_fb_set_par(struct fb_info *info)
 
 	writel(data, regs + sfb->variant.wincon + (win_no * 4));
 	writel(0x0, regs + sfb->variant.winmap + (win_no * 4));
+
+	if (data & WINCONx_ENWIN) {
+		bw = s3c_fb_calc_bandwidth(info->var.xres, info->var.yres,
+				info->var.bits_per_pixel,
+				win->fps);
+	} else {
+		bw = -1;
+	}
+	pm_qos_update_request(&win->mem_bw_req, bw);
 
 	shadow_protect_win(win, 0);
 
@@ -1049,11 +1073,20 @@ static void s3c_fb_activate_window(struct s3c_fb *sfb, unsigned int index)
 
 static void s3c_fb_activate_window_dma(struct s3c_fb *sfb, unsigned int index)
 {
+	int bw;
+	struct s3c_fb_win *win = sfb->windows[index];
+	struct fb_var_screeninfo *var = &win->fbinfo->var;
+
 	u32 shadowcon = readl(sfb->regs + SHADOWCON);
 	shadowcon |= SHADOWCON_CHx_ENABLE(index);
 	writel(shadowcon, sfb->regs + SHADOWCON);
 
 	writel(0, sfb->regs + WINxMAP(index));
+
+	bw = s3c_fb_calc_bandwidth(var->xres, var->yres,
+			var->bits_per_pixel,
+			win->fps);
+	pm_qos_update_request(&win->mem_bw_req, bw);
 }
 
 static int s3c_fb_enable(struct s3c_fb *sfb);
@@ -1879,13 +1912,10 @@ static int s3c_fb_set_win_config(struct s3c_fb *sfb,
 			regs->wincon[i] &= ~WINCONx_ENWIN;
 		regs->winmap[i] = color_map;
 
-		if (enabled) {
-			bw = config->w * config->h;
-			bw *= DIV_ROUND_UP(win->fbinfo->var.bits_per_pixel, 8);
-			bw *= win->fps;
-			bw /= 1000000;
-			bw *= 15;
-			bw /= 10;
+		if (enabled && config->state == S3C_FB_WIN_STATE_BUFFER) {
+			bw = s3c_fb_calc_bandwidth(config->w, config->h,
+					win->fbinfo->var.bits_per_pixel,
+					win->fps);
 		} else {
 			bw = -1;
 		}
@@ -2346,7 +2376,6 @@ static void s3c_fb_release_win(struct s3c_fb *sfb, struct s3c_fb_win *win)
 			data &= ~SHADOWCON_CHx_LOCAL_ENABLE(win->index);
 			writel(data, sfb->regs + SHADOWCON);
 		}
-		unregister_framebuffer(win->fbinfo);
 		pm_qos_remove_request(&win->mem_bw_req);
 		if (win->fbinfo->cmap.len)
 			fb_dealloc_cmap(&win->fbinfo->cmap);
@@ -2464,20 +2493,6 @@ static int __devinit s3c_fb_probe_win(struct s3c_fb *sfb, unsigned int win_no,
 		fb_set_cmap(&fbinfo->cmap, fbinfo);
 	else
 		dev_err(sfb->dev, "failed to allocate fb cmap\n");
-
-	s3c_fb_set_par(fbinfo);
-
-	dev_dbg(sfb->dev, "about to register framebuffer\n");
-
-	/* run the check_var and set_par on our configuration. */
-
-	ret = register_framebuffer(fbinfo);
-	if (ret < 0) {
-		dev_err(sfb->dev, "failed to register framebuffer\n");
-		return ret;
-	}
-
-	dev_info(sfb->dev, "window %d: fb %s\n", win_no, fbinfo->fix.id);
 
 	return 0;
 }
@@ -3157,6 +3172,69 @@ int s3c_fb_sysmmu_fault_handler(struct device *dev,
 
 	return 0;
 }
+
+static int __devinit s3c_fb_copy_bootloader_fb(struct platform_device *pdev,
+		struct dma_buf *dest_buf)
+{
+	struct resource *res;
+	void __iomem *to_io;
+	int ret = 0;
+	size_t i;
+
+	res = platform_get_resource(pdev, IORESOURCE_MEM, 1);
+	if (!res || !res->start || !resource_size(res)) {
+		dev_warn(&pdev->dev, "failed to find bootloader framebuffer\n");
+		return -ENOENT;
+	}
+
+	ret = dma_buf_begin_cpu_access(dest_buf, 0, resource_size(res),
+			DMA_TO_DEVICE);
+	if (ret < 0) {
+		dev_warn(&pdev->dev, "dma_buf_begin_cpu_access() failed on bootloader framebuffer: %u\n",
+				ret);
+		goto err;
+	}
+	for (i = 0; i < resource_size(res); i += PAGE_SIZE) {
+		void *page = phys_to_page(res->start + i);
+		void *from_virt = kmap(page);
+		to_io = dma_buf_kmap(dest_buf, i / PAGE_SIZE);
+		memcpy_toio(to_io, from_virt, PAGE_SIZE);
+		kunmap(page);
+		dma_buf_kunmap(dest_buf, i / PAGE_SIZE, to_io);
+	}
+
+	dma_buf_end_cpu_access(dest_buf, 0, resource_size(res), DMA_TO_DEVICE);
+
+err:
+	if (memblock_free(res->start, resource_size(res)))
+		dev_warn(&pdev->dev, "failed to free bootloader framebuffer memblock\n");
+
+	return ret;
+}
+
+static int __devinit s3c_fb_clear_fb(struct s3c_fb *sfb,
+		struct dma_buf *dest_buf, size_t size)
+{
+	void __iomem *to_io;
+	size_t i;
+
+	int ret = dma_buf_begin_cpu_access(dest_buf, 0, dest_buf->size,
+			DMA_TO_DEVICE);
+	if (ret < 0) {
+		dev_warn(sfb->dev, "dma_buf_begin_cpu_access() failed while clearing framebuffer: %u\n",
+				ret);
+		return ret;
+	}
+
+	for (i = 0; i < dest_buf->size / PAGE_SIZE; i++) {
+		to_io = dma_buf_kmap(dest_buf, i);
+		memset_io(to_io, 0, PAGE_SIZE);
+		dma_buf_kunmap(dest_buf, i, to_io);
+	}
+
+	dma_buf_end_cpu_access(dest_buf, 0, size, DMA_TO_DEVICE);
+	return 0;
+}
 #endif
 
 #ifdef CONFIG_DEBUG_FS
@@ -3251,6 +3329,7 @@ static int __devinit s3c_fb_probe(struct platform_device *pdev)
 	struct s3c_fb_platdata *pd;
 	struct s3c_fb *sfb;
 	struct resource *res;
+	struct fb_info *fbinfo;
 	int win;
 	int default_win;
 	int i;
@@ -3381,7 +3460,8 @@ static int __devinit s3c_fb_probe(struct platform_device *pdev)
 
 	/* zero all windows before we do anything */
 	for (win = 0; win < fbdrv->variant.nr_windows; win++)
-		s3c_fb_clear_win(sfb, win);
+		if (win != pd->default_win)
+			s3c_fb_clear_win(sfb, win);
 
 	/* initialise colour key controls */
 	for (win = 0; win < (fbdrv->variant.nr_windows - 1); win++) {
@@ -3507,6 +3587,19 @@ static int __devinit s3c_fb_probe(struct platform_device *pdev)
 	}
 
 #ifdef CONFIG_ION_EXYNOS
+	ret = s3c_fb_copy_bootloader_fb(pdev,
+			sfb->windows[default_win]->dma_buf_data.dma_buf);
+	if (ret < 0) {
+		struct s3c_fb_win *win = sfb->windows[default_win];
+		dev_warn(sfb->dev, "couldn't copy bootloader framebuffer into default window; clearing instead\n");
+		s3c_fb_clear_fb(sfb, win->dma_buf_data.dma_buf,
+				PAGE_ALIGN(win->fbinfo->fix.smem_len));
+	}
+#endif
+
+	s3c_fb_set_par(sfb->windows[default_win]->fbinfo);
+
+#ifdef CONFIG_ION_EXYNOS
 	s3c_fb_wait_for_vsync(sfb, 0);
 	ret = iovmm_activate(&s5p_device_fimd1.dev);
 	if (ret < 0) {
@@ -3515,11 +3608,27 @@ static int __devinit s3c_fb_probe(struct platform_device *pdev)
 	}
 #endif
 
-	s3c_fb_activate_window_dma(sfb, pd->default_win);
-	s3c_fb_activate_window(sfb, pd->default_win);
+	s3c_fb_activate_window_dma(sfb, default_win);
+	s3c_fb_activate_window(sfb, default_win);
 	sfb->output_on = true;
 
+	dev_dbg(sfb->dev, "about to register framebuffer\n");
+
+	/* run the check_var and set_par on our configuration. */
+
+	fbinfo = sfb->windows[default_win]->fbinfo;
+	ret = register_framebuffer(fbinfo);
+	if (ret < 0) {
+		dev_err(sfb->dev, "failed to register framebuffer\n");
+		goto err_fb;
+	}
+
+	dev_info(sfb->dev, "window %d: fb %s\n", default_win, fbinfo->fix.id);
+
 	return 0;
+
+err_fb:
+	iovmm_deactivate(&s5p_device_fimd1.dev);
 
 err_iovmm:
 	device_remove_file(sfb->dev, &dev_attr_vsync);
@@ -3572,6 +3681,8 @@ static int __devexit s3c_fb_remove(struct platform_device *pdev)
 	int win;
 
 	pm_runtime_get_sync(sfb->dev);
+
+	unregister_framebuffer(sfb->windows[sfb->pdata->default_win]->fbinfo);
 
 	if (sfb->update_regs_thread)
 		kthread_stop(sfb->update_regs_thread);
