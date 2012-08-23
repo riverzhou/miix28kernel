@@ -606,11 +606,14 @@ static int manta_bat_get_temperature(int *temp_now)
 			&temp);
 
 		if (ret >= 0)
-			*temp_now = temp.intval * 1000;
+			*temp_now = temp.intval;
 	} else {
 		if (fg_callbacks && fg_callbacks->get_temperature)
 			ret = fg_callbacks->get_temperature(fg_callbacks,
 							    temp_now);
+
+		if (ret >= 0)
+			*temp_now /= 1000;
 	}
 
 	return ret;
@@ -685,9 +688,9 @@ static struct android_bat_platform_data android_battery_pdata = {
 	.get_voltage_now = manta_bat_get_voltage_now,
 	.get_current_now = manta_bat_get_current_now,
 
-	.temp_high_threshold = 500000,	/* 50c */
-	.temp_high_recovery = 430000,	/* 43c */
-	.temp_low_recovery = 30000,		/* 3c */
+	.temp_high_threshold = 500,	/* 50c */
+	.temp_high_recovery = 430,	/* 43c */
+	.temp_low_recovery = 30,		/* 3c */
 	.temp_low_threshold = 0,		/* 0c */
 };
 
