@@ -648,7 +648,7 @@ static int mxt_read_message_reportid(struct mxt_data *data,
 			return error;
 
 		if (message->reportid == 0xff)
-			return -EINVAL;
+			continue;
 
 		if (message->reportid == reportid)
 			return 0;
