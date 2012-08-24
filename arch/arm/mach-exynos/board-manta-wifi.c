@@ -310,6 +310,7 @@ static void __init manta_wlan_gpio(void)
 	s5p_gpio_set_drvstr(gpio, S5P_GPIO_DRVSTR_LV3);
 	/* Keep power state during suspend */
 	s5p_gpio_set_pd_cfg(gpio, S5P_GPIO_PD_PREV_STATE);
+	gpio_set_value(gpio, 0);
 
 	/* Setup wlan IRQ */
 	gpio = GPIO_WLAN_IRQ;
