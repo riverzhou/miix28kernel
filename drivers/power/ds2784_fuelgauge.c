@@ -203,11 +203,7 @@ static int ds2784_get_soc(struct ds2784_info *di, int *soc)
 	if (ret < 0)
 		return ret;
 
-	if (di->raw[DS2784_REG_RARC] == 0xff)
-		di->status.percentage = 42;
-	else
-		di->status.percentage =	di->raw[DS2784_REG_RARC];
-
+	di->status.percentage =	di->raw[DS2784_REG_RARC];
 	pr_debug("%s: level : %d\n", __func__, di->status.percentage);
 	*soc = di->status.percentage;
 	return 0;
@@ -224,16 +220,9 @@ static int ds2784_get_vcell(struct ds2784_info *di, int *vcell)
 	if (ret < 0)
 		return ret;
 
-	if (di->raw[DS2784_REG_VOLT_LSB] == 0xff &&
-			di->raw[DS2784_REG_VOLT_MSB] == 0xff) {
-		di->status.voltage_uV = 4242000;
-	} else {
-		n = (((di->raw[DS2784_REG_VOLT_MSB] << 8) |
-			(di->raw[DS2784_REG_VOLT_LSB])) >> 5);
-
-		di->status.voltage_uV = n * 4886;
-	}
-
+	n = (((di->raw[DS2784_REG_VOLT_MSB] << 8) |
+	      (di->raw[DS2784_REG_VOLT_LSB])) >> 5);
+	di->status.voltage_uV = n * 4886;
 	pr_debug("%s: voltage : %d\n", __func__, di->status.voltage_uV);
 	*vcell = di->status.voltage_uV;
 	return 0;
