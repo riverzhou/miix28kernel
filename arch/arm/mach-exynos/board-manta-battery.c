@@ -35,6 +35,9 @@
 #define TA_ADC_LOW		700
 #define TA_ADC_HIGH		1750
 
+#define ADC_NUM_SAMPLES		5
+#define ADC_LIMIT_ERR_COUNT	5
+
 #define	GPIO_USB_SEL1		EXYNOS5_GPH0(1)
 #define	GPIO_POGO_SEL1		EXYNOS5_GPG1(0)
 #define	GPIO_TA_EN		EXYNOS5_GPG1(5)
@@ -162,9 +165,12 @@ static void charger_gpio_init(void)
 
 static int read_ta_adc(enum charge_connector conn)
 {
-	int vol1, vol2;
+	int adc_max = -1;
+	int adc_min = 1 << 11;
+	int adc_total = 0;
+	int i, j;
 	int adc_sel;
-	int result;
+	int ret;
 
 	mutex_lock(&manta_bat_adc_lock);
 
@@ -177,25 +183,51 @@ static int read_ta_adc(enum charge_connector conn)
 	gpio_set_value(adc_sel, 0);
 	msleep(100);
 
-	if (exynos5_manta_get_revision() <= MANTA_REV_LUNCHBOX) {
-		vol1 = manta_stmpe811_read_adc_data(6);
-		vol2 = manta_stmpe811_read_adc_data(6);
-	} else {
-		vol1 = s3c_adc_read(ta_adc_client, 0);
-		vol2 = s3c_adc_read(ta_adc_client, 0);
+	for (i = 0; i < ADC_NUM_SAMPLES; i++) {
+		if (exynos5_manta_get_revision() <= MANTA_REV_LUNCHBOX)
+			ret = manta_stmpe811_read_adc_data(6);
+		else
+			ret = s3c_adc_read(ta_adc_client, 0);
+
+		if (ret == -ETIMEDOUT) {
+			for (j = 0; j < ADC_LIMIT_ERR_COUNT; j++) {
+				msleep(20);
+				if (exynos5_manta_get_revision() <=
+				    MANTA_REV_LUNCHBOX)
+					ret = manta_stmpe811_read_adc_data(6);
+				else
+					ret = s3c_adc_read(ta_adc_client, 0);
+
+				if (ret > 0)
+					break;
+			}
+			if (j >= ADC_LIMIT_ERR_COUNT) {
+				pr_err("%s: Retry count exceeded\n", __func__);
+				goto out;
+			}
+		} else if (ret < 0) {
+			pr_err("%s: Failed read adc value : %d\n",
+				__func__, ret);
+			goto out;
+		}
+
+		if (ret > adc_max)
+			adc_max = ret;
+		if (ret < adc_min)
+			adc_min = ret;
+
+		adc_total += ret;
 	}
 
-	if (vol1 >= 0 && vol2 >= 0)
-		result = (vol1 + vol2) / 2;
-	else
-		result = -1;
+	ret = (adc_total - adc_max - adc_min) / (ADC_NUM_SAMPLES - 2);
 
+out:
 	msleep(50);
 
 	/* switch back to normal */
 	gpio_set_value(adc_sel, 1);
 	mutex_unlock(&manta_bat_adc_lock);
-	return result;
+	return ret;
 }
 
 int manta_bat_otg_enable(bool enable)
