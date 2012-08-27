@@ -17,6 +17,7 @@
 #define __MACH_EXYNOS_BOARD_MANTA_H
 
 #include <mach/irqs.h>
+#include <linux/serial_core.h>
 
 #define MANTA_REV_LUNCHBOX	0x1
 #define MANTA_REV_PRE_ALPHA	0x2
@@ -52,5 +53,6 @@ int manta_stmpe811_read_adc_data(u8 channel);
 extern int manta_bat_otg_enable(bool enable);
 void manta_otg_set_usb_state(bool connected);
 int manta_pogo_set_vbus(bool status);
+void bcm_bt_lpm_exit_lpm_locked(struct uart_port *uport);
 
 #endif

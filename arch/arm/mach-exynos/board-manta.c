@@ -138,6 +138,7 @@ static struct s3c2410_uartcfg manta_uartcfgs[] __initdata = {
 		.ucon		= MANTA_UCON_DEFAULT,
 		.ulcon		= MANTA_ULCON_DEFAULT,
 		.ufcon		= MANTA_UFCON_DEFAULT,
+		.wake_peer	= bcm_bt_lpm_exit_lpm_locked,
 	},
 	[1] = {
 		.hwport		= 1,

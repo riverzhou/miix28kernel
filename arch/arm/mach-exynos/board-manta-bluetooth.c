@@ -23,12 +23,11 @@
 #include <linux/wakelock.h>
 
 #include <net/bluetooth/bluetooth.h>
-#include <net/bluetooth/hci_core.h>
-
 #include <asm/mach-types.h>
-
 #include <mach/gpio.h>
 #include <plat/gpio-cfg.h>
+
+#include "board-manta.h"
 
 #define GPIO_BT_WAKE		EXYNOS5_GPH1(3)
 #define GPIO_BT_HOST_WAKE	EXYNOS5_GPX2(6)
@@ -39,9 +38,23 @@
 #define GPIO_BT_UART_CTS	EXYNOS5_GPA0(2)
 #define GPIO_BT_UART_RTS	EXYNOS5_GPA0(3)
 
+#define BT_LPM_ENABLE
+
 static struct rfkill *bt_rfkill;
 
 static DEFINE_MUTEX(manta_bt_wlan_sync);
+
+struct bcm_bt_lpm {
+	int wake;
+	int host_wake;
+
+	struct hrtimer enter_lpm_timer;
+	ktime_t enter_lpm_delay;
+
+	struct uart_port *uport;
+
+	struct wake_lock wake_lock;
+} bt_lpm;
 
 struct gpio_init_data {
 	uint num;
@@ -123,6 +136,109 @@ static const struct rfkill_ops bcm43241_bt_rfkill_ops = {
 	.set_block = bcm43241_bt_rfkill_set_power,
 };
 
+#ifdef BT_LPM_ENABLE
+static void set_wake_locked(int wake)
+{
+	bt_lpm.wake = wake;
+
+	if (!wake)
+		wake_unlock(&bt_lpm.wake_lock);
+
+	gpio_set_value(GPIO_BT_WAKE, wake);
+}
+
+static enum hrtimer_restart enter_lpm(struct hrtimer *timer)
+{
+	set_wake_locked(0);
+
+	return HRTIMER_NORESTART;
+}
+
+void bcm_bt_lpm_exit_lpm_locked(struct uart_port *uport)
+{
+	bt_lpm.uport = uport;
+
+	hrtimer_try_to_cancel(&bt_lpm.enter_lpm_timer);
+	set_wake_locked(1);
+
+	hrtimer_start(&bt_lpm.enter_lpm_timer, bt_lpm.enter_lpm_delay,
+		HRTIMER_MODE_REL);
+}
+
+static void update_host_wake_locked(int host_wake)
+{
+	if (host_wake == bt_lpm.host_wake)
+		return;
+
+	bt_lpm.host_wake = host_wake;
+
+	if (host_wake) {
+		wake_lock(&bt_lpm.wake_lock);
+	} else  {
+		/* Take a timed wakelock, so that upper layers can take it.
+		* The chipset deasserts the hostwake lock, when there is no
+		* more data to send.
+		*/
+		wake_lock_timeout(&bt_lpm.wake_lock, HZ/2);
+	}
+}
+
+static irqreturn_t host_wake_isr(int irq, void *dev)
+{
+	int host_wake;
+
+	host_wake = gpio_get_value(GPIO_BT_HOST_WAKE);
+	irq_set_irq_type(irq, host_wake ? IRQF_TRIGGER_LOW : IRQF_TRIGGER_HIGH);
+
+	if (!bt_lpm.uport) {
+		bt_lpm.host_wake = host_wake;
+		return IRQ_HANDLED;
+	}
+
+	update_host_wake_locked(host_wake);
+
+	return IRQ_HANDLED;
+}
+
+static int bcm_bt_lpm_init(struct platform_device *pdev)
+{
+	int irq;
+	int ret;
+
+	pr_info("[BT] bcm_bt_lpm_init\n");
+	hrtimer_init(&bt_lpm.enter_lpm_timer, CLOCK_MONOTONIC,
+			HRTIMER_MODE_REL);
+	bt_lpm.enter_lpm_delay = ktime_set(3, 0);
+	bt_lpm.enter_lpm_timer.function = enter_lpm;
+
+	bt_lpm.host_wake = 0;
+
+	wake_lock_init(&bt_lpm.wake_lock, WAKE_LOCK_SUSPEND,
+			 "BTLowPower");
+
+	irq = gpio_to_irq(GPIO_BT_HOST_WAKE);
+	ret = request_threaded_irq(irq, NULL, host_wake_isr,
+		IRQF_TRIGGER_HIGH | IRQF_ONESHOT, "bt_host_wake", NULL);
+	if (ret) {
+		pr_err("[BT] Request host_wake irq failed.\n");
+		goto err_lpm_init;
+	}
+
+	ret = irq_set_irq_wake(irq, 1);
+	if (ret) {
+		pr_err("[BT] Set_irq_wake failed.\n");
+		free_irq(irq, NULL);
+		goto err_lpm_init;
+	}
+
+	return 0;
+
+err_lpm_init:
+	wake_lock_destroy(&bt_lpm.wake_lock);
+	return ret;
+}
+#endif
+
 static int bcm43241_bluetooth_probe(struct platform_device *pdev)
 {
 	int rc;
@@ -167,8 +283,17 @@ static int bcm43241_bluetooth_probe(struct platform_device *pdev)
 	}
 	rfkill_set_sw_state(bt_rfkill, true);
 
+#ifdef BT_LPM_ENABLE
+	rc = bcm_bt_lpm_init(pdev);
+	if (rc)
+		goto err_lpm_init;
+#endif
 	return rc;
 
+#ifdef BT_LPM_ENABLE
+err_lpm_init:
+	rfkill_unregister(bt_rfkill);
+#endif
 err_rfkill_register:
 	rfkill_destroy(bt_rfkill);
 err_rfkill_alloc:
@@ -183,6 +308,17 @@ err_gpio_btreg_on:
 
 static int bcm43241_bluetooth_remove(struct platform_device *pdev)
 {
+#ifdef BT_LPM_ENABLE
+	int irq;
+
+	irq = gpio_to_irq(GPIO_BT_HOST_WAKE);
+	irq_set_irq_wake(irq, 0);
+	free_irq(irq, NULL);
+	set_wake_locked(0);
+	hrtimer_try_to_cancel(&bt_lpm.enter_lpm_timer);
+	wake_lock_destroy(&bt_lpm.wake_lock);
+#endif
+
 	rfkill_unregister(bt_rfkill);
 	rfkill_destroy(bt_rfkill);
 
