@@ -122,7 +122,6 @@ struct fuelgauge_status {
 
 	int voltage_uV;		/* units of uV */
 	int current_uA;		/* units of uA */
-	int current_avg_uA;
 	int charge_uAh;
 
 	short temp_C;		/* units of 0.1 C */
@@ -228,8 +227,9 @@ static int ds2784_get_vcell(struct ds2784_info *di, int *vcell)
 	return 0;
 }
 
-static int ds2784_get_current_now(struct ds2784_info *di, int *i_current)
+static int ds2784_get_current(struct ds2784_info *di, bool avg, int *ival)
 {
+	int reg = avg ? DS2784_REG_AVG_CURR_MSB : DS2784_REG_CURR_MSB;
 	short n;
 	int ret;
 
@@ -240,20 +240,24 @@ static int ds2784_get_current_now(struct ds2784_info *di, int *i_current)
 			dev_err(di->dev, "error %d reading RSNSP\n", ret);
 	}
 
-	ret = w1_ds2784_read(di->w1_slave,
-			di->raw + DS2784_REG_CURR_MSB, DS2784_REG_CURR_MSB, 2);
-
+	ret = w1_ds2784_read(di->w1_slave, di->raw + reg, reg, 2);
 	if (ret < 0)
 		return ret;
 
-	n = ((di->raw[DS2784_REG_CURR_MSB] << 8) |
-			(di->raw[DS2784_REG_CURR_LSB]));
+	n = ((di->raw[reg] << 8) | (di->raw[reg+1]));
 
-	di->status.current_uA = (n * 15625) / 10000 * di->raw[DS2784_REG_RSNSP];
-	pr_debug("%s: current : %d\n", __func__, di->status.current_uA);
-
-	*i_current = di->status.current_uA / 1000;
+	*ival = (n * 15625) / 10000 * di->raw[DS2784_REG_RSNSP] / 1000;
 	return 0;
+}
+
+static int ds2784_get_current_now(struct ds2784_info *di, int *i_current)
+{
+	return ds2784_get_current(di, false, i_current);
+}
+
+static int ds2784_get_current_avg(struct ds2784_info *di, int *i_avg)
+{
+	return ds2784_get_current(di, true, i_avg);
 }
 
 static int ds2784_get_temperature(struct ds2784_info *di, int *temp_now)
@@ -311,6 +315,10 @@ static int ds2784_get_property(struct power_supply *psy,
 		ret = ds2784_get_current_now(di, &val->intval);
 		break;
 
+	case POWER_SUPPLY_PROP_CURRENT_AVG:
+		ret = ds2784_get_current_avg(di, &val->intval);
+		break;
+
 	case POWER_SUPPLY_PROP_CAPACITY:
 		ret = ds2784_get_soc(di, &val->intval);
 		break;
@@ -328,6 +336,7 @@ static enum power_supply_property ds2784_props[] = {
 	POWER_SUPPLY_PROP_MODEL_NAME,
 	POWER_SUPPLY_PROP_MANUFACTURER,
 	POWER_SUPPLY_PROP_CURRENT_NOW,
+	POWER_SUPPLY_PROP_CURRENT_AVG,
 	POWER_SUPPLY_PROP_CAPACITY,
 };
 
