@@ -30,7 +30,7 @@ void __init exynos5_manta_gps_init(void)
 	gps_class = class_create(THIS_MODULE, "gps");
 	if (IS_ERR(gps_class)) {
 		pr_err("Failed to create class(sec)!\n");
-		return PTR_ERR(gps_class);
+		return;
 	}
 	BUG_ON(!gps_class);
 	gps_dev = device_create(gps_class, NULL, 0, NULL, "bcm475x");
@@ -65,6 +65,4 @@ void __init exynos5_manta_gps_init(void)
 
 	gpio_export_link(gps_dev, "GPS_nRST", n_rst_pin);
 	gpio_export_link(gps_dev, "GPS_PWR_EN", GPIO_GPS_PWR_EN);
-
-	return 0;
 }
