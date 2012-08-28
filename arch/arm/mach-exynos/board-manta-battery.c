@@ -262,14 +262,15 @@ static int detect_charge_source(enum charge_connector conn, bool online)
 
 	is_ta = check_samsung_charger(conn);
 
-	if (is_ta)
+	if (is_ta) {
 		charge_source = CHARGE_SOURCE_AC;
-	else {
-		dock_charge_source = manta_pogo_set_vbus(online);
-		if (dock_charge_source < 0)
-			charge_source = CHARGE_SOURCE_USB;
-		else
-			charge_source = dock_charge_source;
+	} else {
+		if (conn == CHARGE_CONNECTOR_POGO) {
+			dock_charge_source = manta_pogo_set_vbus(online);
+			if (dock_charge_source >= 0)
+				return dock_charge_source;
+		}
+		charge_source = CHARGE_SOURCE_USB;
 	}
 
 	return charge_source;
