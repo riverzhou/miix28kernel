@@ -156,15 +156,12 @@ static struct s3c2410_uartcfg manta_uartcfgs[] __initdata = {
 	},
 };
 
-static struct gpio_event_direct_entry manta_keypad_powerkey_map[] = {
+static struct gpio_event_direct_entry manta_keypad_key_map[] = {
 	{
 		.gpio   = EXYNOS5_GPX2(7),
 		.code   = KEY_POWER,
 		.dev    = 0,
-	}
-};
-
-static struct gpio_event_direct_entry manta_keypad_volumekey_map[] = {
+	},
 	{
 		.gpio   = EXYNOS5_GPX2(0),
 		.code   = KEY_VOLUMEUP,
@@ -185,22 +182,13 @@ static struct gpio_event_direct_entry manta_switch_map[] = {
 	}
 };
 
-static struct gpio_event_input_info manta_keypad_powerkey_info = {
+static struct gpio_event_input_info manta_keypad_key_info = {
 	.info.func              = gpio_event_input_func,
 	.info.no_suspend        = true,
 	.debounce_time.tv64     = 5 * NSEC_PER_MSEC,
 	.type                   = EV_KEY,
-	.keymap                 = manta_keypad_powerkey_map,
-	.keymap_size            = ARRAY_SIZE(manta_keypad_powerkey_map)
-};
-
-static struct gpio_event_input_info manta_keypad_volumekey_info = {
-	.info.func              = gpio_event_input_func,
-	.info.no_suspend        = false,
-	.debounce_time.tv64     = 5 * NSEC_PER_MSEC,
-	.type                   = EV_KEY,
-	.keymap                 = manta_keypad_volumekey_map,
-	.keymap_size            = ARRAY_SIZE(manta_keypad_volumekey_map)
+	.keymap                 = manta_keypad_key_map,
+	.keymap_size            = ARRAY_SIZE(manta_keypad_key_map)
 };
 
 static struct gpio_event_input_info manta_switch_info = {
@@ -213,8 +201,7 @@ static struct gpio_event_input_info manta_switch_info = {
 };
 
 static struct gpio_event_info *manta_event_input_info[] = {
-	&manta_keypad_powerkey_info.info,
-	&manta_keypad_volumekey_info.info,
+	&manta_keypad_key_info.info,
 	&manta_switch_info.info,
 };
 
