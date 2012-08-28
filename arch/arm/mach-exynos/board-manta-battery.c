@@ -480,6 +480,7 @@ static struct smb347_charger_platform_data smb347_chg_pdata = {
 	.mains_current_limit = 2000000,
 	.usb_hc_current_limit = 1800000,
 	.irq_gpio = GPIO_TA_nCHG_ALPHA,
+	.disable_stat_interrupts = true,
 	.en_gpio = GPIO_TA_EN,
 	.supplied_to = exynos5_manta_supplicant,
 	.num_supplicants = ARRAY_SIZE(exynos5_manta_supplicant),
