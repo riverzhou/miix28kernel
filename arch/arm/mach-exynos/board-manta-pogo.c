@@ -29,6 +29,7 @@
 #include <linux/gpio.h>
 #include <linux/switch.h>
 #include <linux/wakelock.h>
+#include <linux/sched.h>
 
 #include <plat/gpio-cfg.h>
 #include "board-manta.h"
@@ -73,7 +74,7 @@
 #define CMD_DELAY_USEC			100		/* 100us */
 #define TX_ERR_DELAY_USEC(delay_ns)	((delay_ns) / 1000 * 7 + CMD_DELAY_USEC)
 #define check_stop_bits(x, n) ((((x) >> ((n) - 2)) & 1) == (STOP_BITS & 1))
-#define raw_resp(x, n) ((x) & ((1 << ((n) - 1)) - 1));
+#define raw_resp(x, n) ((x) & ((1 << ((n) - 2)) - 1));
 
 /* GPIO configuration */
 #define GPIO_POGO_DATA_BETA		EXYNOS5_GPB0(0)
@@ -102,7 +103,7 @@ struct dock_state {
 	bool vbus_present;
 	struct workqueue_struct *dock_wq;
 	struct work_struct dock_work;
-	struct wake_lock dock_work_wake_lock;
+	struct wake_lock wake_lock;
 };
 
 static struct dock_state ds = {
@@ -117,17 +118,15 @@ static struct gpio manta_pogo_gpios[] = {
 
 #define _GPIO_DOCK		(manta_pogo_gpios[0].gpio)
 
-#define dock_out(n) { s3c_gpio_cfgpin(_GPIO_DOCK, S3C_GPIO_OUTPUT); \
-	gpio_direction_output(_GPIO_DOCK, n); }
+#define dock_out(n) gpio_direction_output(_GPIO_DOCK, n);
 #define dock_out2(n) gpio_set_value(_GPIO_DOCK, n)
-#define dock_in() { s3c_gpio_cfgpin(_GPIO_DOCK, S3C_GPIO_INPUT); \
-	gpio_direction_input(_GPIO_DOCK); }
+#define dock_in() gpio_direction_input(_GPIO_DOCK);
 #define dock_read() gpio_get_value(_GPIO_DOCK)
 #define dock_irq() s3c_gpio_cfgpin(_GPIO_DOCK, S3C_GPIO_SFN(0xF))
 
 static u32 pogo_read_fast_timer(void)
 {
-	return ktime_to_ns(ktime_get());
+	return sched_clock();
 }
 
 static u16 make_cmd(int id, bool write, int data)
@@ -215,9 +214,15 @@ static int dock_send_bits(struct dock_state *s, u32 data, int count, int period)
 		if (data & 1)
 			dock_out2((s->level = !s->level));
 
+		t = pogo_read_fast_timer() - t0;
+		if (t - to > period / 2) {
+			pr_debug("dock: to = %d, t = %d\n", to, t);
+			return -EIO;
+		}
+
 		data >>= 1;
 
-		to += s->mfm_delay_ns;
+		to += period;
 		do {
 			t = pogo_read_fast_timer() - t0;
 		} while (t < to);
@@ -286,7 +291,6 @@ static int dock_command(struct dock_state *s, u16 cmd, int len, int retlen)
 			pr_debug("%s: response sync error\n", __func__);
 			ret = -1;
 		}
-		dock_out(0);
 	}
 	local_irq_restore(flags);
 
@@ -448,8 +452,6 @@ static int dock_check_status(struct dock_state *s,
 	if (!s->vbus_present || dock_acquire(s))
 		goto no_dock;
 
-	dock_out(0);
-
 	if (s->dock_connected_unknown) {
 		/* force a new dock notification if a command failed */
 		switch_set_state(&dock_switch, POGO_UNDOCKED);
@@ -494,7 +496,7 @@ no_dock:
 	switch_set_state(&dock_switch, POGO_UNDOCKED);
 	switch_set_state(&usb_audio_switch, POGO_NO_AUDIO);
 done:
-	wake_unlock(&s->dock_work_wake_lock);
+	wake_unlock(&s->wake_lock);
 
 	return ret;
 }
@@ -509,7 +511,7 @@ enum manta_charge_source manta_pogo_set_vbus(bool status)
 	pr_debug("%s: status %d\n", __func__, status ? 1 : 0);
 
 	if (status) {
-		wake_lock(&s->dock_work_wake_lock);
+		wake_lock(&s->wake_lock);
 		ret = dock_check_status(s, &charge_source);
 		if (ret < 0)
 			return (enum manta_charge_source) ret;
@@ -535,9 +537,9 @@ static void dock_work_proc(struct work_struct *work)
 static irqreturn_t pogo_data_interrupt(int irq, void *data)
 {
 	struct dock_state *s = data;
-	pr_debug("%s\n", __func__);
+	pr_debug("%s: irq %d\n", __func__, irq);
 
-	wake_lock(&s->dock_work_wake_lock);
+	wake_lock(&s->wake_lock);
 	queue_work(s->dock_wq, &s->dock_work);
 
 	return IRQ_HANDLED;
@@ -563,6 +565,7 @@ static DEVICE_ATTR(vbus, S_IRUGO | S_IWUSR, dev_attr_vbus_show,
 		dev_attr_vbus_store);
 #endif
 
+#ifdef DEBUG
 static ssize_t dev_attr_delay_ns_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
@@ -580,6 +583,7 @@ static ssize_t dev_attr_delay_ns_store(struct device *dev,
 }
 static DEVICE_ATTR(delay_ns, S_IRUGO | S_IWUSR, dev_attr_delay_ns_show,
 		dev_attr_delay_ns_store);
+#endif
 
 static ssize_t dev_attr_dock_id_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
@@ -640,7 +644,7 @@ void __init exynos5_manta_pogo_init(void)
 	if (exynos5_manta_get_revision() <= MANTA_REV_BETA)
 		manta_pogo_gpios[0].gpio = GPIO_POGO_DATA_BETA;
 
-	wake_lock_init(&s->dock_work_wake_lock, WAKE_LOCK_SUSPEND, "dock");
+	wake_lock_init(&s->wake_lock, WAKE_LOCK_SUSPEND, "dock");
 
 	INIT_WORK(&s->dock_work, dock_work_proc);
 	s->dock_wq = create_singlethread_workqueue("dock");
@@ -653,11 +657,11 @@ void __init exynos5_manta_pogo_init(void)
 		pr_err("%s: cannot request gpios\n", __func__);
 
 	if (switch_dev_register(&dock_switch) == 0) {
-		ret = device_create_file(dock_switch.dev, &dev_attr_delay_ns);
-		WARN_ON(ret);
 		ret = device_create_file(dock_switch.dev, &dev_attr_dock_id);
 		WARN_ON(ret);
 #ifdef DEBUG
+		ret = device_create_file(dock_switch.dev, &dev_attr_delay_ns);
+		WARN_ON(ret);
 		ret = device_create_file(dock_switch.dev, &dev_attr_vbus);
 		WARN_ON(ret);
 #endif
@@ -673,11 +677,10 @@ int __init pogo_data_irq_late_init(void)
 	dock_irq();
 	s3c_gpio_setpull(_GPIO_DOCK, S3C_GPIO_PULL_NONE);
 
-	s5p_register_gpio_interrupt(_GPIO_DOCK);
 	data_irq = gpio_to_irq(_GPIO_DOCK);
 
-	ret = request_threaded_irq(data_irq, NULL, pogo_data_interrupt,
-			IRQF_TRIGGER_FALLING | IRQF_ONESHOT, "dock", &ds);
+	ret = request_irq(data_irq, pogo_data_interrupt, IRQF_TRIGGER_FALLING,
+			"dock", &ds);
 	if (ret < 0)
 		pr_err("%s: failed to request irq %d, rc: %d\n", __func__,
 			data_irq, ret);
