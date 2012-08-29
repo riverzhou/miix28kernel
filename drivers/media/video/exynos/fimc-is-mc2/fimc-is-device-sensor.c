@@ -307,7 +307,7 @@ int fimc_is_sensor_probe(struct fimc_is_device_sensor *this,
 
 		ext = &enum_sensor[SENSOR_NAME_S5K4E5].ext;
 		ext->actuator_con.product_name = ACTUATOR_NAME_DWXXXX;
-		ext->actuator_con.peri_type = SE_GPIO;
+		ext->actuator_con.peri_type = SE_I2C;
 		ext->actuator_con.peri_setting.i2c.channel
 			= SENSOR_CONTROL_I2C0;
 
@@ -373,12 +373,14 @@ int fimc_is_sensor_open(struct fimc_is_device_sensor *this)
 {
 	int ret = 0;
 
-	dbg_front("%s\n", __func__);
+	printk(KERN_INFO "+++%s()\n", __func__);
 
 	this->state = 0;
 	this->active_sensor = &this->enum_sensor[SENSOR_NAME_S5K4E5];
 
 	fimc_is_frame_open(this->framemgr, 8);
+
+	printk(KERN_INFO "---%s()\n", __func__);
 
 	return ret;
 }
