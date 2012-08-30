@@ -172,6 +172,18 @@ static int manta_wm1811_aif1_hw_params(struct snd_pcm_substream *substream,
 	unsigned int pll_out;
 	int ret;
 
+	/*
+	 * Make sure that we have a system clock not derived from the
+	 * FLL, since we cannot change the FLL when the system clock
+	 * is derived from it.
+	 */
+	ret = snd_soc_dai_set_sysclk(codec_dai, WM8994_SYSCLK_MCLK2,
+					MCLK2_FREQ, SND_SOC_CLOCK_IN);
+	if (ret < 0) {
+		pr_err("Failed to switch away from FLL: %d\n", ret);
+		return ret;
+	}
+
 	/* Start the reference clock for the codec's FLL */
 	if (!machine->clock_on) {
 		clk_enable(machine->clk);
