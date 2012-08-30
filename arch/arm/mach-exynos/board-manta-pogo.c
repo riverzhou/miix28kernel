@@ -478,6 +478,7 @@ static int dock_check_status(struct dock_state *s, int *charge_source)
 			}
 		}
 
+		dock_irq();
 		goto done;
 	}
 no_dock:
@@ -486,8 +487,6 @@ no_dock:
 	switch_set_state(&usb_audio_switch, POGO_NO_AUDIO);
 done:
 	wake_unlock(&s->dock_work_wake_lock);
-
-	dock_irq();
 
 	return ret;
 }
@@ -506,6 +505,7 @@ int manta_pogo_set_vbus(bool status)
 		if (ret < 0)
 			return ret;
 	} else {
+		dock_in();
 		switch_set_state(&dock_switch, POGO_UNDOCKED);
 		switch_set_state(&usb_audio_switch, POGO_NO_AUDIO);
 		s->dock_connected_unknown = false;
