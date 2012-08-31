@@ -595,6 +595,7 @@ static void dock_release(struct dock_state *s)
 enum {
 	DOCK_STATUS = 0x1,
 	DOCK_ID_ADDR = 0x2,
+	DOCK_VERSION = 0x7,
 };
 
 static int dock_check_status(struct dock_state *s,
@@ -883,6 +884,25 @@ fail:
 static DEVICE_ATTR(dock_id, S_IRUGO | S_IWUSR, dev_attr_dock_id_show,
 		dev_attr_dock_id_store);
 
+static ssize_t dev_attr_dock_ver_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	int ret;
+
+	ret = dock_acquire(&ds, true);
+	if (ret < 0)
+		goto fail;
+	ret = dock_send_cmd(&ds, DOCK_VERSION, false, 0);
+	dock_release(&ds);
+	if (ret < 0)
+		goto fail;
+
+	ret = sprintf(buf, "0x%02x\n", ret);
+fail:
+	return ret;
+}
+static DEVICE_ATTR(dock_ver, S_IRUGO, dev_attr_dock_ver_show, NULL);
+
 void __init exynos5_manta_pogo_init(void)
 {
 	struct dock_state *s = &ds;
@@ -915,6 +935,8 @@ void __init exynos5_manta_pogo_init(void)
 
 	if (switch_dev_register(&dock_switch) == 0) {
 		ret = device_create_file(dock_switch.dev, &dev_attr_dock_id);
+		WARN_ON(ret);
+		ret = device_create_file(dock_switch.dev, &dev_attr_dock_ver);
 		WARN_ON(ret);
 #ifdef DEBUG
 		ret = device_create_file(dock_switch.dev, &dev_attr_delay_ns);
