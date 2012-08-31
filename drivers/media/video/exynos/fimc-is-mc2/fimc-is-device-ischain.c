@@ -37,6 +37,7 @@
 
 #include <mach/map.h>
 #include <mach/regs-clock.h>
+#include <plat/bts.h>
 
 #include "fimc-is-time.h"
 #include "fimc-is-core.h"
@@ -70,7 +71,8 @@
 #define DEFAULT_PREVIEW_VIDEO_WIDTH		(640)
 #define DEFAULT_PREVIEW_VIDEO_HEIGHT		(480)
 
-static struct pm_qos_request pm_qos_req;
+static struct pm_qos_request pm_qos_req_cpu;
+static struct pm_qos_request pm_qos_req_mem;
 
 static const struct sensor_param init_sensor_param = {
 	.frame_rate = {
@@ -1679,16 +1681,21 @@ int fimc_is_ischain_open(struct fimc_is_device_ischain *this,
 		}
 		set_bit(FIMC_IS_ISCHAIN_LOADED, &this->state);
 
-		/* 4. Bus lock */
+		/* 4. requeset pm_qos for normal cpuidle and bus lock */
 		if (!this->lock_bus) {
-			pm_qos_add_request(&pm_qos_req, PM_QOS_CPU_DMA_LATENCY,
-				100);
+			pm_qos_add_request(&pm_qos_req_cpu,
+				PM_QOS_CPU_DMA_LATENCY, 100);
+			pm_qos_add_request(&pm_qos_req_mem,
+				PM_QOS_MEMORY_THROUGHPUT, 3200);
 			this->lock_bus = true;
 		}
 
 		/* 5. A5 power on */
 		fimc_is_ischain_power(this, 1);
 		dbg_ischain("power up and loaded firmware\n");
+
+		/* bts api for bandwidth guarantee */
+		bts_change_bus_traffic(&this->pdev->dev, BTS_INCREASE_BW);
 	} while (0);
 
 	printk(KERN_INFO "---%s(%d)\n", __func__, ret);
@@ -1712,6 +1719,8 @@ int fimc_is_ischain_close(struct fimc_is_device_ischain *this)
 	if (ret)
 		err("power down is failed, retry forcelly\n");
 
+	bts_change_bus_traffic(&this->pdev->dev, BTS_DECREASE_BW);
+
 	/* 3. Power down */
 	ret = fimc_is_ischain_power(this, 0);
 	if (ret)
@@ -1719,7 +1728,8 @@ int fimc_is_ischain_close(struct fimc_is_device_ischain *this)
 
 	/* 4. Bus release */
 	if (this->lock_bus) {
-		pm_qos_remove_request(&pm_qos_req);
+		pm_qos_remove_request(&pm_qos_req_cpu);
+		pm_qos_remove_request(&pm_qos_req_mem);
 		this->lock_bus = false;
 	}
 

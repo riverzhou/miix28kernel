@@ -27,12 +27,16 @@
 #include <mach/map.h>
 #include <mach/regs-clock.h>
 #include <mach/asv-exynos.h>
+#include <mach/abb-exynos.h>
+#include <mach/smc.h>
+#include <mach/regs-mem.h>
 
 #include "exynos_ppmu.h"
 #include "exynos5_ppmu.h"
 
 #define MAX_SAFEVOLT	1100000 /* 1.1V */
 
+#define MIF_ABB_CONTROL_FREQUENCY 667000000
 
 /* Assume that the bus is saturated if the utilization is 20% */
 #define MIF_BUS_SATURATION_RATIO	20
@@ -65,14 +69,15 @@ struct mif_bus_opp_table {
 	unsigned int idx;
 	unsigned long clk;
 	unsigned long volt;
+	unsigned long dmc_timingrow;
 };
 
 static struct mif_bus_opp_table exynos5_mif_opp_table[] = {
-	{LV_0, 800000, 1000000},
-	{LV_1, 667000, 1000000},
-	{LV_2, 400000, 1000000},
-	{LV_3, 160000, 1000000},
-	{0, 0, 0},
+	{LV_0, 800000, 1000000, 0x34498692},
+	{LV_1, 667000, 1000000, 0x2c48758f},
+	{LV_2, 400000, 1000000, 0x1A255349},
+	{LV_3, 160000, 1000000, 0x12233247},
+	{0, 0, 0, 0},
 };
 
 static int exynos5_mif_setvolt(struct busfreq_data_mif *data, struct opp *opp)
@@ -86,6 +91,47 @@ static int exynos5_mif_setvolt(struct busfreq_data_mif *data, struct opp *opp)
 	return regulator_set_voltage(data->vdd_mif, volt, MAX_SAFEVOLT);
 }
 
+static int exynos5_mif_set_dmc_timing(unsigned int freq)
+{
+	int index;
+	unsigned int timing0 = 0;
+	unsigned int timing1 = 0;
+
+	for (index = LV_0; index < _LV_END; index++) {
+		if (freq == exynos5_mif_opp_table[index].clk)
+			break;
+	}
+
+	if (index == _LV_END)
+		return -EINVAL;
+
+#ifdef CONFIG_ARM_TRUSTZONE
+	exynos_smc_read_sfr(SMC_CMD_REG,
+		SMC_REG_ID_SFR_R(EXYNOS5_PA_DREXII +
+				EXYNOS_DMC_TIMINGROW_OFFSET),
+				&timing0, 0);
+
+	timing0 |= exynos5_mif_opp_table[index].dmc_timingrow;
+	timing1 = exynos5_mif_opp_table[index].dmc_timingrow;
+
+	exynos_smc(SMC_CMD_REG,
+		SMC_REG_ID_SFR_W(EXYNOS5_PA_DREXII +
+				EXYNOS_DMC_TIMINGROW_OFFSET),
+				timing0, 0);
+	exynos_smc(SMC_CMD_REG,
+		SMC_REG_ID_SFR_W(EXYNOS5_PA_DREXII +
+				EXYNOS_DMC_TIMINGROW_OFFSET),
+				timing1, 0);
+#else
+	timing0 = __raw_readl(S5P_VA_DREXII +
+				EXYNOS_DMC_TIMINGROW_OFFSET);
+	timing0 |= exynos5_mif_opp_table[index].dmc_timingrow;
+	timing1 = exynos5_mif_opp_table[index].dmc_timingrow;
+	__raw_writel(timing0, S5P_VA_DREXII + EXYNOS_DMC_TIMINGROW_OFFSET);
+	__raw_writel(timing1, S5P_VA_DREXII + EXYNOS_DMC_TIMINGROW_OFFSET);
+#endif
+	return 0;
+}
 static int exynos5_mif_setclk(struct busfreq_data_mif *data,
 		unsigned long new_freq)
 {
@@ -95,6 +141,14 @@ static int exynos5_mif_setclk(struct busfreq_data_mif *data,
 	unsigned long old_p_rate;
 	unsigned long new_p_rate;
 	int div;
+
+	/*
+	 * Dynamic ABB control according to MIF frequency
+	 * MIF frquency > 667 MHz : ABB_MODE_130V
+	 * MIF frquency <= 667 MHz : ABB_MODE_BYPASS
+	 */
+	if (new_freq > MIF_ABB_CONTROL_FREQUENCY)
+		set_abb_member(ABB_MIF, ABB_MODE_130V);
 
 	old_p = clk_get_parent(data->mclk_cdrex);
 	if (IS_ERR(old_p))
@@ -148,6 +202,9 @@ static int exynos5_mif_setclk(struct busfreq_data_mif *data,
 		/* No need to change pll */
 		err = clk_set_rate(data->mif_clk, new_freq);
 	}
+
+	if (new_freq <= MIF_ABB_CONTROL_FREQUENCY)
+		set_abb_member(ABB_MIF, ABB_MODE_BYPASS);
 out:
 	return err;
 }
@@ -187,19 +244,27 @@ static int exynos5_busfreq_mif_target(struct device *dev, unsigned long *_freq,
 	if (data->disabled)
 		goto out;
 
-	if (old_freq < freq)
+	if (old_freq < freq) {
 		err = exynos5_mif_setvolt(data, opp);
-	if (err)
-		goto out;
+		if (err)
+			goto out;
+		err = exynos5_mif_set_dmc_timing(freq);
+		if (err)
+			goto out;
+	}
 
 	err = exynos5_mif_setclk(data, freq * 1000);
 	if (err)
 		goto out;
 
-	if (old_freq > freq)
+	if (old_freq > freq) {
+		err = exynos5_mif_set_dmc_timing(freq);
+		if (err)
+			goto out;
 		err = exynos5_mif_setvolt(data, opp);
-	if (err)
-		goto out;
+		if (err)
+			goto out;
+	}
 
 	data->curr_opp = opp;
 out:
@@ -274,6 +339,11 @@ static int exynos5_busfreq_mif_pm_notifier_event(struct notifier_block *this,
 		rcu_read_unlock();
 
 		err = exynos5_mif_setvolt(data, opp);
+		if (err)
+			goto unlock;
+
+		err = exynos5_mif_set_dmc_timing(freq);
+
 		if (err)
 			goto unlock;
 
@@ -375,15 +445,15 @@ static __devinit int exynos5_busfreq_mif_probe(struct platform_device *pdev)
 
 	data->curr_opp = opp;
 
-	err = clk_set_rate(data->mif_clk, initial_freq * 1000);
+	err = exynos5_mif_setclk(data, initial_freq * 1000);
 	if (err) {
 		dev_err(dev, "Failed to set initial frequency\n");
 		goto err_opp_add;
 	}
 
-	err = clk_set_parent(data->mclk_cdrex, data->mout_mpll);
+	err = exynos5_mif_set_dmc_timing(initial_freq);
 	if (err) {
-		dev_err(dev, "Failed to set initial parent\n");
+		dev_err(dev, "Failed to set dmc timingrow\n");
 		goto err_opp_add;
 	}
 
