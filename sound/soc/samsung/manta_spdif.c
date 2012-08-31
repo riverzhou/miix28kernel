@@ -25,7 +25,6 @@
 struct manta_spdif {
 	struct clk *clk_parent;
 	struct clk *clk_spdif;
-	struct clk *clk_busdiv;
 };
 
 static int manta_hw_params(struct snd_pcm_substream *substream,
@@ -59,7 +58,6 @@ static int manta_hw_params(struct snd_pcm_substream *substream,
 
 	clk_set_rate(machine->clk_parent, pll_out);
 	clk_set_rate(machine->clk_spdif, rclk_rate);
-	clk_set_rate(machine->clk_busdiv, pll_out);
 
 	/* Set SPDIF uses internal source clock */
 	ret = snd_soc_dai_set_sysclk(cpu_dai, SND_SOC_SPDIF_INT_MCLK,
@@ -117,13 +115,6 @@ static int __devinit snd_manta_probe(struct platform_device *pdev)
 		goto err_clk_spdif_get;
 	}
 
-	machine->clk_busdiv = clk_get(NULL, "dout_bus");
-	if (IS_ERR(machine->clk_busdiv)) {
-		pr_err("%s: failed to get bus clock\n", __func__);
-		ret = PTR_ERR(machine->clk_busdiv);
-		goto err_clk_busdiv_get;
-	}
-
 	snd_soc_card_set_drvdata(&manta, machine);
 
 	manta.dev = &pdev->dev;
@@ -136,8 +127,6 @@ static int __devinit snd_manta_probe(struct platform_device *pdev)
 	return 0;
 
 err_register_card:
-	clk_put(machine->clk_busdiv);
-err_clk_busdiv_get:
 	clk_put(machine->clk_spdif);
 err_clk_spdif_get:
 	clk_put(machine->clk_parent);
@@ -154,7 +143,6 @@ static int __devexit snd_manta_remove(struct platform_device *pdev)
 	snd_soc_unregister_card(&manta);
 	clk_put(machine->clk_parent);
 	clk_put(machine->clk_spdif);
-	clk_put(machine->clk_busdiv);
 	kfree(machine);
 
 	return 0;
