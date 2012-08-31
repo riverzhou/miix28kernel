@@ -246,6 +246,8 @@
 
 #ifndef __ASSEMBLY__
 
+struct uart_port;
+
 /* configuration structure for per-machine configurations for the
  * serial port
  *
