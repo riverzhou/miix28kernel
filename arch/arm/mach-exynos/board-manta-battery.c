@@ -27,6 +27,7 @@
 #include <linux/platform_data/bq24191_charger.h>
 #include <linux/power/smb347-charger.h>
 #include <linux/platform_data/android_battery.h>
+#include <linux/platform_data/ds2482.h>
 
 #include "board-manta.h"
 
@@ -47,6 +48,7 @@
 #define GPIO_OTG_VBUS_SENSE	EXYNOS5_GPX1(0)
 #define GPIO_VBUS_POGO_5V	EXYNOS5_GPX1(2)
 #define GPIO_OTG_VBUS_SENSE_FAC	EXYNOS5_GPB0(1)
+#define GPIO_1WIRE_SLEEP	EXYNOS5_GPG0(0)
 
 static int gpio_TA_nCHG = GPIO_TA_nCHG_ALPHA;
 
@@ -820,7 +822,11 @@ static const struct file_operations manta_power_adc_debug_fops = {
 	.release = single_release,
 };
 
-static struct i2c_board_info i2c_devs2_common[] __initdata = {
+static struct ds2482_platform_data ds2483_pdata = {
+	.slpz_gpio = -1,
+};
+
+static struct i2c_board_info i2c_devs2_prebeta[] __initdata = {
 	{
 		I2C_BOARD_INFO("max17047-fuelgauge", 0x36),
 		.platform_data	= &max17047_fg_pdata,
@@ -830,6 +836,7 @@ static struct i2c_board_info i2c_devs2_common[] __initdata = {
 static struct i2c_board_info i2c_devs2_beta[] __initdata = {
 	{
 		I2C_BOARD_INFO("ds2482", 0x30 >> 1),
+		.platform_data = &ds2483_pdata,
 	},
 };
 
@@ -856,12 +863,21 @@ void __init exynos5_manta_battery_init(void)
 	platform_add_devices(manta_battery_devices,
 		ARRAY_SIZE(manta_battery_devices));
 
+	if (hw_rev >= 6) {
+		s3c_gpio_cfgpin(GPIO_1WIRE_SLEEP, S3C_GPIO_OUTPUT);
+		s3c_gpio_setpull(GPIO_1WIRE_SLEEP, S3C_GPIO_PULL_NONE);
+		s5p_gpio_set_pd_cfg(GPIO_1WIRE_SLEEP, S5P_GPIO_PD_OUTPUT0);
+		s5p_gpio_set_pd_pull(GPIO_1WIRE_SLEEP,
+				     S5P_GPIO_PD_UPDOWN_DISABLE);
+		ds2483_pdata.slpz_gpio = GPIO_1WIRE_SLEEP;
+	}
+
 	if (hw_rev >= MANTA_REV_BETA)
 		i2c_register_board_info(2, i2c_devs2_beta,
 				ARRAY_SIZE(i2c_devs2_beta));
 	else
-		i2c_register_board_info(2, i2c_devs2_common,
-				ARRAY_SIZE(i2c_devs2_common));
+		i2c_register_board_info(2, i2c_devs2_prebeta,
+				ARRAY_SIZE(i2c_devs2_prebeta));
 
 	if (hw_rev  >= MANTA_REV_PRE_ALPHA)
 		i2c_register_board_info(2, i2c_devs2_prealpha,
