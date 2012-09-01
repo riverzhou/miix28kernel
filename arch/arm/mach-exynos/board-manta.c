@@ -324,7 +324,7 @@ static struct tmu_data manta_tmu_pdata __initdata = {
 	},
 
 	.efuse_value	= 80,
-	.slope		= 0x07000F02,
+	.slope		= 0x10608802,
 };
 
 /* defined in arch/arm/mach-exynos/reserve-mem.c */
