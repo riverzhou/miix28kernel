@@ -319,6 +319,8 @@ static struct tmu_data manta_tmu_pdata __initdata = {
 		.start_throttle		= 80,
 		.start_tripping		= 110,
 		.start_emergency	= 120,
+		.stop_mem_throttle	= 80,
+		.start_mem_throttle	= 85,
 	},
 
 	.efuse_value	= 80,
