@@ -68,5 +68,6 @@ void manta_otg_set_usb_state(bool connected);
 enum manta_charge_source manta_pogo_set_vbus(bool status);
 extern void manta_pogo_switch_set(int value);
 void bcm_bt_lpm_exit_lpm_locked(struct uart_port *uport);
+void exynos5_manta_adjust_mif_asv_table(void);
 
 #endif

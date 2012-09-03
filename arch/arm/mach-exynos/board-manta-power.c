@@ -20,6 +20,7 @@
 #include <asm/system_misc.h>
 
 #include <mach/regs-pmu.h>
+#include <mach/asv-exynos.h>
 
 #include "board-manta.h"
 #include "common.h"
@@ -424,6 +425,22 @@ static void manta_reboot(char str, const char *cmd)
 	}
 
 	exynos5_restart(str, cmd); /* S/W reset: INFORM0~3:  Keep its value */
+}
+
+extern unsigned int
+exynos5250_set_volt(enum asv_type_id target_type, unsigned int target_freq,
+			unsigned int group, unsigned int volt);
+
+void __init exynos5_manta_adjust_mif_asv_table(void)
+{
+	int i;
+	unsigned int adj_mif_volt[] = { 1175000, 1125000, 1100000, 1037500 };
+
+	if (exynos5_manta_get_revision() > MANTA_REV_DOGFOOD02)
+		return;
+
+	for (i = 0; i < ARRAY_SIZE(adj_mif_volt); i++)
+		exynos5250_set_volt(ID_MIF, 800000, i, adj_mif_volt[i]);
 }
 
 void __init exynos5_manta_power_init(void)
