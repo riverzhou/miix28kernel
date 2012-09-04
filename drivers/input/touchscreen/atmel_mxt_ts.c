@@ -1004,7 +1004,7 @@ static int mxt_make_highchg(struct mxt_data *data)
 {
 	struct device *dev = &data->client->dev;
 	struct mxt_message message;
-	int count = 10;
+	int count = data->max_reportid * 2;
 	int error;
 
 	/* Read dummy message to make high CHG pin */
