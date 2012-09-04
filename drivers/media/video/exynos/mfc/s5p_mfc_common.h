@@ -500,6 +500,7 @@ struct s5p_mfc_dec {
 	int is_packedpb;
 	int slice_enable;
 	int mv_count;
+	int idr_decoding;
 
 	int crc_enable;
 	int crc_luma0;

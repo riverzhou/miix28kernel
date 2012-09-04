@@ -1322,6 +1322,8 @@ int s5p_mfc_init_decode(struct s5p_mfc_ctx *ctx)
 		  READL(S5P_FIMV_D_CPB_BUFFER_ADDR),
 		  READL(S5P_FIMV_D_CPB_BUFFER_ADDR));
 
+	reg |= (dec->idr_decoding << S5P_FIMV_D_OPT_IDR_DECODING_SHFT);
+
 	/* FMO_ASO_CTRL - 0: Enable, 1: Disable */
 	reg |= (fmo_aso_ctrl << S5P_FIMV_D_OPT_FMO_ASO_CTRL_MASK);
 

@@ -297,6 +297,15 @@ static struct v4l2_queryctrl controls[] = {
 		.step = 1,
 		.default_value = 0,
 	},
+	{
+		.id = V4L2_CID_MPEG_MFC51_VIDEO_I_FRAME_DECODING,
+		.type = V4L2_CTRL_TYPE_BOOLEAN,
+		.name = "I frame decoding mode",
+		.minimum = 0,
+		.maximum = 1,
+		.step = 1,
+		.default_value = 0,
+	},
 };
 
 #define NUM_CTRLS ARRAY_SIZE(controls)
@@ -1647,6 +1656,9 @@ static int get_ctrl_val(struct s5p_mfc_ctx *ctx, struct v4l2_control *ctrl)
 	case V4L2_CID_MPEG_VIDEO_H264_SEI_FRAME_PACKING:
 		ctrl->value = dec->sei_parse;
 		break;
+	case V4L2_CID_MPEG_MFC51_VIDEO_I_FRAME_DECODING:
+		ctrl->value = dec->idr_decoding;
+		break;
 	default:
 		list_for_each_entry(ctx_ctrl, &ctx->ctrls, list) {
 			if (!(ctx_ctrl->type & MFC_CTRL_TYPE_GET))
@@ -1760,6 +1772,12 @@ static int vidioc_s_ctrl(struct file *file, void *priv,
 			dec->sei_parse = ctrl->value;
 		else
 			dec->sei_parse = 0;
+		break;
+	case V4L2_CID_MPEG_MFC51_VIDEO_I_FRAME_DECODING:
+		if (ctrl->value == 0 || ctrl->value == 1)
+			dec->idr_decoding = ctrl->value;
+		else
+			dec->idr_decoding = 0;
 		break;
 	default:
 		list_for_each_entry(ctx_ctrl, &ctx->ctrls, list) {
