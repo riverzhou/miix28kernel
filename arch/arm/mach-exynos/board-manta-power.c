@@ -77,6 +77,10 @@ static struct regulator_consumer_supply ldo19_supply[] = {
 	REGULATOR_SUPPLY("vt_cam_1.8v", NULL),
 };
 
+static struct regulator_consumer_supply ldo20_supply[] = {
+	REGULATOR_SUPPLY("ta_check_1.1v", NULL),
+};
+
 static struct regulator_consumer_supply ldo23_supply[] = {
 	REGULATOR_SUPPLY("avdd", "3-004a"),
 };
@@ -146,6 +150,8 @@ REGULATOR_INIT(ldo17, "5M_CORE_1.5V", 1500000, 1500000, 0,
 REGULATOR_INIT(ldo18, "CAM_IO_1.8V", 1800000, 1800000, 0,
 	       REGULATOR_CHANGE_STATUS, 1);
 REGULATOR_INIT(ldo19, "VT_CAM_1.8V", 1800000, 1800000, 0,
+	       REGULATOR_CHANGE_STATUS, 1);
+REGULATOR_INIT(ldo20, "TA_CHECK_1.1V", 1100000, 1100000, 0,
 	       REGULATOR_CHANGE_STATUS, 1);
 REGULATOR_INIT(ldo23, "TSP_AVDD_2.8V", 2800000, 2800000, 0,
 	       REGULATOR_CHANGE_STATUS, 1);
@@ -235,6 +241,7 @@ static struct max77686_regulator_data max77686_regulators[] = {
 	{MAX77686_LDO17, &ldo17_init_data,},
 	{MAX77686_LDO18, &ldo18_init_data,},
 	{MAX77686_LDO19, &ldo19_init_data,},
+	{MAX77686_LDO20, &ldo20_init_data,},
 	{MAX77686_LDO23, &ldo23_init_data,},
 	{MAX77686_LDO24, &ldo24_init_data,},
 	{MAX77686_LDO25, &ldo25_init_data,},
