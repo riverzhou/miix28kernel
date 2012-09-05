@@ -98,7 +98,6 @@ struct dock_state {
 	bool level;
 	bool dock_connected_unknown;
 
-	int gpio_pogo_data;
 	u32 mfm_delay_ns;
 	bool vbus_present;
 	struct workqueue_struct *dock_wq;
@@ -109,10 +108,14 @@ struct dock_state {
 static struct dock_state ds = {
 	.lock		= __MUTEX_INITIALIZER(ds.lock),
 	.mfm_delay_ns	= MFM_DELAY_NS_DEFAULT,
-	.gpio_pogo_data	= GPIO_POGO_DATA_POST_BETA,
 };
 
-#define _GPIO_DOCK		(ds.gpio_pogo_data)
+static struct gpio manta_pogo_gpios[] = {
+	{GPIO_POGO_DATA_POST_BETA, GPIOF_IN, "dock"},
+	{GPIO_POGO_SEL1, GPIOF_OUT_INIT_HIGH, "pogo_sel1"},
+};
+
+#define _GPIO_DOCK		(manta_pogo_gpios[0].gpio)
 
 #define dock_out(n) { s3c_gpio_cfgpin(_GPIO_DOCK, S3C_GPIO_OUTPUT); \
 	gpio_direction_output(_GPIO_DOCK, n); }
@@ -394,12 +397,16 @@ static int dock_write_multi(struct dock_state *s, int addr, u8 *data,
 	return -EIO;
 }
 
+void manta_pogo_switch_set(int value)
+{
+	gpio_set_value(GPIO_POGO_SEL1, value);
+}
+
+
 static int dock_acquire(struct dock_state *s)
 {
 	mutex_lock(&s->lock);
-
-	gpio_set_value(GPIO_POGO_SEL1, 1);
-
+	manta_pogo_switch_set(1);
 	dock_in();
 	if (dock_read()) {
 		/* Allow some time for the dock pull-down resistor to discharge
@@ -629,13 +636,7 @@ void __init exynos5_manta_pogo_init(void)
 	int ret;
 
 	if (exynos5_manta_get_revision() <= MANTA_REV_BETA)
-		s->gpio_pogo_data = GPIO_POGO_DATA_BETA;
-
-	ret = gpio_request(s->gpio_pogo_data, "dock");
-	if (ret < 0) {
-		pr_err("%s: cannot request gpio %d: rc %d\n", __func__,
-			s->gpio_pogo_data, ret);
-	}
+		manta_pogo_gpios[0].gpio = GPIO_POGO_DATA_BETA;
 
 	wake_lock_init(&s->dock_work_wake_lock, WAKE_LOCK_SUSPEND, "dock");
 
@@ -644,7 +645,10 @@ void __init exynos5_manta_pogo_init(void)
 
 	s3c_gpio_cfgpin(GPIO_POGO_SEL1, S3C_GPIO_OUTPUT);
 	s3c_gpio_setpull(GPIO_POGO_SEL1, S3C_GPIO_PULL_NONE);
-	gpio_set_value(GPIO_POGO_SEL1, 1);
+	ret = gpio_request_array(manta_pogo_gpios,
+				 ARRAY_SIZE(manta_pogo_gpios));
+	if (ret)
+		pr_err("%s: cannot request gpios\n", __func__);
 
 	if (switch_dev_register(&dock_switch) == 0) {
 		ret = device_create_file(dock_switch.dev, &dev_attr_delay_ns);

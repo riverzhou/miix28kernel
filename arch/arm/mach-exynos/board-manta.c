@@ -510,8 +510,6 @@ static void __init manta_udc_init(void)
 	struct s3c_hsotg_plat *pdata = &manta_hsotg_pdata;
 
 	s3c_hsotg_set_platdata(pdata);
-
-	gpio_request_one(EXYNOS5_GPH0(1), GPIOF_INIT_HIGH, "usb_sel");
 }
 
 static void __init manta_dwmci_init(void)

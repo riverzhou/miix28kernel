@@ -40,7 +40,6 @@
 #define ADC_LIMIT_ERR_COUNT	5
 
 #define	GPIO_USB_SEL1		EXYNOS5_GPH0(1)
-#define	GPIO_POGO_SEL1		EXYNOS5_GPG1(0)
 #define	GPIO_TA_EN		EXYNOS5_GPG1(5)
 #define	GPIO_TA_INT		EXYNOS5_GPX0(0)
 #define	GPIO_TA_nCHG_LUNCHBOX	EXYNOS5_GPG1(4)
@@ -125,6 +124,7 @@ static void bq24191_chg_unregister_callbacks(void)
 static void charger_gpio_init(void)
 {
 	int hw_rev = exynos5_manta_get_revision();
+	int ret;
 
 	gpio_TA_nCHG = hw_rev >= MANTA_REV_PRE_ALPHA ? GPIO_TA_nCHG_ALPHA
 		: GPIO_TA_nCHG_LUNCHBOX;
@@ -155,14 +155,12 @@ static void charger_gpio_init(void)
 	s3c_gpio_setpull(GPIO_TA_EN, S3C_GPIO_PULL_NONE);
 	s5p_gpio_set_pd_cfg(GPIO_TA_EN, S5P_GPIO_PD_PREV_STATE);
 	s5p_gpio_set_pd_pull(GPIO_TA_EN, S5P_GPIO_PD_UPDOWN_DISABLE);
-	gpio_set_value(GPIO_TA_EN, 0);
 
 	s3c_gpio_cfgpin(GPIO_USB_SEL1, S3C_GPIO_OUTPUT);
 	s3c_gpio_setpull(GPIO_USB_SEL1, S3C_GPIO_PULL_NONE);
-	gpio_set_value(GPIO_USB_SEL1, 1);
-	s3c_gpio_cfgpin(GPIO_POGO_SEL1, S3C_GPIO_OUTPUT);
-	s3c_gpio_setpull(GPIO_POGO_SEL1, S3C_GPIO_PULL_NONE);
-	gpio_set_value(GPIO_POGO_SEL1, 1);
+	ret = gpio_request_one(GPIO_USB_SEL1, GPIOF_OUT_INIT_HIGH, "usb_sel1");
+	if (ret)
+		pr_err("%s: cannot request gpio%d\n", __func__, GPIO_USB_SEL1);
 }
 
 static int read_ta_adc(enum charge_connector conn)
@@ -171,18 +169,16 @@ static int read_ta_adc(enum charge_connector conn)
 	int adc_min = 1 << 11;
 	int adc_total = 0;
 	int i, j;
-	int adc_sel;
 	int ret;
 
 	mutex_lock(&manta_bat_adc_lock);
 
-	if (conn == CHARGE_CONNECTOR_USB)
-		adc_sel = GPIO_USB_SEL1;
-	else
-		adc_sel = GPIO_POGO_SEL1;
-
 	/* switch to check adc */
-	gpio_set_value(adc_sel, 0);
+	if (conn == CHARGE_CONNECTOR_USB)
+		gpio_set_value(GPIO_USB_SEL1, 0);
+	else
+		manta_pogo_switch_set(0);
+
 	msleep(100);
 
 	for (i = 0; i < ADC_NUM_SAMPLES; i++) {
@@ -227,7 +223,10 @@ out:
 	msleep(50);
 
 	/* switch back to normal */
-	gpio_set_value(adc_sel, 1);
+	if (conn == CHARGE_CONNECTOR_USB)
+		gpio_set_value(GPIO_USB_SEL1, 1);
+	else
+		manta_pogo_switch_set(1);
 	mutex_unlock(&manta_bat_adc_lock);
 	return ret;
 }

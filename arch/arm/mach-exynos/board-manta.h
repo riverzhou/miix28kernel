@@ -56,6 +56,7 @@ int manta_stmpe811_read_adc_data(u8 channel);
 extern int manta_bat_otg_enable(bool enable);
 void manta_otg_set_usb_state(bool connected);
 int manta_pogo_set_vbus(bool status);
+extern void manta_pogo_switch_set(int value);
 void bcm_bt_lpm_exit_lpm_locked(struct uart_port *uport);
 
 #endif
