@@ -234,13 +234,13 @@ static int smb347_read(struct smb347_charger *smb, u8 reg)
 	int t;
 	int ret;
 
-	/*
-	 * HACK: manta i2c sometimes returns NXIO for a missing ACK.
-	 */
-	for (t = 0; t < 10; t++) {
+	for (t = 0; t < 20; t++) {
 		ret = i2c_smbus_read_byte_data(smb->client, reg);
 		if (ret >= 0)
 			break;
+		dev_dbg(&smb->client->dev, "%s: retry %d reg=0x%x ret=%d\n",
+			__func__, t, reg, ret);
+		msleep(20);
 	}
 
 	if (ret < 0)
@@ -254,18 +254,40 @@ static int smb347_write(struct smb347_charger *smb, u8 reg, u8 val)
 	int t;
 	int ret;
 
-	/*
-	 * HACK: manta i2c sometimes returns ECONNREFUSED for a missing ACK.
-	 */
-	for (t = 0; t < 10; t++) {
+	for (t = 0; t < 20; t++) {
 		ret = i2c_smbus_write_byte_data(smb->client, reg, val);
 		if (ret >= 0)
 			break;
+		dev_dbg(&smb->client->dev, "%s: retry %d reg=0x%x ret=%d\n",
+			__func__, t, reg, ret);
+		msleep(20);
 	}
 
 	if (ret < 0)
 		dev_warn(&smb->client->dev, "failed to write reg 0x%x: %d\n",
 			 reg, ret);
+	return ret;
+}
+
+static int smb347_read_block_data(struct smb347_charger *smb, u8 reg,
+				  u8 length, u8 *values)
+{
+	int t;
+	int ret;
+
+	for (t = 0; t < 20; t++) {
+		ret = i2c_smbus_read_i2c_block_data(smb->client, reg, length,
+						    values);
+		if (ret >= 0)
+			break;
+		dev_dbg(&smb->client->dev, "%s: retry %d reg=0x%x ret=%d\n",
+			__func__, t, reg, ret);
+		msleep(20);
+	}
+
+	if (ret < 0)
+		dev_warn(&smb->client->dev,
+			 "failed to block read reg 0x%x: %d\n", reg, ret);
 	return ret;
 }
 
@@ -777,7 +799,7 @@ static irqreturn_t smb347_interrupt(int irq, void *data)
 	u8 irqstat[6];
 	irqreturn_t ret = IRQ_NONE;
 
-	t = i2c_smbus_read_i2c_block_data(smb->client, IRQSTAT_A, 6, irqstat);
+	t = smb347_read_block_data(smb, IRQSTAT_A, 6, irqstat);
 	if (t < 0) {
 		dev_warn(&smb->client->dev,
 			 "reading IRQSTAT registers failed\n");
