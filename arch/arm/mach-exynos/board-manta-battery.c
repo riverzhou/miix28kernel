@@ -863,7 +863,7 @@ void __init exynos5_manta_battery_init(void)
 	platform_add_devices(manta_battery_devices,
 		ARRAY_SIZE(manta_battery_devices));
 
-	if (hw_rev >= 6) {
+	if (hw_rev >= MANTA_REV_DOGFOOD02) {
 		s3c_gpio_cfgpin(GPIO_1WIRE_SLEEP, S3C_GPIO_OUTPUT);
 		s3c_gpio_setpull(GPIO_1WIRE_SLEEP, S3C_GPIO_PULL_NONE);
 		s5p_gpio_set_pd_cfg(GPIO_1WIRE_SLEEP, S5P_GPIO_PD_OUTPUT0);
