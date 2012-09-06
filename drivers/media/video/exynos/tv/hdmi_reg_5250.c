@@ -2263,7 +2263,7 @@ irqreturn_t hdmi_irq_handler(int irq, void *dev_data)
 					HDMI_INTC_FLAG_HPD_PLUG);
 		}
 		if (intc_flag & HDMI_INTC_FLAG_HDCP) {
-			pr_info("hdcp interrupt occur\n");
+			pr_debug("%s: hdcp interrupt occur\n", __func__);
 			hdcp_irq_handler(hdev);
 			hdmi_write_mask(hdev, HDMI_INTC_FLAG_0, ~0,
 					HDMI_INTC_FLAG_HDCP);

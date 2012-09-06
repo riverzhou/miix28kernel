@@ -662,6 +662,8 @@ static void hdmi_hpd_changed(struct hdmi_device *hdev, int state)
 	}
 
 	switch_set_state(&hdev->hpd_switch, state);
+
+	dev_info(hdev->dev, "%s\n", state ? "plugged" : "unplugged");
 }
 
 static void hdmi_hpd_work_ext(struct work_struct *work)
@@ -672,8 +674,6 @@ static void hdmi_hpd_work_ext(struct work_struct *work)
 
 	state = s5p_v4l2_hpd_read_gpio();
 	hdmi_hpd_changed(hdev, state);
-
-	dev_info(hdev->dev, "%s (ext)\n", state ? "plugged" : "unplugged");
 }
 
 static void hdmi_hpd_work(struct work_struct *work)
@@ -684,8 +684,6 @@ static void hdmi_hpd_work(struct work_struct *work)
 
 	state = hdmi_hpd_status(hdev);
 	hdmi_hpd_changed(hdev, state);
-
-	dev_info(hdev->dev, "%s (int)\n", state ? "plugged" : "unplugged");
 }
 
 static int __devinit hdmi_probe(struct platform_device *pdev)
