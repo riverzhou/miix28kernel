@@ -23,24 +23,10 @@
 #include <plat/iic.h>
 #include <plat/gpio-cfg.h>
 
-#include "board-manta.h"
-
 #define GPIO_TOUCH_CHG		EXYNOS5_GPG1(2)
 #define GPIO_TOUCH_RESET	EXYNOS5_GPG1(3)
 #define GPIO_TOUCH_EN_BOOSTER	EXYNOS5_GPD1(1)
 #define GPIO_TOUCH_EN_XVDD	EXYNOS5_GPG0(1)
-
-/*
- * From H/W revision 0.2 manta use the 12V for XVDD to improve SNR.
- * So we need to use different configuration data according to voltage level.
- *
- * H/W   : XVDD  : firmware name
- *
- * ~ 0.1 : 2.8V  : maxtouch_nv.bin
- * 0.2 ~ : 10.2V : maxtouch_hv.bin
- */
-#define MXT_FIRMWARE_FOR_NV	"maxtouch_nv.fw"
-#define MXT_FIRMWARE_FOR_HV	"maxtouch_hv.fw"
 
 static struct mxt_platform_data atmel_mxt_ts_pdata = {
 	.x_line         = 32,
@@ -50,7 +36,6 @@ static struct mxt_platform_data atmel_mxt_ts_pdata = {
 	.orient         = MXT_DIAGONAL,
 	.irqflags       = IRQF_TRIGGER_LOW | IRQF_ONESHOT,
 	.boot_address   = 0x26,
-	.firmware_name  = MXT_FIRMWARE_FOR_NV,
 	.gpio_reset     = GPIO_TOUCH_RESET,
 	.reset_msec     = 75,
 };
@@ -76,13 +61,6 @@ void __init exynos5_manta_input_init(void)
 	s5p_gpio_set_pd_cfg(GPIO_TOUCH_RESET, S5P_GPIO_PD_PREV_STATE);
 	s5p_gpio_set_pd_cfg(GPIO_TOUCH_EN_XVDD, S5P_GPIO_PD_PREV_STATE);
 	s5p_gpio_set_pd_cfg(GPIO_TOUCH_EN_BOOSTER, S5P_GPIO_PD_PREV_STATE);
-
-	/* get hardware revison */
-	hw_rev = exynos5_manta_get_revision();
-	if (hw_rev >= MANTA_REV_PRE_ALPHA)
-		atmel_mxt_ts_pdata.firmware_name = MXT_FIRMWARE_FOR_HV;
-	else
-		atmel_mxt_ts_pdata.firmware_name = MXT_FIRMWARE_FOR_NV;
 
 	i2c_devs3[0].irq = gpio_to_irq(GPIO_TOUCH_CHG);
 	i2c_register_board_info(3, i2c_devs3, ARRAY_SIZE(i2c_devs3));
