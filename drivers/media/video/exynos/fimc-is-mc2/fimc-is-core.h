@@ -54,9 +54,9 @@
 #define FIMC_IS_VIDEO_3DNR_NAME			"exynos5-fimc-is2-3dnr"
 #define FIMC_IS_VIDEO_SCALERP_NAME		"exynos5-fimc-is2-scalerp"
 
-#define FIMC_IS_COMMAND_TIMEOUT			(4*HZ)
+#define FIMC_IS_COMMAND_TIMEOUT			(3*HZ)
 #define FIMC_IS_SHUTDOWN_TIMEOUT		(10*HZ)
-#define FIMC_IS_FLITE_STOP_TIMEOUT		(4*HZ)
+#define FIMC_IS_FLITE_STOP_TIMEOUT		(3*HZ)
 
 #define FIMC_IS_SENSOR_MAX_ENTITIES		(1)
 #define FIMC_IS_SENSOR_PAD_SOURCE_FRONT		(0)
@@ -92,6 +92,8 @@
 /*#define FW_DEBUG*/
 #define RESERVED_MEM
 #define ENABLE_DZOOM
+/*#define USE_FRAME_SYNC*/
+#define TASKLET_MSG
 
 #ifdef DEBUG
 #define dbg(fmt, args...) \

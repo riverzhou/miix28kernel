@@ -201,6 +201,8 @@ struct camera2_flash_dm {
 	uint64_t		firingTime;
 	/*1 : stable, 0 : unstable*/
 	uint32_t		firingStable;
+	/*1 : success, 0 : fail*/
+	uint8_t			decision;
 };
 
 struct camera2_flash_sm {
@@ -502,7 +504,8 @@ enum aa_scene_mode {
 	AA_SCENE_MODE_SPORTS,
 	AA_SCENE_MODE_PARTY,
 	AA_SCENE_MODE_CANDLELIGHT,
-	AA_SCENE_MODE_BARCODE
+	AA_SCENE_MODE_BARCODE,
+	AA_SCENE_MODE_NIGHT_CAPTURE
 };
 
 enum aa_effect_mode {
@@ -534,7 +537,10 @@ enum aa_ae_flashmode {
 	/*internal 3A can do auto flash algorithm*/
 	AA_FLASHMODE_AUTO,
 	/*internal 3A can fire flash by auto result*/
-	AA_FLASHMODE_CAPTURE
+	AA_FLASHMODE_CAPTURE,
+	/*internal 3A can control flash forced*/
+	AA_FLASHMODE_ON_ALWAYS
+
 };
 
 enum aa_ae_antibanding_mode {
@@ -834,7 +840,7 @@ struct camera2_shot_ext {
 		[0] disable stream out
 		[1] enable stream out
 	*/
-	uint32_t		request_sensor;
+	uint32_t		request_isp;
 	uint32_t		request_scc;
 	uint32_t		request_scp;
 
@@ -875,6 +881,34 @@ struct camera2_shot_ext {
 	uint32_t		timeZone[10][2];
 
 	struct camera2_shot	shot;
+};
+
+/** \brief
+	stream structure for scaler.
+*/
+struct camera2_stream {
+	/**	\brief
+		this address for verifying conincidence of index and address
+		\remarks
+		[X] kernel virtual address for this buffer
+	*/
+	uint32_t		address;
+
+	/**	\brief
+		this frame count is from FLITE through dm.request.fcount,
+		this count increases every frame end. initial value is 1.
+		\remarks
+		[X] frame count
+	*/
+	uint32_t		fcount;
+
+	/**	\brief
+		this request count is from HAL through ctl.request.fcount,
+		this count is the unique.
+		\remarks
+		[X] request count
+	*/
+	uint32_t		rcount;
 };
 
 #define CAM_LENS_CMD		(0x1 << 0x0)

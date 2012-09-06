@@ -16,18 +16,17 @@
 #define TRACE_WORK_ID_META	0x20
 #define TRACE_WORK_ID_MASK	0xFF
 
-#define MAX_NBLOCKING_COUNT 3
-#define MAX_WORK_COUNT 10
+#define MAX_NBLOCKING_COUNT	3
+#define MAX_WORK_COUNT		10
 
-#define TRY_RECV_AWARE_COUNT 100
+#define TRY_RECV_AWARE_COUNT	100
 
 #define LOWBIT_OF(num)	(num >= 32 ? 0 : (u32)1<<num)
 #define HIGHBIT_OF(num)	(num >= 32 ? (u32)1<<(num-32) : 0)
 
 enum fimc_is_interface_state {
 	IS_IF_STATE_IDLE,
-	IS_IF_STATE_BLOCK_IO,
-	IS_IF_STATE_NBLOCK_IO
+	IS_IF_STATE_BUSY
 };
 
 enum interrupt_map {
@@ -90,10 +89,12 @@ struct fimc_is_work_list {
 struct fimc_is_interface {
 	void __iomem			*regs;
 	struct is_common_reg __iomem	*com_regs;
-	enum fimc_is_interface_state	state;
+	u32				state;
+	/* this spinlock is needed for data coincidence.
+	it need to update SCU tag between different thread */
+	spinlock_t			slock_state;
 	spinlock_t			process_barrier;
 	struct mutex			request_barrier;
-	struct mutex			state_barrier;
 
 	wait_queue_head_t		wait_queue;
 	struct fimc_is_msg		reply;
@@ -167,7 +168,7 @@ int fimc_is_hw_power_down(struct fimc_is_interface *interface,
 	u32 instance);
 
 int fimc_is_hw_shot_nblk(struct fimc_is_interface *this,
-	u32 instance, u32 byaer, u32 shot, u32 fcount,
+	u32 instance, u32 bayer, u32 shot, u32 fcount, u32 rcount,
 	struct fimc_is_frame_shot *frame);
 int fimc_is_hw_s_camctrl_nblk(struct fimc_is_interface *this,
 	u32 instance, u32 address, u32 fcount);

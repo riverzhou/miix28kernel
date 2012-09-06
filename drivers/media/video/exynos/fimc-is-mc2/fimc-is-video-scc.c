@@ -75,7 +75,8 @@ static int fimc_is_scalerc_video_open(struct file *file)
 	dbg_scc("%s\n", __func__);
 
 	file->private_data = video;
-	fimc_is_video_open(&video->common, ischain);
+	fimc_is_video_open(&video->common, ischain,
+		VIDEO_SCC_READY_BUFFERS);
 	fimc_is_ischain_dev_open(scc, &video->common);
 
 	return 0;
@@ -89,7 +90,7 @@ static int fimc_is_scalerc_video_close(struct file *file)
 	struct fimc_is_device_ischain *ischain = common->device;
 	struct fimc_is_ischain_dev *scc = &ischain->scc;
 
-	dbg("%s\n", __func__);
+	printk(KERN_INFO "%s\n", __func__);
 
 	if (test_bit(FIMC_IS_VIDEO_STREAM_ON, &common->state)) {
 		clear_bit(FIMC_IS_VIDEO_STREAM_ON, &video->common.state);
@@ -322,6 +323,54 @@ static int fimc_is_scalerc_video_s_input(struct file *file, void *priv,
 	return 0;
 }
 
+static int fimc_is_scalerc_video_s_ctrl(struct file *file, void *priv,
+	struct v4l2_control *ctrl)
+{
+	int ret = 0;
+	unsigned long flags;
+	struct fimc_is_video_scp *video = file->private_data;
+	struct fimc_is_video_common *common = &video->common;
+	struct fimc_is_device_ischain *ischain = common->device;
+	struct fimc_is_ischain_dev *scc = &ischain->scc;
+	struct fimc_is_framemgr *framemgr = &scc->framemgr;
+	struct fimc_is_frame_shot *frame;
+
+	dbg_scc("%s\n", __func__);
+
+	switch (ctrl->id) {
+	case V4L2_CID_IS_FORCE_DONE:
+		if (framemgr->frame_process_cnt) {
+			err("force done can be performed(process count %d)",
+				framemgr->frame_process_cnt);
+			ret = -EINVAL;
+		} else if (!framemgr->frame_request_cnt) {
+			err("force done can be performed(request count %d)",
+				framemgr->frame_request_cnt);
+			ret = -EINVAL;
+		} else {
+			framemgr_e_barrier_irqs(framemgr, 0, flags);
+
+			fimc_is_frame_request_head(framemgr, &frame);
+			if (frame) {
+				fimc_is_frame_trans_req_to_com(framemgr, frame);
+				buffer_done(common, frame->index);
+			} else {
+				err("frame is NULL");
+				ret = -EINVAL;
+			}
+
+			framemgr_x_barrier_irqr(framemgr, 0, flags);
+		}
+		break;
+	default:
+		err("unsupported ioctl(%d)\n", ctrl->id);
+		ret = -EINVAL;
+		break;
+	}
+
+	return ret;
+}
+
 const struct v4l2_file_operations fimc_is_scalerc_video_fops = {
 	.owner		= THIS_MODULE,
 	.open		= fimc_is_scalerc_video_open,
@@ -353,6 +402,7 @@ const struct v4l2_ioctl_ops fimc_is_scalerc_video_ioctl_ops = {
 	.vidioc_enum_input		= fimc_is_scalerc_video_enum_input,
 	.vidioc_g_input			= fimc_is_scalerc_video_g_input,
 	.vidioc_s_input			= fimc_is_scalerc_video_s_input,
+	.vidioc_s_ctrl			= fimc_is_scalerc_video_s_ctrl,
 };
 
 static int fimc_is_scalerc_queue_setup(struct vb2_queue *vq,
@@ -395,11 +445,18 @@ static int fimc_is_scalerc_start_streaming(struct vb2_queue *q,
 {
 	int ret = 0;
 	struct fimc_is_video_scc *video = q->drv_priv;
+	struct fimc_is_video_common *common = &video->common;
 
 	dbg_scc("%s\n", __func__);
 
-	if (test_bit(FIMC_IS_VIDEO_BUFFER_PREPARED, &video->common.state))
+	if (!test_bit(FIMC_IS_VIDEO_STREAM_ON, &common->state) &&
+		test_bit(FIMC_IS_VIDEO_BUFFER_READY, &common->state))
 		set_bit(FIMC_IS_VIDEO_STREAM_ON, &video->common.state);
+	else {
+		err("already stream on or buffer is not ready(%ld)",
+			common->state);
+		ret = -EINVAL;
+	}
 
 	return ret;
 }
@@ -408,16 +465,21 @@ static int fimc_is_scalerc_stop_streaming(struct vb2_queue *q)
 {
 	int ret = 0;
 	struct fimc_is_video_scc *video = q->drv_priv;
-	struct fimc_is_device_ischain *ischain = video->common.device;
+	struct fimc_is_video_common *common = &video->common;
+	struct fimc_is_device_ischain *ischain = common->device;
 	struct fimc_is_ischain_dev *scc = &ischain->scc;
 
 	dbg_scc("%s\n", __func__);
 
-	if (test_bit(FIMC_IS_VIDEO_STREAM_ON, &video->common.state)) {
-		clear_bit(FIMC_IS_VIDEO_STREAM_ON, &video->common.state);
-		clear_bit(FIMC_IS_VIDEO_BUFFER_PREPARED, &video->common.state);
+	if (test_bit(FIMC_IS_VIDEO_STREAM_ON, &common->state)) {
+		clear_bit(FIMC_IS_VIDEO_STREAM_ON, &common->state);
+		clear_bit(FIMC_IS_VIDEO_BUFFER_READY, &common->state);
+		clear_bit(FIMC_IS_VIDEO_BUFFER_PREPARED, &common->state);
 		fimc_is_frame_close(&scc->framemgr);
 		fimc_is_frame_open(&scc->framemgr, NUM_SCC_DMA_BUF);
+	} else {
+		err("already stream off");
+		ret = -EINVAL;
 	}
 
 	return ret;
