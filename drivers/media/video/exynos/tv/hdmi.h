@@ -29,6 +29,9 @@
 
 #define INFOFRAME_CNT          2
 
+/* default preset configured on probe */
+#define HDMI_DEFAULT_PRESET	V4L2_DV_720P60
+
 #define HDMI_VSI_VERSION	0x01
 #define HDMI_AVI_VERSION	0x02
 #define HDMI_AUI_VERSION	0x01

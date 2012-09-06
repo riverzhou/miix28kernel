@@ -52,7 +52,7 @@ static struct edid_preset {
 	{ V4L2_DV_1080P60,    1920, 1080, 60, "1080p@60" },
 };
 
-static u32 preferred_preset = V4L2_DV_INVALID;
+static u32 preferred_preset = HDMI_DEFAULT_PRESET;
 
 static int edid_i2c_read(struct hdmi_device *hdev, u8 segment, u8 offset,
 						   u8 *buf, size_t len)
@@ -183,17 +183,28 @@ static struct edid_preset *edid_find_preset(struct fb_videomode *mode)
 	return NULL;
 }
 
+static void edid_use_default_preset(void)
+{
+	int i;
+
+	preferred_preset = HDMI_DEFAULT_PRESET;
+	for (i = 0; i < ARRAY_SIZE(edid_presets); i++)
+		edid_presets[i].supported =
+				(edid_presets[i].preset == preferred_preset);
+}
+
 int edid_update(struct hdmi_device *hdev)
 {
 	struct fb_monspecs specs;
 	struct edid_preset *preset;
 	bool first = true;
-	u8 *edid;
-	int ret, i;
+	u8 *edid = NULL;
+	int ret = 0;
+	int i;
 
 	ret = edid_read(hdev, &edid);
 	if (ret < 0)
-		return ret;
+		goto out;
 
 	print_hex_dump_bytes("EDID: ", DUMP_PREFIX_OFFSET, edid,
 						ret * EDID_BLOCK_SIZE);
@@ -218,8 +229,13 @@ int edid_update(struct hdmi_device *hdev)
 		}
 	}
 
+out:
+	/* No supported preset found, use default */
+	if (first)
+		edid_use_default_preset();
+
 	kfree(edid);
-	return 0;
+	return ret;
 }
 
 u32 edid_enum_presets(struct hdmi_device *hdev, int index)
@@ -245,6 +261,7 @@ static int __devinit edid_probe(struct i2c_client *client,
 				const struct i2c_device_id *dev_id)
 {
 	edid_client = client;
+	edid_use_default_preset();
 	dev_info(&client->adapter->dev, "probed exynos edid\n");
 	return 0;
 }

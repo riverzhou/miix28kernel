@@ -41,9 +41,6 @@ MODULE_AUTHOR("Tomasz Stanislawski, <t.stanislaws@samsung.com>");
 MODULE_DESCRIPTION("Samsung HDMI");
 MODULE_LICENSE("GPL");
 
-/* default preset configured on probe */
-#define HDMI_DEFAULT_PRESET V4L2_DV_720P60
-
 /* I2C module and id for HDMIPHY */
 static struct i2c_board_info hdmiphy_info = {
 	I2C_BOARD_INFO("hdmiphy", 0x38),
