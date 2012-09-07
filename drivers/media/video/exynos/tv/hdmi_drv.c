@@ -640,15 +640,10 @@ static void hdmi_hpd_changed(struct hdmi_device *hdev, int state)
 	if (state == switch_get_state(&hdev->hpd_switch))
 		return;
 
-	if (pdata->ls_enable)
-		pdata->ls_enable(pdev, state);
-
 	if (state) {
 		ret = edid_update(hdev);
-		if (ret == -ENODEV) {
-			pdata->ls_enable(pdev, 0);
+		if (ret == -ENODEV)
 			return;
-		}
 
 		preset = edid_preferred_preset(hdev);
 		if (preset == V4L2_DV_INVALID)
