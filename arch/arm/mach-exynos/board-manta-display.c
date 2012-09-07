@@ -191,14 +191,8 @@ static void manta_hdmiphy_enable(struct platform_device *pdev, int en)
 	s5p_hdmiphy_enable(pdev, en ? 1 : 0);
 }
 
-static void manta_ls_enable(struct platform_device *pdev, int en)
-{
-	gpio_set_value(GPIO_HDMI_LS_EN, en ? 1 : 0);
-}
-
 static struct s5p_hdmi_platdata hdmi_platdata __initdata = {
 	.hdmiphy_enable = manta_hdmiphy_enable,
-	.ls_enable = manta_ls_enable,
 };
 
 static struct platform_device *manta_display_devices[] __initdata = {
@@ -234,7 +228,7 @@ void __init exynos5_manta_display_init(void)
 	/* HDMI Companion DC/DC converter and HPD circuitry */
 	gpio_request_one(GPIO_HDMI_DCDC_EN, GPIOF_OUT_INIT_HIGH, "HDMI_DCDC_EN");
 	/* HDMI Companion level shifters and LDO */
-	gpio_request_one(GPIO_HDMI_LS_EN, GPIOF_OUT_INIT_LOW, "HDMI_LS_EN");
+	gpio_request_one(GPIO_HDMI_LS_EN, GPIOF_OUT_INIT_HIGH, "HDMI_LS_EN");
 
 	s5p_hdmi_set_platdata(&hdmi_platdata);
 	dev_set_name(&s5p_device_hdmi.dev, "exynos5-hdmi");

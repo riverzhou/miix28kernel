@@ -49,7 +49,6 @@ struct s5p_platform_cec {
 
 struct s5p_hdmi_platdata {
 	void (*hdmiphy_enable)(struct platform_device *pdev, int en);
-	void (*ls_enable)(struct platform_device *pdev, int en);
 };
 
 extern void s5p_hdmi_set_platdata(struct s5p_hdmi_platdata *pd);
