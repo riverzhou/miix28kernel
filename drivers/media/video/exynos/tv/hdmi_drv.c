@@ -649,6 +649,7 @@ static void hdmi_hpd_changed(struct hdmi_device *hdev, int state)
 		if (preset == V4L2_DV_INVALID)
 			preset = HDMI_DEFAULT_PRESET;
 
+		hdev->dvi_mode = !edid_supports_hdmi(hdev);
 		hdev->cur_preset = preset;
 		hdev->cur_conf = hdmi_preset2conf(preset);
 	}

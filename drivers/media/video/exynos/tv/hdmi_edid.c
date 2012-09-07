@@ -53,6 +53,7 @@ static struct edid_preset {
 };
 
 static u32 preferred_preset = HDMI_DEFAULT_PRESET;
+static u32 edid_misc;
 
 static int edid_i2c_read(struct hdmi_device *hdev, u8 segment, u8 offset,
 						   u8 *buf, size_t len)
@@ -202,6 +203,8 @@ int edid_update(struct hdmi_device *hdev)
 	int ret = 0;
 	int i;
 
+	edid_misc = 0;
+
 	ret = edid_read(hdev, &edid);
 	if (ret < 0)
 		goto out;
@@ -229,6 +232,9 @@ int edid_update(struct hdmi_device *hdev)
 		}
 	}
 
+	edid_misc = specs.misc;
+	pr_info("EDID: misc flags %08x", edid_misc);
+
 out:
 	/* No supported preset found, use default */
 	if (first)
@@ -255,6 +261,11 @@ u32 edid_enum_presets(struct hdmi_device *hdev, int index)
 u32 edid_preferred_preset(struct hdmi_device *hdev)
 {
 	return preferred_preset;
+}
+
+bool edid_supports_hdmi(struct hdmi_device *hdev)
+{
+	return edid_misc & FB_MISC_HDMI;
 }
 
 static int __devinit edid_probe(struct i2c_client *client,
