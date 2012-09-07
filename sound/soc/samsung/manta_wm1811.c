@@ -229,6 +229,47 @@ static struct snd_soc_ops manta_wm1811_aif1_ops = {
 	.hw_params = manta_wm1811_aif1_hw_params,
 };
 
+static int manta_wm1811_aif2_hw_params(struct snd_pcm_substream *substream,
+					struct snd_pcm_hw_params *params)
+{
+	struct snd_soc_pcm_runtime *rtd = substream->private_data;
+	struct snd_soc_dai *codec_dai = rtd->codec_dai;
+	int ret;
+	int prate;
+
+	prate = params_rate(params);
+	switch (prate) {
+	case 8000:
+	case 16000:
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	/* Set the codec DAI configuration */
+	ret = snd_soc_dai_set_fmt(codec_dai, SND_SOC_DAIFMT_I2S |
+						SND_SOC_DAIFMT_NB_NF |
+						SND_SOC_DAIFMT_CBM_CFM);
+	if (ret < 0)
+		return ret;
+
+	ret = snd_soc_dai_set_pll(codec_dai, WM8994_FLL2, WM8994_FLL_SRC_MCLK1,
+						MCLK1_FREQ, prate * 256);
+	if (ret < 0)
+		dev_err(codec_dai->dev, "Unable to configure FLL2: %d\n", ret);
+
+	ret = snd_soc_dai_set_sysclk(codec_dai, WM8994_SYSCLK_FLL2,
+						prate * 256, SND_SOC_CLOCK_IN);
+	if (ret < 0)
+		dev_err(codec_dai->dev, "Unable to switch to FLL2: %d\n", ret);
+
+	return 0;
+}
+
+static struct snd_soc_ops manta_wm1811_aif2_ops = {
+	.hw_params = manta_wm1811_aif2_hw_params,
+};
+
 static struct snd_soc_dai_link manta_dai[] = {
 	{
 		.name = "media-pri",
@@ -251,6 +292,66 @@ static struct snd_soc_dai_link manta_dai[] = {
 #endif
 		.codec_name = "wm8994-codec",
 		.ops = &manta_wm1811_aif1_ops,
+	},
+	{
+		.name = "voice",
+		.stream_name = "Voice",
+		.cpu_dai_name = "manta-voice",
+		.codec_dai_name = "wm8994-aif2",
+		.platform_name = "snd-soc-dummy",
+		.codec_name = "wm8994-codec",
+		.ops = &manta_wm1811_aif2_ops,
+		.ignore_suspend = 1,
+	},
+	{
+		.name = "bt",
+		.stream_name = "Bluetooth",
+		.cpu_dai_name = "manta-bt",
+		.codec_dai_name = "wm8994-aif3",
+		.platform_name = "snd-soc-dummy",
+		.codec_name = "wm8994-codec",
+		.ignore_suspend = 1,
+	},
+};
+
+static struct snd_soc_dai_driver manta_ext_dai[] = {
+	{
+		.name = "manta-voice",
+		.playback = {
+			.channels_min = 1,
+			.channels_max = 2,
+			.rate_min = 8000,
+			.rate_max = 16000,
+			.rates = SNDRV_PCM_RATE_8000 | SNDRV_PCM_RATE_16000,
+			.formats = SNDRV_PCM_FMTBIT_S16_LE,
+		},
+		.capture = {
+			.channels_min = 1,
+			.channels_max = 2,
+			.rate_min = 8000,
+			.rate_max = 16000,
+			.rates = SNDRV_PCM_RATE_8000 | SNDRV_PCM_RATE_16000,
+			.formats = SNDRV_PCM_FMTBIT_S16_LE,
+		},
+	},
+	{
+		.name = "manta-bt",
+		.playback = {
+			.channels_min = 1,
+			.channels_max = 2,
+			.rate_min = 8000,
+			.rate_max = 16000,
+			.rates = SNDRV_PCM_RATE_8000 | SNDRV_PCM_RATE_16000,
+			.formats = SNDRV_PCM_FMTBIT_S16_LE,
+		},
+		.capture = {
+			.channels_min = 1,
+			.channels_max = 2,
+			.rate_min = 8000,
+			.rate_max = 16000,
+			.rates = SNDRV_PCM_RATE_8000 | SNDRV_PCM_RATE_16000,
+			.formats = SNDRV_PCM_FMTBIT_S16_LE,
+		},
 	},
 };
 
@@ -349,6 +450,11 @@ static int __devinit snd_manta_probe(struct platform_device *pdev)
 		ret = PTR_ERR(machine->clk);
 		goto err_clk_get;
 	}
+
+	ret = snd_soc_register_dais(&pdev->dev, manta_ext_dai,
+						ARRAY_SIZE(manta_ext_dai));
+	if (ret != 0)
+		pr_err("Failed to register external DAIs: %d\n", ret);
 
 	snd_soc_card_set_drvdata(&manta, machine);
 
