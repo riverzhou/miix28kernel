@@ -63,6 +63,12 @@ struct gpio_init_data {
 	uint drv;
 };
 
+struct gpio_sleep_data {
+	uint num;
+	uint cfg;
+	uint pull;
+};
+
 static struct gpio_init_data manta_init_bt_gpios[] = {
 	/* BT_UART_RXD */
 	{GPIO_BT_UART_RXD, S3C_GPIO_SFN(2), S3C_GPIO_PULL_UP,
@@ -79,6 +85,21 @@ static struct gpio_init_data manta_init_bt_gpios[] = {
 	/* BT_HOST_WAKE */
 	{GPIO_BT_HOST_WAKE, S3C_GPIO_INPUT, S3C_GPIO_PULL_NONE,
 							S5P_GPIO_DRVSTR_LV1}
+};
+
+static struct gpio_sleep_data manta_sleep_bt_gpios[] = {
+	/* BT_UART_RXD */
+	{GPIO_BT_UART_RXD, S5P_GPIO_PD_INPUT, S5P_GPIO_PD_UP_ENABLE},
+	/* BT_UART_TXD */
+	{GPIO_BT_UART_TXD, S5P_GPIO_PD_OUTPUT0, S5P_GPIO_PD_UPDOWN_DISABLE},
+	/* BT_UART_CTS */
+	{GPIO_BT_UART_CTS, S5P_GPIO_PD_INPUT, S5P_GPIO_PD_UPDOWN_DISABLE},
+	/* BT_UART_RTS */
+	{GPIO_BT_UART_RTS, S5P_GPIO_PD_OUTPUT1, S5P_GPIO_PD_UPDOWN_DISABLE},
+	/* BTREG_ON */
+	{GPIO_BTREG_ON, S5P_GPIO_PD_PREV_STATE, S5P_GPIO_PD_UPDOWN_DISABLE},
+	/* BT_WAKE */
+	{GPIO_BT_WAKE, S5P_GPIO_PD_PREV_STATE, S5P_GPIO_PD_UPDOWN_DISABLE},
 };
 
 static struct platform_device bcm43241_bluetooth_platform_device = {
@@ -102,10 +123,11 @@ void __init exynos5_manta_bt_init(void)
 		s5p_gpio_set_drvstr(gpio, manta_init_bt_gpios[i].drv);
 	}
 
-	s5p_gpio_set_pd_cfg(GPIO_BTREG_ON, S5P_GPIO_PD_PREV_STATE);
-	s5p_gpio_set_pd_pull(GPIO_BTREG_ON, S5P_GPIO_PD_UPDOWN_DISABLE);
-	s5p_gpio_set_pd_cfg(GPIO_BT_WAKE, S5P_GPIO_PD_PREV_STATE);
-	s5p_gpio_set_pd_pull(GPIO_BT_WAKE, S5P_GPIO_PD_UPDOWN_DISABLE);
+	for (i = 0; i < ARRAY_SIZE(manta_sleep_bt_gpios); i++) {
+		gpio = manta_sleep_bt_gpios[i].num;
+		s5p_gpio_set_pd_cfg(gpio, manta_sleep_bt_gpios[i].cfg);
+		s5p_gpio_set_pd_pull(gpio, manta_sleep_bt_gpios[i].pull);
+	}
 
 	platform_add_devices(manta_bt_devs, ARRAY_SIZE(manta_bt_devs));
 }
