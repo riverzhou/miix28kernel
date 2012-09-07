@@ -441,6 +441,14 @@ static void mxt_dump_message(struct device *dev,
 		if (message->message[0] & 0x80)
 			dev_dbg(dev, "Reset is ongoing\n");
 		break;
+
+	case MXT_SPT_SELFTEST_T25:
+		if (message->message[0] != 0xFE)
+			dev_err(dev, "Self-test error:[0x%x][0x%x][0x%x][0x%x]\n",
+			message->message[0], message->message[1],
+			message->message[2], message->message[3]);
+		break;
+
 	case MXT_PROCI_TOUCHSUPPRESSION_T42:
 		if (message->message[0] & 0x01)
 			dev_dbg(dev, "Start touch suppression\n");
