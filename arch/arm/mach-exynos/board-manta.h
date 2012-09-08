@@ -34,6 +34,16 @@
 					MANTA_IRQ_BOARD_PMIC_NR)
 #define MANTA_IRQ_BOARD_AUDIO_NR	27
 
+/* Manta-specific charger info */
+
+enum manta_charge_source {
+	MANTA_CHARGE_SOURCE_NONE,
+	MANTA_CHARGE_SOURCE_USB,
+	MANTA_CHARGE_SOURCE_AC_SAMSUNG,
+	MANTA_CHARGE_SOURCE_AC_OTHER,
+};
+
+
 void exynos5_manta_audio_init(void);
 void exynos5_manta_display_init(void);
 void exynos5_manta_input_init(void);
@@ -55,7 +65,7 @@ int exynos5_manta_get_revision(void);
 int manta_stmpe811_read_adc_data(u8 channel);
 extern int manta_bat_otg_enable(bool enable);
 void manta_otg_set_usb_state(bool connected);
-int manta_pogo_set_vbus(bool status);
+enum manta_charge_source manta_pogo_set_vbus(bool status);
 extern void manta_pogo_switch_set(int value);
 void bcm_bt_lpm_exit_lpm_locked(struct uart_port *uport);
 

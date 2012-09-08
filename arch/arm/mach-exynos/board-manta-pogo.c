@@ -439,7 +439,8 @@ enum {
 	DOCK_ID_ADDR = 0x2,
 };
 
-static int dock_check_status(struct dock_state *s, int *charge_source)
+static int dock_check_status(struct dock_state *s,
+			     enum manta_charge_source *charge_source)
 {
 	int ret = 0;
 	int dock_stat, power;
@@ -473,15 +474,15 @@ static int dock_check_status(struct dock_state *s, int *charge_source)
 					DOCK_STAT_POWER_MASK;
 			switch (power) {
 			case DOCK_STAT_POWER_500MA:
-				*charge_source = CHARGE_SOURCE_USB;
+				*charge_source = MANTA_CHARGE_SOURCE_USB;
 				break;
 			case DOCK_STAT_POWER_2A:
-				*charge_source = CHARGE_SOURCE_AC;
+				*charge_source = MANTA_CHARGE_SOURCE_AC_SAMSUNG;
 				break;
 			default:
 				pr_warn("%s: unknown dock power state %d, default to USB\n",
 							__func__, power);
-				*charge_source = CHARGE_SOURCE_USB;
+				*charge_source = MANTA_CHARGE_SOURCE_USB;
 			}
 		}
 
@@ -498,10 +499,11 @@ done:
 	return ret;
 }
 
-int manta_pogo_set_vbus(bool status)
+enum manta_charge_source manta_pogo_set_vbus(bool status)
 {
 	struct dock_state *s = &ds;
-	int ret, charge_source;
+	enum manta_charge_source charge_source;
+	int ret;
 
 	s->vbus_present = status;
 	pr_debug("%s: status %d\n", __func__, status ? 1 : 0);
@@ -510,13 +512,13 @@ int manta_pogo_set_vbus(bool status)
 		wake_lock(&s->dock_work_wake_lock);
 		ret = dock_check_status(s, &charge_source);
 		if (ret < 0)
-			return ret;
+			return (enum manta_charge_source) ret;
 	} else {
 		dock_in();
 		switch_set_state(&dock_switch, POGO_UNDOCKED);
 		switch_set_state(&usb_audio_switch, POGO_NO_AUDIO);
 		s->dock_connected_unknown = false;
-		charge_source = CHARGE_SOURCE_NONE;
+		charge_source = MANTA_CHARGE_SOURCE_NONE;
 	}
 
 	return charge_source;
