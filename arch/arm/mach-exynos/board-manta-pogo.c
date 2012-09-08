@@ -64,6 +64,7 @@
 #define DOCK_STAT_POWER_NONE		0
 #define DOCK_STAT_POWER_500MA		1
 #define DOCK_STAT_POWER_2A		2
+#define DOCK_STAT_POWER_1A		3
 
 #define DOCK_STAT_AUDIO_MASK		3
 #define DOCK_STAT_AUDIO_OFFSET		0
@@ -631,6 +632,9 @@ static int dock_check_status(struct dock_state *s,
 			switch (power) {
 			case DOCK_STAT_POWER_500MA:
 				*charge_source = MANTA_CHARGE_SOURCE_USB;
+				break;
+			case DOCK_STAT_POWER_1A:
+				*charge_source = MANTA_CHARGE_SOURCE_AC_OTHER;
 				break;
 			case DOCK_STAT_POWER_2A:
 				*charge_source = MANTA_CHARGE_SOURCE_AC_SAMSUNG;
