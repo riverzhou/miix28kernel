@@ -1058,31 +1058,12 @@ static int smb347_mains_set_property(struct power_supply *psy,
 {
 	struct smb347_charger *smb =
 		container_of(psy, struct smb347_charger, mains);
-	int ret;
 	bool oldval;
 
 	switch (prop) {
 	case POWER_SUPPLY_PROP_ONLINE:
 		oldval = smb->mains_online;
-
 		smb->mains_online = val->intval;
-
-		smb347_set_writable(smb, true);
-
-		ret = smb347_read(smb, CMD_A);
-		if (ret < 0)
-			return -EINVAL;
-
-		ret &= ~CMD_A_SUSPEND_ENABLED;
-		if (val->intval)
-			ret |= CMD_A_SUSPEND_ENABLED;
-
-		ret = smb347_write(smb, CMD_A, ret);
-
-		smb347_hw_init(smb);
-
-		smb347_set_writable(smb, false);
-
 		if (smb->mains_online != oldval)
 			power_supply_changed(psy);
 		return 0;
@@ -1330,6 +1311,13 @@ static int smb347_battery_get_property(struct power_supply *psy,
 		val->strval = pdata->battery_info.name;
 		break;
 
+	case POWER_SUPPLY_PROP_USB_INPRIORITY:
+		ret = smb347_read(smb, CFG_VARIOUS_FUNCTION);
+		if (ret < 0)
+			return ret;
+		val->intval = ret & CFG_INPUT_SOURCE_PRIORITY ? 1 : 0;
+		break;
+
 	default:
 		return -EINVAL;
 	}
@@ -1350,6 +1338,33 @@ static int smb347_battery_set_property(struct power_supply *psy,
 		ret = smb347_charging_set(smb, val->intval);
 		break;
 
+	case POWER_SUPPLY_PROP_USB_INPRIORITY:
+		smb347_set_writable(smb, true);
+
+		ret = smb347_read(smb, CMD_A);
+		if (ret < 0)
+			goto priority_fail;
+		ret |= CMD_A_SUSPEND_ENABLED;
+		if (val->intval)
+			ret &= ~CMD_A_SUSPEND_ENABLED;
+		ret = smb347_write(smb, CMD_A, ret);
+		if (ret < 0)
+			goto priority_fail;
+
+		ret = smb347_read(smb, CFG_VARIOUS_FUNCTION);
+		if (ret < 0)
+			goto priority_fail;
+		ret &= ~(CFG_INPUT_SOURCE_PRIORITY);
+		if (val->intval)
+			ret |= CFG_INPUT_SOURCE_PRIORITY;
+		ret = smb347_write(smb, CFG_VARIOUS_FUNCTION, ret);
+		if (ret < 0)
+			goto priority_fail;
+		ret = 0;
+priority_fail:
+		smb347_set_writable(smb, false);
+		break;
+
 	default:
 		break;
 	}
@@ -1362,6 +1377,7 @@ static int smb347_battery_property_is_writeable(struct power_supply *psy,
 {
 	switch (prop) {
 	case POWER_SUPPLY_PROP_CHARGE_ENABLED:
+	case POWER_SUPPLY_PROP_USB_INPRIORITY:
 		return 1;
 	default:
 		break;
@@ -1381,6 +1397,7 @@ static enum power_supply_property smb347_battery_properties[] = {
 	POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN,
 	POWER_SUPPLY_PROP_CHARGE_ENABLED,
 	POWER_SUPPLY_PROP_MODEL_NAME,
+	POWER_SUPPLY_PROP_USB_INPRIORITY,
 };
 
 static int smb347_debugfs_show(struct seq_file *s, void *data)
