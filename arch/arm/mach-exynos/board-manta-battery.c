@@ -51,6 +51,10 @@
 
 static int gpio_TA_nCHG = GPIO_TA_nCHG_ALPHA;
 
+/* Temporary, need pogo driver API to share these */
+#define GPIO_TA_CHECK_SEL	EXYNOS5_GPD1(5)
+#define GPIO_POGO_SPDIF		EXYNOS5_GPB1(0)
+
 enum charge_connector {
 	CHARGE_CONNECTOR_POGO,
 	CHARGE_CONNECTOR_USB,
@@ -164,6 +168,18 @@ static void charger_gpio_init(void)
 					S5P_GPIO_PD_UPDOWN_DISABLE);
 	}
 
+#if 1 /* temporary, move to pogo driver */
+	if (hw_rev >= MANTA_REV_DOGFOOD02) {
+		s3c_gpio_cfgpin(GPIO_TA_CHECK_SEL, S3C_GPIO_OUTPUT);
+		s3c_gpio_setpull(GPIO_TA_CHECK_SEL, S3C_GPIO_PULL_NONE);
+		ret = gpio_request_one(GPIO_TA_CHECK_SEL, GPIOF_OUT_INIT_LOW,
+				       "ta_check_sel");
+		if (ret)
+			pr_err("%s: cannot request gpio%d\n", __func__,
+			       GPIO_TA_CHECK_SEL);
+	}
+#endif /* temporary */
+
 	s3c_gpio_cfgpin(gpio_TA_nCHG, S3C_GPIO_INPUT);
 	s3c_gpio_setpull(gpio_TA_nCHG, hw_rev >= MANTA_REV_PRE_ALPHA ?
 			 S3C_GPIO_PULL_NONE : S3C_GPIO_PULL_UP);
@@ -180,13 +196,14 @@ static void charger_gpio_init(void)
 		pr_err("%s: cannot request gpio%d\n", __func__, GPIO_USB_SEL1);
 }
 
-static int read_ta_adc(enum charge_connector conn)
+static int read_ta_adc(enum charge_connector conn, int ta_check_sel)
 {
 	int adc_max = -1;
 	int adc_min = 1 << 11;
 	int adc_total = 0;
 	int i, j;
 	int ret;
+	int hw_rev = exynos5_manta_get_revision();
 
 	mutex_lock(&manta_bat_adc_lock);
 
@@ -195,6 +212,16 @@ static int read_ta_adc(enum charge_connector conn)
 		gpio_set_value(GPIO_USB_SEL1, 0);
 	else
 		manta_pogo_switch_set(0);
+
+	/* temporary, need pogo driver API */
+	if (hw_rev >= MANTA_REV_DOGFOOD02) {
+		if (ta_check_sel) {
+			s3c_gpio_cfgpin(GPIO_POGO_SPDIF, S3C_GPIO_INPUT);
+			s3c_gpio_setpull(GPIO_POGO_SPDIF, S3C_GPIO_PULL_NONE);
+		}
+
+		gpio_set_value(GPIO_TA_CHECK_SEL, ta_check_sel);
+	}
 
 	msleep(100);
 
@@ -244,6 +271,14 @@ out:
 		gpio_set_value(GPIO_USB_SEL1, 1);
 	else
 		manta_pogo_switch_set(1);
+
+	/* temporary, need pogo driver API */
+	if (hw_rev >= MANTA_REV_DOGFOOD02) {
+		gpio_set_value(GPIO_TA_CHECK_SEL, 1); /* TODO: restore */
+		if (ta_check_sel)
+			s3c_gpio_cfgpin(GPIO_POGO_SPDIF, S3C_GPIO_SFN(0x4));
+	}
+
 	mutex_unlock(&manta_bat_adc_lock);
 	return ret;
 }
@@ -283,24 +318,41 @@ int manta_bat_otg_enable(bool enable)
 	return ret;
 }
 
-static bool check_samsung_charger(enum charge_connector conn)
+static enum manta_charge_source check_samsung_charger(
+	enum charge_connector conn)
 {
-	bool result;
 	int ta_adc;
+	enum manta_charge_source charge_source;
 
-	ta_adc = read_ta_adc(conn);
+	if (conn == CHARGE_CONNECTOR_POGO) {
+		/* todo: check dock int */
+		ta_adc = read_ta_adc(conn, 0);
+		pr_debug("%s: ta_adc conn=%d ta_check=0 val=%d\n", __func__,
+			 conn, ta_adc);
+	} else {
+		/* temporary until use APSD */
+		ta_adc = read_ta_adc(conn, 0);
+		pr_debug("%s: ta_adc conn=%d ta_check=0 val=%d\n", __func__,
+			 conn, ta_adc);
+	}
 
-	/* ADC range was recommended by HW */
-	result = ta_adc > TA_ADC_LOW && ta_adc < TA_ADC_HIGH;
-	pr_debug("%s : ta_adc conn=%d val=%d, return %d\n", __func__,
-		 conn, ta_adc, result);
-	return result;
+	if (ta_adc > TA_ADC_LOW && ta_adc < TA_ADC_HIGH) {
+		ta_adc = read_ta_adc(conn, 1);
+		pr_debug("%s: ta_adc conn=%d ta_check=1 val=%d\n",
+			 __func__, conn, ta_adc);
+		charge_source = ta_adc > TA_ADC_LOW && ta_adc < TA_ADC_HIGH ?
+			MANTA_CHARGE_SOURCE_AC_SAMSUNG :
+			MANTA_CHARGE_SOURCE_AC_OTHER;
+	} else {
+		charge_source = MANTA_CHARGE_SOURCE_USB;
+	}
+
+	return charge_source;
 }
 
 static enum manta_charge_source
 detect_charge_source(enum charge_connector conn, bool online)
 {
-	int is_ta;
 	enum manta_charge_source charge_source, dock_charge_source;
 
 	if (!online) {
@@ -309,17 +361,13 @@ detect_charge_source(enum charge_connector conn, bool online)
 		return MANTA_CHARGE_SOURCE_NONE;
 	}
 
-	is_ta = check_samsung_charger(conn);
+	charge_source = check_samsung_charger(conn);
 
-	if (is_ta) {
-		charge_source = MANTA_CHARGE_SOURCE_AC_SAMSUNG;
-	} else {
-		if (conn == CHARGE_CONNECTOR_POGO) {
-			dock_charge_source = manta_pogo_set_vbus(online);
-			if ((int) dock_charge_source >= 0)
-				return dock_charge_source;
-		}
-		charge_source = MANTA_CHARGE_SOURCE_USB;
+	if (conn == CHARGE_CONNECTOR_POGO &&
+	    charge_source == MANTA_CHARGE_SOURCE_USB) {
+		dock_charge_source = manta_pogo_set_vbus(online);
+		if ((int) dock_charge_source >= 0)
+			return dock_charge_source;
 	}
 
 	return charge_source;
@@ -796,12 +844,14 @@ static int manta_power_debug_dump(struct seq_file *s, void *unused)
 			gpio_get_value(GPIO_TA_INT));
 	}
 
-	seq_printf(s, "usb: type=%s; pogo: type=%s\n",
+	seq_printf(s, "usb: type=%s; pogo: type=%s adc=%d,%d\n",
 		   manta_bat_otg_enabled ? "otg" :
 		   manta_charge_source_str(
 			   manta_bat_charge_source[CHARGE_CONNECTOR_USB]),
 		   manta_charge_source_str(
-			   manta_bat_charge_source[CHARGE_CONNECTOR_POGO]));
+			   manta_bat_charge_source[CHARGE_CONNECTOR_POGO]),
+		   read_ta_adc(CHARGE_CONNECTOR_POGO, 0),
+		   read_ta_adc(CHARGE_CONNECTOR_POGO, 1));
 	return 0;
 }
 
@@ -819,10 +869,11 @@ static const struct file_operations manta_power_debug_fops = {
 
 static int manta_power_adc_debug_dump(struct seq_file *s, void *unused)
 {
-	seq_printf(s, "ta_adc(usb)=%d ta_adc(pogo)=%d\n",
-		   read_ta_adc(CHARGE_CONNECTOR_USB),
-		   exynos5_manta_get_revision() >= MANTA_REV_PRE_ALPHA ?
-		   read_ta_adc(CHARGE_CONNECTOR_POGO) : 0);
+	seq_printf(s, "usb=%d,%d pogo=%d,%d\n",
+		   read_ta_adc(CHARGE_CONNECTOR_USB, 0),
+		   read_ta_adc(CHARGE_CONNECTOR_USB, 1),
+		   read_ta_adc(CHARGE_CONNECTOR_POGO, 0),
+		   read_ta_adc(CHARGE_CONNECTOR_POGO, 1));
 	return 0;
 }
 
