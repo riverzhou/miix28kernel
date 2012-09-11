@@ -319,7 +319,7 @@ static int __init manta_connector_init(void)
 	int ret;
 
 	s3c_gpio_cfgpin(GPIO_USB_ID, S3C_GPIO_INPUT);
-	s3c_gpio_setpull(GPIO_USB_ID, S3C_GPIO_PULL_UP);
+	s3c_gpio_setpull(GPIO_USB_ID, S3C_GPIO_PULL_NONE);
 
 	ret = request_irq(gpio_to_irq(GPIO_USB_ID), manta_otg_irq,
 			IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING |
