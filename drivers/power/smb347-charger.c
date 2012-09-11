@@ -41,6 +41,7 @@
 #define CFG_CURRENT_LIMIT_USB_MASK		0x0f
 #define CFG_VARIOUS_FUNCTION                    0x02
 #define CFG_INPUT_SOURCE_PRIORITY               BIT(2)
+#define CFG_AUTOMATIC_INPUT_CURRENT_LIMIT	BIT(4)
 #define CFG_FLOAT_VOLTAGE			0x03
 #define CFG_FLOAT_VOLTAGE_THRESHOLD_MASK	0xc0
 #define CFG_FLOAT_VOLTAGE_MASK			0x3F
@@ -1318,6 +1319,13 @@ static int smb347_battery_get_property(struct power_supply *psy,
 		val->intval = ret & CFG_INPUT_SOURCE_PRIORITY ? 1 : 0;
 		break;
 
+	case POWER_SUPPLY_PROP_AUTO_CURRENT_LIMIT:
+		ret = smb347_read(smb, CFG_VARIOUS_FUNCTION);
+		if (ret < 0)
+			return ret;
+		val->intval = ret & CFG_AUTOMATIC_INPUT_CURRENT_LIMIT ? 1 : 0;
+		break;
+
 	default:
 		return -EINVAL;
 	}
@@ -1365,6 +1373,22 @@ priority_fail:
 		smb347_set_writable(smb, false);
 		break;
 
+	case POWER_SUPPLY_PROP_AUTO_CURRENT_LIMIT:
+		smb347_set_writable(smb, true);
+		ret = smb347_read(smb, CFG_VARIOUS_FUNCTION);
+		if (ret < 0)
+			goto aicl_fail;
+		ret &= ~(CFG_AUTOMATIC_INPUT_CURRENT_LIMIT);
+		if (val->intval)
+			ret |= CFG_AUTOMATIC_INPUT_CURRENT_LIMIT;
+		ret = smb347_write(smb, CFG_VARIOUS_FUNCTION, ret);
+		if (ret < 0)
+			goto aicl_fail;
+		ret = 0;
+aicl_fail:
+		smb347_set_writable(smb, false);
+		break;
+
 	default:
 		break;
 	}
@@ -1378,6 +1402,7 @@ static int smb347_battery_property_is_writeable(struct power_supply *psy,
 	switch (prop) {
 	case POWER_SUPPLY_PROP_CHARGE_ENABLED:
 	case POWER_SUPPLY_PROP_USB_INPRIORITY:
+	case POWER_SUPPLY_PROP_AUTO_CURRENT_LIMIT:
 		return 1;
 	default:
 		break;
@@ -1398,6 +1423,7 @@ static enum power_supply_property smb347_battery_properties[] = {
 	POWER_SUPPLY_PROP_CHARGE_ENABLED,
 	POWER_SUPPLY_PROP_MODEL_NAME,
 	POWER_SUPPLY_PROP_USB_INPRIORITY,
+	POWER_SUPPLY_PROP_AUTO_CURRENT_LIMIT,
 };
 
 static int smb347_debugfs_show(struct seq_file *s, void *data)
