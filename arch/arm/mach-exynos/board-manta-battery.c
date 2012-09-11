@@ -56,13 +56,14 @@ static int gpio_TA_nCHG = GPIO_TA_nCHG_ALPHA;
 #define GPIO_POGO_SPDIF		EXYNOS5_GPB1(0)
 
 enum charge_connector {
+	CHARGE_CONNECTOR_NONE,
 	CHARGE_CONNECTOR_POGO,
 	CHARGE_CONNECTOR_USB,
 	CHARGE_CONNECTOR_MAX,
 };
 
-static enum manta_charge_source charge_source;
 static enum manta_charge_source manta_bat_charge_source[CHARGE_CONNECTOR_MAX];
+static enum charge_connector manta_bat_charge_conn;
 static bool manta_bat_usb_online;
 static bool manta_bat_pogo_online;
 static bool manta_bat_otg_enabled;
@@ -375,7 +376,7 @@ detect_charge_source(enum charge_connector conn, bool online)
 
 static int update_charging_status(bool usb_connected, bool pogo_connected)
 {
-	int i;
+	enum charge_connector old_charge_conn;
 	int ret = 0;
 
 	if (manta_bat_usb_online != usb_connected) {
@@ -397,15 +398,21 @@ static int update_charging_status(bool usb_connected, bool pogo_connected)
 		ret = 1;
 	}
 
-	/* Find the highest-priority charging source */
-	for (i = 0; i < CHARGE_CONNECTOR_MAX; i++)
-		if (manta_bat_charge_source[i] != MANTA_CHARGE_SOURCE_NONE)
-			break;
+	old_charge_conn = manta_bat_charge_conn;
 
-	if (i < CHARGE_CONNECTOR_MAX)
-		charge_source = manta_bat_charge_source[i];
+	if (manta_bat_charge_source[CHARGE_CONNECTOR_POGO] ==
+	    MANTA_CHARGE_SOURCE_NONE &&
+	    manta_bat_charge_source[CHARGE_CONNECTOR_USB] ==
+	    MANTA_CHARGE_SOURCE_NONE)
+		manta_bat_charge_conn = CHARGE_CONNECTOR_NONE;
 	else
-		charge_source = MANTA_CHARGE_SOURCE_NONE;
+		manta_bat_charge_conn =
+			(manta_bat_charge_source[CHARGE_CONNECTOR_POGO] >=
+			 manta_bat_charge_source[CHARGE_CONNECTOR_USB]) ?
+			CHARGE_CONNECTOR_POGO : CHARGE_CONNECTOR_USB;
+
+	if (old_charge_conn != manta_bat_charge_conn)
+		ret = 1;
 
 	return ret;
 }
@@ -457,6 +464,42 @@ static void manta_bat_sync_charge_enable(void)
 
 		manta_bat_set_charging_enable(manta_bat_chg_enabled);
 	}
+}
+
+static void exynos5_manta_set_priority(void)
+{
+	int ret;
+	union power_supply_propval value;
+
+	if (!manta_bat_smb347_battery)
+		manta_bat_smb347_battery =
+			power_supply_get_by_name("smb347-battery");
+
+	if (!manta_bat_smb347_battery) {
+		pr_err("%s: failed to get smb347-battery power supply\n",
+		       __func__);
+		return;
+	}
+
+	/* set SMB347 INPUT SOURCE PRIORITY = DCIN or USBIN */
+	value.intval = manta_bat_charge_conn == CHARGE_CONNECTOR_USB;
+	ret = manta_bat_smb347_battery->set_property(
+		manta_bat_smb347_battery, POWER_SUPPLY_PROP_USB_INPRIORITY,
+		&value);
+	if (ret)
+		pr_err("%s: failed to set smb347 input source priority: %d\n",
+		       __func__, ret);
+
+	/* enable SMB347 AICL for other TA */
+	value.intval =
+		manta_bat_charge_source[manta_bat_charge_conn] ==
+		MANTA_CHARGE_SOURCE_AC_OTHER;
+	ret = manta_bat_smb347_battery->set_property(
+		manta_bat_smb347_battery, POWER_SUPPLY_PROP_AUTO_CURRENT_LIMIT,
+		&value);
+	if (ret)
+		pr_err("%s: failed to set smb347 AICL: %d\n",
+		       __func__, ret);
 }
 
 static void change_charger_status(void)
@@ -543,13 +586,19 @@ static void change_charger_status(void)
 		status_change = update_charging_status(false, false);
 	}
 
-	pr_debug("%s: ta_int(%d), charge_source(%d)", __func__,
-		 ta_int, charge_source);
+	pr_debug("%s: ta_int(%d), charge_conn(%d), charge_source(%d)\n",
+		 __func__, ta_int, manta_bat_charge_conn,
+		 manta_bat_charge_source[manta_bat_charge_conn]);
+
+	if (status_change)
+		exynos5_manta_set_priority();
 
 	if (status_change && bat_callbacks &&
 	    bat_callbacks->charge_source_changed)
 		bat_callbacks->charge_source_changed(
-			bat_callbacks, manta_source_to_android(charge_source));
+			bat_callbacks,
+			manta_source_to_android(
+				manta_bat_charge_source[manta_bat_charge_conn]));
 
 	if (status_change) {
 		if (manta_bat_charge_source[CHARGE_CONNECTOR_USB] ==
@@ -608,7 +657,8 @@ static void manta_bat_unregister_callbacks(void)
 static int manta_bat_poll_charge_source(void)
 {
 	change_charger_status();
-	return manta_source_to_android(charge_source);
+	return manta_source_to_android(
+		manta_bat_charge_source[manta_bat_charge_conn]);
 }
 
 static void exynos5_manta_set_mains_current(void)
@@ -667,8 +717,9 @@ static void manta_bat_set_charging_current(
 	int android_charge_source)
 {
 	if (exynos5_manta_get_revision() >= MANTA_REV_PRE_ALPHA) {
-		exynos5_manta_set_mains_current();
+		exynos5_manta_set_priority();
 		exynos5_manta_set_usb_hc();
+		exynos5_manta_set_mains_current();
 	}
 }
 
@@ -844,10 +895,12 @@ static int manta_power_debug_dump(struct seq_file *s, void *unused)
 			gpio_get_value(GPIO_TA_INT));
 	}
 
-	seq_printf(s, "usb: type=%s; pogo: type=%s adc=%d,%d\n",
+	seq_printf(s, "%susb: type=%s; %spogo: type=%s adc=%d,%d\n",
+		   manta_bat_charge_conn == CHARGE_CONNECTOR_USB ? "*" : "",
 		   manta_bat_otg_enabled ? "otg" :
 		   manta_charge_source_str(
 			   manta_bat_charge_source[CHARGE_CONNECTOR_USB]),
+		   manta_bat_charge_conn == CHARGE_CONNECTOR_POGO ? "*" : "",
 		   manta_charge_source_str(
 			   manta_bat_charge_source[CHARGE_CONNECTOR_POGO]),
 		   read_ta_adc(CHARGE_CONNECTOR_POGO, 0),
