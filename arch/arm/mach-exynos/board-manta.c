@@ -526,6 +526,7 @@ static struct platform_device *manta_devices[] __initdata = {
 	&exynos4_device_ohci,
 	&exynos_bus_mif_devfreq,
 	&exynos_bus_int_devfreq,
+	&exynos5_device_g3d,
 };
 
 static struct s3c_hsotg_plat manta_hsotg_pdata;
