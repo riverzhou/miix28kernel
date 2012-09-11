@@ -142,6 +142,10 @@ static int android_bat_get_property(struct power_supply *ps,
 		val->intval = battery->batt_soc;
 		if (val->intval == -1)
 			return -EINVAL;
+#if 1 /* temporary HACK */
+		if (val->intval < 2)
+			val->intval = 2;
+#endif /* temporary HACK */
 		break;
 	case POWER_SUPPLY_PROP_TECHNOLOGY:
 		val->intval = POWER_SUPPLY_TECHNOLOGY_LION;
