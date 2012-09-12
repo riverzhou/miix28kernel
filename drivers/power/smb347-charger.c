@@ -124,7 +124,18 @@
 #define STAT_C_CHG_MASK				0x06
 #define STAT_C_CHG_SHIFT			1
 #define STAT_C_CHARGER_ERROR			BIT(6)
+#define STAT_D					0x3e
+#define STAT_D_APSD_RESULT_MASK			0x7
+#define STAT_D_APSD_COMPLETE			BIT(3)
 #define STAT_E					0x3f
+
+/* APSD results */
+#define APSD_RESULT_NOT_RUN			0x0
+#define APSD_RESULT_CDP				0x1
+#define APSD_RESULT_DCP				0x2
+#define APSD_RESULT_OTHER_CHARGER		0x3
+#define APSD_RESULT_SDP				0x4
+#define APSD_RESULT_ACA				0x5
 
 /**
  * struct smb347_charger - smb347 charger instance
@@ -1098,6 +1109,48 @@ static enum power_supply_property smb347_mains_properties[] = {
 	POWER_SUPPLY_PROP_CURRENT_MAX,
 };
 
+static int apsd_detect(struct smb347_charger *smb)
+{
+	int ret;
+
+	smb347_update_status(smb);
+
+	if (!smb->usb_online)
+		return POWER_SUPPLY_TYPE_UNKNOWN;
+
+	ret = smb347_read(smb, STAT_D);
+
+	if (!(ret & STAT_D_APSD_COMPLETE)) {
+		msleep(800);
+		ret = smb347_read(smb, STAT_D);
+	}
+
+	if (!(ret & STAT_D_APSD_COMPLETE))
+		return POWER_SUPPLY_TYPE_UNKNOWN;
+
+	switch (ret & STAT_D_APSD_RESULT_MASK) {
+	case APSD_RESULT_CDP:
+		ret = POWER_SUPPLY_TYPE_USB_CDP;
+		break;
+	case APSD_RESULT_DCP:
+		ret = POWER_SUPPLY_TYPE_USB_DCP;
+		break;
+	case APSD_RESULT_SDP:
+		ret = POWER_SUPPLY_TYPE_USB;
+		break;
+	case APSD_RESULT_ACA:
+		ret = POWER_SUPPLY_TYPE_USB_ACA;
+		break;
+	case APSD_RESULT_OTHER_CHARGER:
+	case APSD_RESULT_NOT_RUN:
+	default:
+		ret = POWER_SUPPLY_TYPE_UNKNOWN;
+		break;
+	}
+
+	return ret;
+}
+
 static int smb347_usb_get_property(struct power_supply *psy,
 				   enum power_supply_property prop,
 				   union power_supply_propval *val)
@@ -1116,6 +1169,10 @@ static int smb347_usb_get_property(struct power_supply *psy,
 
 	case POWER_SUPPLY_PROP_USB_OTG:
 		val->intval = smb->usb_otg_enabled;
+		return 0;
+
+	case POWER_SUPPLY_PROP_REMOTE_TYPE:
+		val->intval = apsd_detect(smb);
 		return 0;
 
 	default:
@@ -1193,6 +1250,7 @@ static enum power_supply_property smb347_usb_properties[] = {
 	POWER_SUPPLY_PROP_ONLINE,
 	POWER_SUPPLY_PROP_USB_HC,
 	POWER_SUPPLY_PROP_USB_OTG,
+	POWER_SUPPLY_PROP_REMOTE_TYPE,
 };
 
 static int smb347_battery_get_property(struct power_supply *psy,
