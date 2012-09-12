@@ -439,6 +439,10 @@ void __init exynos5_manta_adjust_mif_asv_table(void)
 	if (exynos5_manta_get_revision() > MANTA_REV_DOGFOOD02)
 		return;
 
+	if (exynos5_manta_get_revision() <= MANTA_REV_DOGFOOD01)
+		for (i = 0; i < ARRAY_SIZE(adj_mif_volt); i++)
+			adj_mif_volt[i] = 0;
+
 	for (i = 0; i < ARRAY_SIZE(adj_mif_volt); i++)
 		exynos5250_set_volt(ID_MIF, 800000, i, adj_mif_volt[i]);
 }
