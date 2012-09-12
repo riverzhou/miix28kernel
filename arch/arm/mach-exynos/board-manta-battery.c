@@ -19,6 +19,7 @@
 #include <linux/debugfs.h>
 #include <linux/suspend.h>
 #include <linux/pm_wakeup.h>
+#include <linux/wakelock.h>
 
 #include <plat/adc.h>
 #include <plat/gpio-cfg.h>
@@ -81,6 +82,7 @@ static struct android_bat_callbacks *bat_callbacks;
 static struct s3c_adc_client *ta_adc_client;
 
 static struct wakeup_source manta_bat_vbus_ws;
+static struct wake_lock manta_bat_chgdetect_wakelock;
 
 static DEFINE_MUTEX(manta_bat_charger_detect_lock);
 static DEFINE_MUTEX(manta_bat_adc_lock);
@@ -102,13 +104,29 @@ static inline int manta_source_to_android(enum manta_charge_source src)
 	return CHARGE_SOURCE_NONE;
 }
 
-static inline int manta_bat_get_ds2784(void) {
+static inline int manta_bat_get_ds2784(void)
+{
 	if (!manta_bat_ds2784_battery)
 		manta_bat_ds2784_battery =
 			power_supply_get_by_name("ds2784-fuelgauge");
 
 	if (!manta_bat_ds2784_battery) {
 		pr_err("%s: failed to get ds2784-fuelgauge power supply\n",
+		       __func__);
+		return -ENODEV;
+	}
+
+	return 0;
+}
+
+static inline int manta_bat_get_smb347_usb(void)
+{
+	if (!manta_bat_smb347_usb)
+		manta_bat_smb347_usb =
+			power_supply_get_by_name("smb347-usb");
+
+	if (!manta_bat_smb347_usb) {
+		pr_err("%s: failed to get smb347-usb power supply\n",
 		       __func__);
 		return -ENODEV;
 	}
@@ -289,14 +307,8 @@ int manta_bat_otg_enable(bool enable)
 	int ret;
 	union power_supply_propval value;
 
-	if (!manta_bat_smb347_usb)
-		manta_bat_smb347_usb = power_supply_get_by_name("smb347-usb");
-
-	if (!manta_bat_smb347_usb) {
-		pr_err("%s: failed to get smb347-usb power supply\n",
-		       __func__);
+	if (manta_bat_get_smb347_usb())
 		return -ENODEV;
-	}
 
 	mutex_lock(&manta_bat_charger_detect_lock);
 
@@ -323,21 +335,37 @@ static enum manta_charge_source check_samsung_charger(
 	enum charge_connector conn)
 {
 	int ta_adc;
+	int ret;
+	bool ac_detect = false;
 	enum manta_charge_source charge_source;
+	union power_supply_propval prop;
 
 	if (conn == CHARGE_CONNECTOR_POGO) {
 		/* todo: check dock int */
 		ta_adc = read_ta_adc(conn, 0);
 		pr_debug("%s: ta_adc conn=%d ta_check=0 val=%d\n", __func__,
 			 conn, ta_adc);
+		ac_detect = ta_adc > TA_ADC_LOW && ta_adc < TA_ADC_HIGH;
 	} else {
-		/* temporary until use APSD */
-		ta_adc = read_ta_adc(conn, 0);
-		pr_debug("%s: ta_adc conn=%d ta_check=0 val=%d\n", __func__,
-			 conn, ta_adc);
+		if (manta_bat_get_smb347_usb())
+			return CHARGE_SOURCE_USB;
+		ret = manta_bat_smb347_usb->get_property(
+			manta_bat_smb347_usb,
+			POWER_SUPPLY_PROP_REMOTE_TYPE, &prop);
+		pr_debug("%s: type=%d ret=%d\n", __func__, prop.intval, ret);
+
+		switch (prop.intval) {
+		case POWER_SUPPLY_TYPE_USB:
+		case POWER_SUPPLY_TYPE_UNKNOWN:
+			ac_detect = false;
+			break;
+		default:
+			ac_detect = true;
+			break;
+		}
 	}
 
-	if (ta_adc > TA_ADC_LOW && ta_adc < TA_ADC_HIGH) {
+	if (ac_detect) {
 		ta_adc = read_ta_adc(conn, 1);
 		pr_debug("%s: ta_adc conn=%d ta_check=1 val=%d\n",
 			 __func__, conn, ta_adc);
@@ -521,8 +549,7 @@ static void change_charger_status(void)
 	     !manta_bat_smb347_battery)) {
 		manta_bat_smb347_mains =
 			power_supply_get_by_name("smb347-mains");
-		manta_bat_smb347_usb =
-			power_supply_get_by_name("smb347-usb");
+		manta_bat_get_smb347_usb();
 		manta_bat_smb347_battery =
 			power_supply_get_by_name("smb347-battery");
 
@@ -609,6 +636,7 @@ static void change_charger_status(void)
 	}
 
 	mutex_unlock(&manta_bat_charger_detect_lock);
+	wake_unlock(&manta_bat_chgdetect_wakelock);
 }
 
 static char *exynos5_manta_supplicant[] = { "manta-board" };
@@ -656,6 +684,7 @@ static void manta_bat_unregister_callbacks(void)
 
 static int manta_bat_poll_charge_source(void)
 {
+	wake_lock(&manta_bat_chgdetect_wakelock);
 	change_charger_status();
 	return manta_source_to_android(
 		manta_bat_charge_source[manta_bat_charge_conn]);
@@ -693,14 +722,8 @@ static void exynos5_manta_set_usb_hc(void)
 	int ret;
 	union power_supply_propval value;
 
-	if (!manta_bat_smb347_usb)
-		manta_bat_smb347_usb = power_supply_get_by_name("smb347-usb");
-
-	if (!manta_bat_smb347_usb) {
-		pr_err("%s: failed to get smb347-usb power supply\n",
-		       __func__);
+	if (manta_bat_get_smb347_usb())
 		return;
-	}
 
 	value.intval =
 		manta_bat_charge_source[CHARGE_CONNECTOR_USB] ==
@@ -826,6 +849,8 @@ static int manta_bat_get_current_now(int *i_current)
 
 static irqreturn_t ta_int_intr(int irq, void *arg)
 {
+	wake_lock(&manta_bat_chgdetect_wakelock);
+	msleep(600);
 	change_charger_status();
 	return IRQ_HANDLED;
 }
@@ -979,6 +1004,8 @@ void __init exynos5_manta_battery_init(void)
 	int hw_rev = exynos5_manta_get_revision();
 
 	charger_gpio_init();
+	wake_lock_init(&manta_bat_chgdetect_wakelock, WAKE_LOCK_SUSPEND,
+		       "manta-chgdetect");
 
 	platform_add_devices(manta_battery_devices,
 		ARRAY_SIZE(manta_battery_devices));
@@ -1022,6 +1049,7 @@ void __init exynos5_manta_battery_init(void)
 
 static void exynos5_manta_power_changed(struct power_supply *psy)
 {
+	wake_lock(&manta_bat_chgdetect_wakelock);
 	change_charger_status();
 }
 
@@ -1136,6 +1164,7 @@ static int __init exynos5_manta_battery_late_init(void)
 	wakeup_source_init(&manta_bat_vbus_ws, "vbus");
 
 	/* Poll initial charger state */
+	wake_lock(&manta_bat_chgdetect_wakelock);
 	change_charger_status();
 	return 0;
 }
