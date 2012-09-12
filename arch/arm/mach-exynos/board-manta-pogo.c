@@ -539,8 +539,10 @@ static irqreturn_t pogo_data_interrupt(int irq, void *data)
 	struct dock_state *s = data;
 	pr_debug("%s: irq %d\n", __func__, irq);
 
-	wake_lock(&s->wake_lock);
-	queue_work(s->dock_wq, &s->dock_work);
+	if (s->vbus_present) {
+		wake_lock(&s->wake_lock);
+		queue_work(s->dock_wq, &s->dock_work);
+	}
 
 	return IRQ_HANDLED;
 }
@@ -668,6 +670,8 @@ void __init exynos5_manta_pogo_init(void)
 	}
 
 	WARN_ON(switch_dev_register(&usb_audio_switch));
+
+	manta_pogo_set_vbus(0);
 }
 
 int __init pogo_data_irq_late_init(void)
