@@ -250,14 +250,12 @@ static int testnset_state(struct fimc_is_device_sensor *this,
 
 	if (test_bit(state, &this->state)) {
 		ret = -EINVAL;
-		spin_unlock(&this->slock_state);
 		goto exit;
 	}
 	set_bit(state, &this->state);
 
-	spin_unlock(&this->slock_state);
-
 exit:
+	spin_unlock(&this->slock_state);
 	return ret;
 }
 
@@ -270,14 +268,12 @@ static int testnclr_state(struct fimc_is_device_sensor *this,
 
 	if (!test_bit(state, &this->state)) {
 		ret = -EINVAL;
-		spin_unlock(&this->slock_state);
 		goto exit;
 	}
 	clear_bit(state, &this->state);
 
-	spin_unlock(&this->slock_state);
-
 exit:
+	spin_unlock(&this->slock_state);
 	return ret;
 }
 
@@ -452,8 +448,6 @@ int fimc_is_sensor_open(struct fimc_is_device_sensor *this)
 
 	this->active_sensor = &this->enum_sensor[SENSOR_NAME_S5K4E5];
 
-	fimc_is_frame_open(this->framemgr, NUM_SENSOR_DMA_BUF);
-
 	printk(KERN_INFO "---%s(%d)\n", __func__, ret);
 
 exit:
@@ -463,6 +457,7 @@ exit:
 int fimc_is_sensor_close(struct fimc_is_device_sensor *this)
 {
 	int ret = 0;
+	struct fimc_is_device_ischain *ischain;
 
 	if (testnclr_state(this, FIMC_IS_SENSOR_OPEN)) {
 		err("already close");
@@ -470,11 +465,23 @@ int fimc_is_sensor_close(struct fimc_is_device_sensor *this)
 		goto exit;
 	}
 
+	/* it can not be accessed to register firmawre
+	after clock gating and power down. ischain close do clock gating and
+	power down */
+	ischain = this->ischain;
+	mutex_lock(&ischain->mutex_state);
+	if (!test_bit(FIMC_IS_ISCHAIN_OPEN, &ischain->state)) {
+		mutex_unlock(&ischain->mutex_state);
+		err("ischain device is already close, skip");
+		ret = -EINVAL;
+		goto exit;
+	}
+	mutex_unlock(&ischain->mutex_state);
+
 	printk(KERN_INFO "+++%s\n", __func__);
 
 	fimc_is_sensor_back_stop(this);
 	fimc_is_sensor_front_stop(this);
-	fimc_is_frame_close(this->framemgr);
 
 	printk(KERN_INFO "---%s(%d)\n", __func__, ret);
 
@@ -566,14 +573,13 @@ int fimc_is_sensor_buffer_finish(struct fimc_is_device_sensor *this,
 
 	framemgr_e_barrier_irqs(framemgr, FMGR_IDX_3 + index, flags);
 
-	if (frame->state == FIMC_IS_FRAME_STATE_COMPLETE)
+	if (frame->state == FIMC_IS_FRAME_STATE_COMPLETE) {
+		if (!frame->shot->dm.request.frameCount)
+			err("request.frameCount is 0\n");
 		fimc_is_frame_trans_com_to_fre(framemgr, frame);
-	else {
+	} else {
 		err("frame(%d) is not com state(%d)", index, frame->state);
-		fimc_is_frame_print_free_list(framemgr);
-		fimc_is_frame_print_request_list(framemgr);
-		fimc_is_frame_print_process_list(framemgr);
-		fimc_is_frame_print_complete_list(framemgr);
+		fimc_is_frame_print_all(framemgr);
 	}
 
 	framemgr_x_barrier_irqr(framemgr, FMGR_IDX_3 + index, flags);
@@ -637,9 +643,6 @@ int fimc_is_sensor_back_stop(struct fimc_is_device_sensor *this)
 	active_flite = this->active_flite;
 
 	ret = fimc_is_flite_stop(active_flite);
-
-	fimc_is_frame_close(this->framemgr);
-	fimc_is_frame_open(this->framemgr, NUM_SENSOR_DMA_BUF);
 
 exit:
 	return ret;

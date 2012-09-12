@@ -55,6 +55,7 @@
 #define FIMC_IS_VIDEO_SCALERP_NAME		"exynos5-fimc-is2-scalerp"
 
 #define FIMC_IS_COMMAND_TIMEOUT			(3*HZ)
+#define FIMC_IS_STARTUP_TIMEOUT			(3*HZ)
 #define FIMC_IS_SHUTDOWN_TIMEOUT		(10*HZ)
 #define FIMC_IS_FLITE_STOP_TIMEOUT		(3*HZ)
 
@@ -86,14 +87,21 @@
 #define err(fmt, args...) \
 	printk(KERN_ERR "%s:%d: " fmt "\n", __func__, __LINE__, ##args)
 
+/* configuration - default post processing */
+/*#define ENABLE_ODC*/
+#define ENABLE_VDIS
+/*#define ENABLE_TDNR*/
+
 /*#define DEBUG*/
-/*#define AUTO_MODE*/
 /*#define DBG_STREAMING*/
-/*#define FW_DEBUG*/
-#define RESERVED_MEM
+/*#define DBG_FLITEISR*/
+/*#define AUTO_MODE*/
+#define FW_DEBUG
+/*#define RESERVED_MEM*/
 #define ENABLE_DZOOM
 #define USE_FRAME_SYNC
-#define TASKLET_MSG
+/*#define TASKLET_MSG*/
+#define ISDRV_VERSION 105
 
 #ifdef DEBUG
 #define dbg(fmt, args...) \

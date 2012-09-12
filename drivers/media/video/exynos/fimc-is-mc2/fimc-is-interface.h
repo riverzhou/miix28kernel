@@ -25,7 +25,8 @@
 #define HIGHBIT_OF(num)	(num >= 32 ? (u32)1<<(num-32) : 0)
 
 enum fimc_is_interface_state {
-	IS_IF_STATE_IDLE,
+	IS_IF_STATE_OPEN,
+	IS_IF_STATE_START,
 	IS_IF_STATE_BUSY
 };
 
@@ -35,7 +36,9 @@ enum interrupt_map {
 	INTR_SCC_FDONE		= 2,
 	INTR_DNR_FDONE		= 3,
 	INTR_SCP_FDONE		= 4,
+	/* 5 is ISP YUV DONE */
 	INTR_META_DONE		= 6,
+	INTR_SHOT_DONE		= 7,
 	INTR_MAX_MAP
 };
 
@@ -82,28 +85,26 @@ struct fimc_is_work_list {
 	u32				work_free_cnt;
 	struct list_head		work_request_head;
 	u32				work_request_cnt;
-
 	wait_queue_head_t		wait_queue;
 };
 
 struct fimc_is_interface {
 	void __iomem			*regs;
 	struct is_common_reg __iomem	*com_regs;
-	u32				state;
+	unsigned long			state;
 	/* this spinlock is needed for data coincidence.
 	it need to update SCU tag between different thread */
 	spinlock_t			slock_state;
 	spinlock_t			process_barrier;
 	struct mutex			request_barrier;
 
+	wait_queue_head_t		init_wait_queue;
 	wait_queue_head_t		wait_queue;
 	struct fimc_is_msg		reply;
 
 	struct work_struct		work_queue[INTR_MAX_MAP];
 	struct fimc_is_work_list	work_list[INTR_MAX_MAP];
 
-	/* this fcount is for internal debugging */
-	u32				fcount;
 	/* sensor streaming flag */
 	enum streaming_state		streaming;
 	/* firmware processing flag */
@@ -120,7 +121,6 @@ struct fimc_is_interface {
 	struct fimc_is_video_common	*video_scp;
 
 	struct fimc_is_work_list	nblk_cam_ctrl;
-	struct fimc_is_work_list	nblk_shot;
 
 	struct camera2_uctl		isp_peri_ctl;
 };
@@ -137,8 +137,8 @@ int fimc_is_interface_close(struct fimc_is_interface *this);
 int print_fre_work_list(struct fimc_is_work_list *this);
 int print_req_work_list(struct fimc_is_work_list *this);
 
-int fimc_is_hw_enum(struct fimc_is_interface *interface,
-	u32 instances);
+int fimc_is_hw_print(struct fimc_is_interface *this);
+int fimc_is_hw_enum(struct fimc_is_interface *this);
 int fimc_is_hw_open(struct fimc_is_interface *this,
 	u32 instance, u32 sensor, u32 channel, u32 ext,
 	u32 *mwidth, u32 *mheight);
@@ -168,8 +168,7 @@ int fimc_is_hw_power_down(struct fimc_is_interface *interface,
 	u32 instance);
 
 int fimc_is_hw_shot_nblk(struct fimc_is_interface *this,
-	u32 instance, u32 bayer, u32 shot, u32 fcount, u32 rcount,
-	struct fimc_is_frame_shot *frame);
+	u32 instance, u32 bayer, u32 shot, u32 fcount, u32 rcount);
 int fimc_is_hw_s_camctrl_nblk(struct fimc_is_interface *this,
 	u32 instance, u32 address, u32 fcount);
 
