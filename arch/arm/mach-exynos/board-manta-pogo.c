@@ -22,6 +22,7 @@
 #include <linux/irq.h>
 #include <linux/interrupt.h>
 #include <linux/ktime.h>
+#include <linux/spinlock.h>
 #include <linux/device.h>
 
 #include <linux/workqueue.h>
@@ -76,12 +77,17 @@
 #define check_stop_bits(x, n) ((((x) >> ((n) - 2)) & 1) == (STOP_BITS & 1))
 #define raw_resp(x, n) ((x) & ((1 << ((n) - 2)) - 1));
 
+#define DEBOUNCE_DELAY_MS		250
+
 /* GPIO configuration */
 #define GPIO_POGO_DATA_BETA		EXYNOS5_GPB0(0)
 #define GPIO_POGO_DATA_POST_BETA	EXYNOS5_GPX0(5)
-
+#define GPIO_DOCK_PD_INT		EXYNOS5_GPX0(6)
 #define GPIO_POGO_SPDIF			EXYNOS5_GPB1(0)
+
 #define GPIO_POGO_SEL1			EXYNOS5_GPG1(0)
+#define GPIO_TA_CHECK_SEL		EXYNOS5_GPD1(5)
+#define GPIO_LDO20_EN			EXYNOS5_GPD1(4)
 
 static struct switch_dev dock_switch = {
 	.name = "dock",
@@ -89,6 +95,13 @@ static struct switch_dev dock_switch = {
 
 static struct switch_dev usb_audio_switch = {
 	.name = "usb_audio",
+};
+
+enum pogo_debounce_state {
+	POGO_DEBOUNCE_UNDOCKED,		/* interrupt enabled,  timer stopped */
+	POGO_DEBOUNCE_UNSTABLE,		/* interrupt disabled, timer running */
+	POGO_DEBOUNCE_WAIT_STABLE,	/* interrupt enabled,  timer running */
+	POGO_DEBOUNCE_DOCKED,		/* interrupt enabled,  timer stopped */
 };
 
 struct dock_state {
@@ -104,16 +117,30 @@ struct dock_state {
 	struct workqueue_struct *dock_wq;
 	struct work_struct dock_work;
 	struct wake_lock wake_lock;
+
+	spinlock_t debounce_lock;
+	int dock_pd_irq;
+	bool debounce_pending;
+	int spdif_mux_state;
+	enum pogo_debounce_state debounce_state;
+	struct timer_list debounce_timer;
+	struct work_struct debounce_work;
+	struct wake_lock debounce_wake_lock;
 };
 
 static struct dock_state ds = {
 	.lock		= __MUTEX_INITIALIZER(ds.lock),
 	.mfm_delay_ns	= MFM_DELAY_NS_DEFAULT,
+	.debounce_lock	= __SPIN_LOCK_INITIALIZER(ds.spdif_lock),
+	.debounce_state	= POGO_DEBOUNCE_UNDOCKED,
 };
 
 static struct gpio manta_pogo_gpios[] = {
 	{GPIO_POGO_DATA_POST_BETA, GPIOF_IN, "dock"},
 	{GPIO_POGO_SEL1, GPIOF_OUT_INIT_HIGH, "pogo_sel1"},
+	{GPIO_TA_CHECK_SEL, GPIOF_OUT_INIT_LOW, "pogo_spdif_sel"},
+	{GPIO_DOCK_PD_INT, GPIOF_IN, "dock_pd_int"},
+	{GPIO_LDO20_EN, GPIOF_OUT_INIT_HIGH, "ldo20_en"},
 };
 
 #define _GPIO_DOCK		(manta_pogo_gpios[0].gpio)
@@ -406,6 +433,61 @@ void manta_pogo_switch_set(int value)
 	gpio_set_value(GPIO_POGO_SEL1, value);
 }
 
+static void pogo_dock_pd_interrupt_locked(int irq, void *data)
+{
+	struct dock_state *s = data;
+
+	switch (s->debounce_state) {
+	case POGO_DEBOUNCE_UNDOCKED:
+	case POGO_DEBOUNCE_DOCKED:
+		wake_lock(&s->debounce_wake_lock);
+		mod_timer(&s->debounce_timer,
+			jiffies + msecs_to_jiffies(DEBOUNCE_DELAY_MS));
+		s->debounce_state = POGO_DEBOUNCE_WAIT_STABLE;
+		break;
+	case POGO_DEBOUNCE_WAIT_STABLE:
+		/*
+		 * Disable IRQ line in case there is noise. It will be
+		 * re-enabled when the timer expires.
+		 */
+		s->debounce_state = POGO_DEBOUNCE_UNSTABLE;
+		disable_irq_nosync(s->dock_pd_irq);
+		break;
+	case POGO_DEBOUNCE_UNSTABLE:
+		break;
+	}
+}
+
+static void dock_spdif_switch_set(bool spdif_mode)
+{
+	struct dock_state *s = &ds;
+
+	pr_debug("%s: %d pending %d\n", __func__, spdif_mode,
+		s->debounce_pending);
+
+	s->spdif_mux_state = spdif_mode;
+	gpio_set_value(GPIO_TA_CHECK_SEL, spdif_mode);
+
+	if (!spdif_mode && s->debounce_pending) {
+		pogo_dock_pd_interrupt_locked(s->dock_pd_irq, s);
+		s->debounce_pending = false;
+	}
+}
+
+static void dock_set_audio_switch(bool audio_on)
+{
+	struct dock_state *s = &ds;
+	unsigned long flags;
+
+	spin_lock_irqsave(&s->debounce_lock, flags);
+	dock_spdif_switch_set(audio_on);
+	if (audio_on && s->debounce_state == POGO_DEBOUNCE_UNDOCKED)
+		pogo_dock_pd_interrupt_locked(s->dock_pd_irq, s);
+	spin_unlock_irqrestore(&s->debounce_lock, flags);
+
+	switch_set_state(&usb_audio_switch, audio_on ?
+			POGO_DIGITAL_AUDIO : POGO_NO_AUDIO);
+}
 
 static int dock_acquire(struct dock_state *s)
 {
@@ -454,8 +536,7 @@ static int dock_check_status(struct dock_state *s,
 
 	if (s->dock_connected_unknown) {
 		/* force a new dock notification if a command failed */
-		switch_set_state(&dock_switch, POGO_UNDOCKED);
-		switch_set_state(&usb_audio_switch, POGO_NO_AUDIO);
+		dock_set_audio_switch(false);
 		s->dock_connected_unknown = false;
 	}
 
@@ -466,10 +547,7 @@ static int dock_check_status(struct dock_state *s,
 
 	pr_debug("%s: Dock status %02x\n", __func__, dock_stat);
 	if (dock_stat >= 0) {
-		switch_set_state(&dock_switch, POGO_DESK_DOCK);
-		switch_set_state(&usb_audio_switch,
-				(dock_stat & DOCK_STAT_AUDIO_CONNECTED) ?
-				POGO_DIGITAL_AUDIO : POGO_NO_AUDIO);
+		dock_set_audio_switch(dock_stat & DOCK_STAT_AUDIO_CONNECTED);
 
 		if (charge_source) {
 			power = (dock_stat >> DOCK_STAT_POWER_OFFSET) &
@@ -493,8 +571,7 @@ static int dock_check_status(struct dock_state *s,
 	}
 no_dock:
 	ret = -ENOENT;
-	switch_set_state(&dock_switch, POGO_UNDOCKED);
-	switch_set_state(&usb_audio_switch, POGO_NO_AUDIO);
+	dock_set_audio_switch(false);
 done:
 	wake_unlock(&s->wake_lock);
 
@@ -517,8 +594,7 @@ enum manta_charge_source manta_pogo_set_vbus(bool status)
 			return (enum manta_charge_source) ret;
 	} else {
 		dock_in();
-		switch_set_state(&dock_switch, POGO_UNDOCKED);
-		switch_set_state(&usb_audio_switch, POGO_NO_AUDIO);
+		dock_set_audio_switch(false);
 		s->dock_connected_unknown = false;
 		charge_source = MANTA_CHARGE_SOURCE_NONE;
 	}
@@ -545,6 +621,92 @@ static irqreturn_t pogo_data_interrupt(int irq, void *data)
 	}
 
 	return IRQ_HANDLED;
+}
+
+static irqreturn_t pogo_dock_pd_interrupt(int irq, void *data)
+{
+	struct dock_state *s = data;
+	unsigned long flags;
+
+	pr_debug("%s: irq %d, state %d, gpio %d, mux %d\n",
+		__func__, irq, s->debounce_state,
+		gpio_get_value(GPIO_DOCK_PD_INT), s->spdif_mux_state);
+
+	spin_lock_irqsave(&s->debounce_lock, flags);
+
+	if (s->spdif_mux_state)
+		s->debounce_pending = true;
+	else
+		pogo_dock_pd_interrupt_locked(irq, data);
+
+	spin_unlock_irqrestore(&s->debounce_lock, flags);
+
+	return IRQ_HANDLED;
+}
+
+static void pogo_debounce_timer(unsigned long data)
+{
+	struct dock_state *s = (struct dock_state *) data;
+	unsigned long flags;
+
+	pr_debug("%s: state %d, gpio %d\n", __func__, s->debounce_state,
+		gpio_get_value(GPIO_DOCK_PD_INT));
+
+	spin_lock_irqsave(&s->debounce_lock, flags);
+
+	switch (s->debounce_state) {
+	case POGO_DEBOUNCE_UNSTABLE:
+		/*
+		 * The detect gpio changed in one the previous timeslots,
+		 * so enable the irq, reset the timer, and wait again. If the
+		 * detect gpio changed after we last disabled the interrupt we
+		 * will get anther interrupt right away and the state will go
+		 * back to POGO_DET_UNSTABLE.
+		 */
+		s->debounce_state = POGO_DEBOUNCE_WAIT_STABLE;
+		enable_irq(s->dock_pd_irq);
+		mod_timer(&s->debounce_timer,
+				jiffies + msecs_to_jiffies(DEBOUNCE_DELAY_MS));
+		break;
+	case POGO_DEBOUNCE_WAIT_STABLE:
+		s->debounce_state = (s->spdif_mux_state ||
+			gpio_get_value(GPIO_DOCK_PD_INT)) ?
+			POGO_DEBOUNCE_DOCKED : POGO_DEBOUNCE_UNDOCKED;
+		queue_work(s->dock_wq, &s->debounce_work);
+		break;
+	default:
+		break;
+	}
+
+	spin_unlock_irqrestore(&s->debounce_lock, flags);
+}
+
+static void debounce_work_proc(struct work_struct *work)
+{
+	struct dock_state *s = container_of(work, struct dock_state,
+			debounce_work);
+	unsigned long flags;
+	int state;
+
+	spin_lock_irqsave(&s->debounce_lock, flags);
+	state = s->debounce_state;
+	spin_unlock_irqrestore(&s->debounce_lock, flags);
+
+	switch (state) {
+	case POGO_DEBOUNCE_DOCKED:
+		switch_set_state(&dock_switch, POGO_DESK_DOCK);
+		break;
+	case POGO_DEBOUNCE_UNDOCKED:
+		switch_set_state(&dock_switch, POGO_UNDOCKED);
+		break;
+	default:
+		break;
+	}
+
+	spin_lock_irqsave(&s->debounce_lock, flags);
+	if (state == s->debounce_state)
+		wake_unlock(&s->debounce_wake_lock);
+	spin_unlock_irqrestore(&s->debounce_lock, flags);
 }
 
 #ifdef DEBUG
@@ -647,9 +809,13 @@ void __init exynos5_manta_pogo_init(void)
 		manta_pogo_gpios[0].gpio = GPIO_POGO_DATA_BETA;
 
 	wake_lock_init(&s->wake_lock, WAKE_LOCK_SUSPEND, "dock");
+	wake_lock_init(&s->debounce_wake_lock, WAKE_LOCK_SUSPEND, "dock_pd");
 
 	INIT_WORK(&s->dock_work, dock_work_proc);
+	INIT_WORK(&s->debounce_work, debounce_work_proc);
 	s->dock_wq = create_singlethread_workqueue("dock");
+
+	setup_timer(&s->debounce_timer, pogo_debounce_timer, (unsigned long)s);
 
 	s3c_gpio_cfgpin(GPIO_POGO_SEL1, S3C_GPIO_OUTPUT);
 	s3c_gpio_setpull(GPIO_POGO_SEL1, S3C_GPIO_PULL_NONE);
@@ -674,8 +840,9 @@ void __init exynos5_manta_pogo_init(void)
 	manta_pogo_set_vbus(0);
 }
 
-int __init pogo_data_irq_late_init(void)
+int __init pogo_data_irq_subsys_init(void)
 {
+	struct dock_state *s = &ds;
 	int ret, data_irq;
 
 	dock_irq();
@@ -685,16 +852,53 @@ int __init pogo_data_irq_late_init(void)
 
 	ret = request_irq(data_irq, pogo_data_interrupt, IRQF_TRIGGER_FALLING,
 			"dock", &ds);
-	if (ret < 0)
+	if (ret < 0) {
 		pr_err("%s: failed to request irq %d, rc: %d\n", __func__,
 			data_irq, ret);
+		goto done;
+	}
 
 	ret = enable_irq_wake(data_irq);
-	if (ret)
-		pr_warn("%s: failed to enable irq_wake for POGO_DATA\n",
+	if (ret) {
+		pr_err("%s: failed to enable irq_wake for POGO_DATA\n",
 			__func__);
+		goto fail_data_irq_wake;
+	}
 
+	s3c_gpio_cfgpin(GPIO_DOCK_PD_INT, S3C_GPIO_SFN(0xF));
+	s3c_gpio_setpull(GPIO_DOCK_PD_INT, S3C_GPIO_PULL_NONE);
+
+	s->dock_pd_irq = gpio_to_irq(GPIO_DOCK_PD_INT);
+
+	ret = request_irq(s->dock_pd_irq, pogo_dock_pd_interrupt,
+		IRQF_TRIGGER_FALLING | IRQF_TRIGGER_RISING, "dock_pd", &ds);
+
+	if (ret < 0) {
+		pr_err("%s: failed to request dock_pd_int irq %d, rc: %d\n",
+			__func__, s->dock_pd_irq, ret);
+		goto fail_pd_irq_request;
+	}
+
+	ret = enable_irq_wake(s->dock_pd_irq);
+	if (ret < 0) {
+		pr_err("%s: failed to enable irq_wake for DOCK_PD_INT\n",
+			__func__);
+		goto fail_pd_irq_wake;
+	}
+
+	return 0;
+
+fail_pd_irq_wake:
+	free_irq(s->dock_pd_irq, &ds);
+
+fail_pd_irq_request:
+	disable_irq_wake(data_irq);
+
+fail_data_irq_wake:
+	free_irq(data_irq, &ds);
+
+done:
 	return ret;
 }
 
-late_initcall(pogo_data_irq_late_init);
+subsys_initcall_sync(pogo_data_irq_subsys_init);
