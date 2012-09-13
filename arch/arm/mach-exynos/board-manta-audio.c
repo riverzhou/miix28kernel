@@ -124,6 +124,17 @@ static struct regulator_init_data wm1811_ldo2_initdata = {
 	.consumer_supplies = wm1811_ldo2_supplies,
 };
 
+static struct wm8994_drc_cfg wm1811_drc_cfgs[] = {
+	{
+		.name = "Default",
+		.regs = {0x0098, 0x0845, 0x0, 0x0, 0x0 }
+	},
+	{
+		.name = "Speakers Media",
+		.regs = {0x0098, 0x0245, 0x0028, 0x00c6, 0x0 }
+	}
+};
+
 static struct wm8994_pdata wm1811_pdata = {
 	.gpio_defaults = {
 		[0] = WM8994_GP_FN_IRQ, /* GPIO1 IRQ output, CMOS mode */
@@ -148,6 +159,8 @@ static struct wm8994_pdata wm1811_pdata = {
 		},
 	},
 
+	.num_drc_cfgs = ARRAY_SIZE(wm1811_drc_cfgs),
+	.drc_cfgs = wm1811_drc_cfgs,
 	/* Regulated mode at highest output voltage */
 	.micbias = {0x2f, 0x2f},
 	.micd_lvl_sel = 0xff,
