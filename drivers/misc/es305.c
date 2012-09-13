@@ -73,6 +73,7 @@ struct es305_data {
 	struct mutex			lock;
 	u32				passthrough;
 	bool				asleep;
+	bool				device_ready;
 };
 
 static int es305_send_cmd(struct es305_data *es305, u32 command, u16 *response)
@@ -289,6 +290,9 @@ static ssize_t es305_audio_routing_show(struct device *dev,
 	int ret;
 	u16 val;
 
+	if (!es305->device_ready)
+		return -EAGAIN;
+
 	mutex_lock(&es305->lock);
 	ret = es305_wake(es305);
 	if (ret < 0) {
@@ -314,6 +318,9 @@ static ssize_t es305_audio_routing_store(struct device *dev,
 	struct es305_data *es305 = dev_get_drvdata(dev);
 	unsigned long val;
 	int ret;
+
+	if (!es305->device_ready)
+		return -EAGAIN;
 
 	ret = kstrtoul(buf, 0, &val);
 	if (ret)
@@ -345,6 +352,9 @@ static ssize_t es305_preset_store(struct device *dev,
 	unsigned long val;
 	int ret;
 
+	if (!es305->device_ready)
+		return -EAGAIN;
+
 	ret = kstrtoul(buf, 0, &val);
 	if (ret)
 		return -EINVAL;
@@ -375,6 +385,9 @@ static ssize_t es305_voice_processing_show(struct device *dev,
 	int ret;
 	u16 val;
 
+	if (!es305->device_ready)
+		return -EAGAIN;
+
 	mutex_lock(&es305->lock);
 	ret = es305_wake(es305);
 	if (ret < 0) {
@@ -400,6 +413,9 @@ static ssize_t es305_voice_processing_store(struct device *dev,
 	struct es305_data *es305 = dev_get_drvdata(dev);
 	unsigned long val;
 	int ret;
+
+	if (!es305->device_ready)
+		return -EAGAIN;
 
 	ret = kstrtoul(buf, 0, &val);
 	if (ret)
@@ -440,6 +456,9 @@ static ssize_t es305_sleep_store(struct device *dev,
 	unsigned long state;
 	int ret;
 
+	if (!es305->device_ready)
+		return -EAGAIN;
+
 	ret = kstrtoul(buf, 0, &state);
 	if (ret)
 		return -EINVAL;
@@ -469,6 +488,9 @@ static ssize_t es305_algorithm_parm_show(struct device *dev,
 	int ret;
 	u16 val;
 	u32 parm;
+
+	if (!es305->device_ready)
+		return -EAGAIN;
 
 	if (strcmp(attr->attr.name, "aec_enable") == 0)
 		parm = ES305_AEC_MODE;
@@ -510,6 +532,9 @@ static ssize_t es305_algorithm_parm_store(struct device *dev,
 	unsigned long val_max = 1;
 	int ret;
 	u32 parm;
+
+	if (!es305->device_ready)
+		return -EAGAIN;
 
 	if (strcmp(attr->attr.name, "aec_enable") == 0) {
 		parm = ES305_AEC_MODE;
@@ -633,10 +658,7 @@ static void es305_firmware_ready(const struct firmware *fw, void *context)
 		}
 	}
 
-	/* Create the sysfs file after the device is ready */
-	ret = sysfs_create_group(&es305->dev->kobj, &es305_attribute_group);
-	if (ret)
-		dev_err(es305->dev, "failed to create sysfs group\n");
+	es305->device_ready = true;
 
 err:
 	release_firmware(es305->fw);
@@ -696,6 +718,14 @@ static int __devinit es305_probe(struct i2c_client *client,
 	request_firmware_nowait(THIS_MODULE, FW_ACTION_HOTPLUG,
 				ES305_FIRMWARE_NAME, es305->dev, GFP_KERNEL,
 				es305, es305_firmware_ready);
+
+	/*
+	 * This is not a critical failure, since the device can still be left
+	 * in passthrough mode.
+	 */
+	ret = sysfs_create_group(&es305->dev->kobj, &es305_attribute_group);
+	if (ret)
+		dev_err(es305->dev, "failed to create sysfs group\n");
 
 	return 0;
 
