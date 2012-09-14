@@ -25,7 +25,6 @@
 #include <asm/pgtable.h>
 #include <linux/firmware.h>
 #include <linux/dma-mapping.h>
-#include <linux/delay.h>
 #include <linux/scatterlist.h>
 #include <linux/videodev2.h>
 #include <linux/videodev2_exynos_camera.h>
@@ -1732,7 +1731,11 @@ static int fimc_is_itf_shot(struct fimc_is_device_ischain *this,
 	}
 
 #ifdef MEASURE_TIME
+#ifdef INTERNAL_TIME
+	do_gettimeofday(&frame->time_shot);
+#else
 	do_gettimeofday(&frame->tzone[TM_SHOT]);
+#endif
 #endif
 
 #ifdef DBG_STREAMING
@@ -1910,6 +1913,7 @@ int fimc_is_ischain_open(struct fimc_is_device_ischain *this,
 	this->fcount = 0;
 	this->setfile = 0;
 	this->debug_cnt = 0;
+	this->dzoom_width = 0;
 
 	/* frame manager open */
 	fimc_is_interface_open(this->interface);
@@ -2492,15 +2496,34 @@ static int fimc_is_ischain_s_dzoom(struct fimc_is_device_ischain *this,
 	u32 crop_height;
 	u32 indexes, lindex, hindex;
 	u32 chain0_width, chain0_height;
-	u32 temp_width;
+	u32 temp_width, input_width;
 	struct scalerc_param *scc_param;
+#ifdef USE_ADVANCED_DZOOM
+	u32 crop_hx, crop_hy, crop_hwidth, crop_hheight;
+	u32 crop_px, crop_py, crop_pwidth, crop_pheight;
+	u32 chain2_width, chain2_height;
+	struct scalerp_param *scp_param;
 
+	scc_param = &this->is_region->parameter.scalerc;
+	scp_param = &this->is_region->parameter.scalerp;
+	indexes = lindex = hindex = 0;
+	chain0_width = this->chain0_width;
+	chain0_height = this->chain0_height;
+	chain2_width = this->chain2_width;
+	chain2_height = this->chain2_height;
+	crop_hx = (chain0_width>>2) & 0xFFFFFFFE;
+	crop_hy = (chain0_height>>2) & 0xFFFFFFFE;
+	crop_hwidth = (chain0_width>>1) & 0xFFFFFFFE;
+	crop_hheight = (chain0_height>>1) & 0xFFFFFFFE;
+#else
 	scc_param = &this->is_region->parameter.scalerc;
 	indexes = lindex = hindex = 0;
 	chain0_width = this->chain0_width;
 	chain0_height = this->chain0_height;
+#endif
 
 	/* CHECK */
+	input_width = crop_width;
 	temp_width = crop_width + (crop_x<<1);
 	if (temp_width != chain0_width) {
 		err("input width is not valid(%d != %d)",
@@ -2517,8 +2540,35 @@ static int fimc_is_ischain_s_dzoom(struct fimc_is_device_ischain *this,
 	crop_width = chain0_width - (crop_x<<1);
 	crop_height = chain0_height - (crop_y<<1);
 
-	dbg_ischain("%s(%d, %d, %d %d)\n", __func__, crop_x, crop_y, crop_width,
-		crop_height);
+#ifdef USE_ADVANCED_DZOOM
+	if (crop_width < crop_hwidth) {
+		crop_px = crop_x - crop_hx;
+		crop_py = crop_y - crop_hy;
+		crop_pwidth = chain2_width - (crop_hwidth - crop_width);
+		crop_pheight = chain2_height - (crop_hheight - crop_height);
+
+		scp_param->input_crop.cmd = SCALER_CROP_COMMAND_ENABLE;
+		scp_param->input_crop.pos_x = crop_px;
+		scp_param->input_crop.pos_y = crop_py;
+		scp_param->input_crop.crop_width = crop_pwidth;
+		scp_param->input_crop.crop_height = crop_pheight;
+		lindex |= LOWBIT_OF(PARAM_SCALERP_INPUT_CROP);
+		hindex |= HIGHBIT_OF(PARAM_SCALERP_INPUT_CROP);
+		indexes++;
+
+		dbg_ischain("%s2(%d, %d, %d %d)\n", __func__, crop_hx, crop_hy,
+			crop_hwidth, crop_hheight);
+		dbg_ischain("%s3(%d, %d, %d %d)\n", __func__, crop_px, crop_py,
+			crop_pwidth, crop_pheight);
+
+		crop_x = crop_hx;
+		crop_y = crop_hy;
+		crop_width = crop_hwidth;
+		crop_height = crop_hheight;
+	}
+#endif
+	dbg_ischain("%s1(%d, %d, %d %d)\n", __func__, crop_x, crop_y,
+		crop_width, crop_height);
 
 	/* SCC OUTPUT */
 	scc_param->input_crop.cmd = SCALER_CROP_COMMAND_ENABLE;
@@ -2541,6 +2591,7 @@ static int fimc_is_ischain_s_dzoom(struct fimc_is_device_ischain *this,
 	this->crop_y = crop_y;
 	this->crop_width = crop_width;
 	this->crop_height = crop_height;
+	this->dzoom_width = input_width;
 
 exit:
 	return ret;
@@ -2800,6 +2851,7 @@ int fimc_is_ischain_isp_start(struct fimc_is_device_ischain *this,
 		crop_x =  ((sensor_width - crop_width) >> 1) & 0xFFFFFFFE;
 	}
 
+	this->dzoom_width = crop_width;
 	this->chain0_width = crop_width;
 	this->chain0_height = crop_height;
 	this->crop_width = crop_width;
@@ -2967,6 +3019,12 @@ int fimc_is_ischain_isp_stop(struct fimc_is_device_ischain *this)
 		goto exit;
 	}
 
+#ifdef MEASURE_TIME
+#ifdef INTERNAL_TIME
+	measure_init();
+#endif
+#endif
+
 exit:
 	return ret;
 }
@@ -3014,6 +3072,12 @@ int fimc_is_ischain_isp_buffer_queue(struct fimc_is_device_ischain *this,
 		goto exit;
 	}
 
+#ifdef MEASURE_TIME
+#ifdef INTERNAL_TIME
+	do_gettimeofday(&frame->time_queued);
+#endif
+#endif
+
 	if (!frame->init) {
 		err("frame %d is NOT init", index);
 		ret = EINVAL;
@@ -3051,7 +3115,7 @@ int fimc_is_ischain_isp_buffer_finish(struct fimc_is_device_ischain *this,
 	u32 index)
 {
 	int ret = 0;
-	struct fimc_is_frame_shot *item;
+	struct fimc_is_frame_shot *frame;
 	struct fimc_is_framemgr *framemgr = this->framemgr;
 
 #ifdef DBG_STREAMING
@@ -3060,32 +3124,29 @@ int fimc_is_ischain_isp_buffer_finish(struct fimc_is_device_ischain *this,
 
 	framemgr_e_barrier_irq(framemgr, index+0xf0);
 
-	fimc_is_frame_complete_head(framemgr, &item);
-	if (item) {
-		if (index == item->index)
-			fimc_is_frame_trans_com_to_fre(framemgr, item);
+	fimc_is_frame_complete_head(framemgr, &frame);
+	if (frame) {
+		if (index == frame->index)
+			fimc_is_frame_trans_com_to_fre(framemgr, frame);
 		else {
 			dbg_warning("buffer index is NOT matched(%d != %d)\n",
-				index, item->index);
+				index, frame->index);
 			fimc_is_frame_print_all(framemgr);
 		}
 	} else {
-		fimc_is_frame_process_head(framemgr, &item);
-		if (item) {
-			if (item->req_flag)
-				dbg_warning("request flag(%X) is not clr\n",
-					(u32)item->req_flag);
-			else {
-				err("item is empty from complete0");
-				fimc_is_frame_print_all(framemgr);
-			}
-		} else {
-			err("item is empty from complete1");
-			fimc_is_frame_print_all(framemgr);
-		}
+		err("frame is empty from complete");
+		fimc_is_frame_print_all(framemgr);
 	}
 
 	framemgr_x_barrier_irq(framemgr, index+0xf0);
+
+#ifdef MEASURE_TIME
+#ifdef INTERNAL_TIME
+	do_gettimeofday(&frame->time_dequeued);
+	measure_internal_time(&frame->time_queued, &frame->time_shot,
+		&frame->time_shotdone, &frame->time_dequeued);
+#endif
+#endif
 
 	return ret;
 }
@@ -3573,8 +3634,7 @@ int fimc_is_ischain_callback(struct fimc_is_device_ischain *this)
 	}
 
 	crop_width = isp_frame->shot->ctl.scaler.cropRegion[2];
-	if (crop_width && (crop_width != this->crop_width)) {
-#ifdef ENABLE_DZOOM
+	if (crop_width && (crop_width != this->dzoom_width)) {
 		ret = fimc_is_ischain_s_dzoom(this,
 			isp_frame->shot->ctl.scaler.cropRegion[0],
 			isp_frame->shot->ctl.scaler.cropRegion[1],
@@ -3586,7 +3646,6 @@ int fimc_is_ischain_callback(struct fimc_is_device_ischain *this)
 				isp_frame->shot->ctl.scaler.cropRegion[2]);
 			goto exit;
 		}
-#endif
 	}
 
 	if (scc_req) {
@@ -3663,14 +3722,6 @@ exit:
 		err("shot(index : %d) is skipped(error : %d)",
 			isp_frame->index, ret);
 	} else {
-		/* 1 frame delay is occured after DIS bypass off */
-		/*
-		if (test_bit(FIMC_IS_ISDEV_DSTART, &this->dis.state))
-			set_bit(FIMC_IS_REQ_SHOT, &isp_frame->req_flag);
-		else
-			set_bit(FIMC_IS_REQ_FRAME, &isp_frame->req_flag);
-		*/
-
 		set_bit(FIMC_IS_REQ_SHOT, &isp_frame->req_flag);
 		set_bit(FIMC_IS_ISCHAIN_RUN, &this->state);
 		fimc_is_frame_trans_req_to_pro(isp_framemgr, isp_frame);
