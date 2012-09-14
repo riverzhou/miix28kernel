@@ -54,6 +54,7 @@ struct bcm_bt_lpm {
 	struct uart_port *uport;
 
 	struct wake_lock wake_lock;
+	struct wake_lock host_wake_lock;
 } bt_lpm;
 
 struct gpio_init_data {
@@ -168,12 +169,18 @@ static const struct rfkill_ops bcm43241_bt_rfkill_ops = {
 #ifdef BT_LPM_ENABLE
 static void set_wake_locked(int wake)
 {
+	if (wake == bt_lpm.wake)
+		return;
+
 	bt_lpm.wake = wake;
 
-	if (!wake)
+	if (wake) {
+		wake_lock(&bt_lpm.wake_lock);
+		gpio_set_value(GPIO_BT_WAKE, wake);
+	} else {
+		gpio_set_value(GPIO_BT_WAKE, wake);
 		wake_unlock(&bt_lpm.wake_lock);
-
-	gpio_set_value(GPIO_BT_WAKE, wake);
+	}
 }
 
 static enum hrtimer_restart enter_lpm(struct hrtimer *timer)
@@ -202,13 +209,13 @@ static void update_host_wake_locked(int host_wake)
 	bt_lpm.host_wake = host_wake;
 
 	if (host_wake) {
-		wake_lock(&bt_lpm.wake_lock);
+		wake_lock(&bt_lpm.host_wake_lock);
 	} else  {
 		/* Take a timed wakelock, so that upper layers can take it.
 		* The chipset deasserts the hostwake lock, when there is no
 		* more data to send.
 		*/
-		wake_lock_timeout(&bt_lpm.wake_lock, HZ/2);
+		wake_lock_timeout(&bt_lpm.host_wake_lock, HZ/2);
 	}
 }
 
@@ -243,7 +250,9 @@ static int bcm_bt_lpm_init(struct platform_device *pdev)
 	bt_lpm.host_wake = 0;
 
 	wake_lock_init(&bt_lpm.wake_lock, WAKE_LOCK_SUSPEND,
-			 "BTLowPower");
+			 "BTWakeLowPower");
+	wake_lock_init(&bt_lpm.host_wake_lock, WAKE_LOCK_SUSPEND,
+			 "BTHostWakeLowPower");
 
 	irq = gpio_to_irq(GPIO_BT_HOST_WAKE);
 	ret = request_threaded_irq(irq, NULL, host_wake_isr,
@@ -264,6 +273,7 @@ static int bcm_bt_lpm_init(struct platform_device *pdev)
 
 err_lpm_init:
 	wake_lock_destroy(&bt_lpm.wake_lock);
+	wake_lock_destroy(&bt_lpm.host_wake_lock);
 	return ret;
 }
 #endif
@@ -346,6 +356,7 @@ static int bcm43241_bluetooth_remove(struct platform_device *pdev)
 	set_wake_locked(0);
 	hrtimer_try_to_cancel(&bt_lpm.enter_lpm_timer);
 	wake_lock_destroy(&bt_lpm.wake_lock);
+	wake_lock_destroy(&bt_lpm.host_wake_lock);
 #endif
 
 	rfkill_unregister(bt_rfkill);
