@@ -79,7 +79,7 @@ static struct regulator_consumer_supply ldo19_supply[] = {
 };
 
 static struct regulator_consumer_supply ldo20_supply[] = {
-	REGULATOR_SUPPLY("ta_check_1.1v", NULL),
+	REGULATOR_SUPPLY("ta_check_1.35v", NULL),
 };
 
 static struct regulator_consumer_supply ldo23_supply[] = {
@@ -152,7 +152,7 @@ REGULATOR_INIT(ldo18, "CAM_IO_1.8V", 1800000, 1800000, 0,
 	       REGULATOR_CHANGE_STATUS, 1);
 REGULATOR_INIT(ldo19, "VT_CAM_1.8V", 1800000, 1800000, 0,
 	       REGULATOR_CHANGE_STATUS, 1);
-REGULATOR_INIT(ldo20, "TA_CHECK_1.1V", 1100000, 1100000, 0,
+REGULATOR_INIT(ldo20, "TA_CHECK_1.35V", 1350000, 1350000, 0,
 	       REGULATOR_CHANGE_STATUS, 1);
 REGULATOR_INIT(ldo23, "TSP_AVDD_2.8V", 2800000, 2800000, 0,
 	       REGULATOR_CHANGE_STATUS, 1);
