@@ -133,9 +133,10 @@ static void manta_otg_host_disable(struct manta_otg *motg)
 	if (err)
 		pr_err("failed to disable vbus: %d\n", err);
 
-	usb_remove_hcd(hcd);
 	if (ohci_hcd)
 		usb_remove_hcd(ohci_hcd);
+	usb_remove_hcd(hcd);
+
 	usb_phy_shutdown(&motg->phy);
 #endif
 }
