@@ -51,20 +51,20 @@ static int manta_phy_init(struct usb_phy *phy)
 {
 	struct manta_otg *motg = container_of(phy, struct manta_otg, phy);
 
-	if (phy->last_event == USB_EVENT_ID)
-		return s5p_usb_phy_init(&motg->pdev, S5P_USB_PHY_HOST);
-	else
+	if (phy->last_event == USB_EVENT_VBUS)
 		return s5p_usb_phy_init(&motg->pdev, S5P_USB_PHY_DEVICE);
+	else
+		return s5p_usb_phy_init(&motg->pdev, S5P_USB_PHY_HOST);
 }
 
 static void manta_phy_shutdown(struct usb_phy *phy)
 {
 	struct manta_otg *motg = container_of(phy, struct manta_otg, phy);
 
-	if (motg->phy.state == OTG_STATE_A_HOST)
-		s5p_usb_phy_exit(&motg->pdev, S5P_USB_PHY_HOST);
-	else
+	if (motg->phy.state == OTG_STATE_B_PERIPHERAL)
 		s5p_usb_phy_exit(&motg->pdev, S5P_USB_PHY_DEVICE);
+	else
+		s5p_usb_phy_exit(&motg->pdev, S5P_USB_PHY_HOST);
 }
 
 static int manta_otg_host_enable(struct manta_otg *motg)
