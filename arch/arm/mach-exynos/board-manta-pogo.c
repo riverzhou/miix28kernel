@@ -113,7 +113,7 @@ struct dock_state {
 	bool dock_connected_unknown;
 
 	u32 mfm_delay_ns;
-	bool vbus_present;
+	bool powered_dock_present;
 	struct workqueue_struct *dock_wq;
 	struct work_struct dock_work;
 	struct wake_lock wake_lock;
@@ -319,6 +319,7 @@ static int dock_command(struct dock_state *s, u16 cmd, int len, int retlen)
 			ret = -1;
 		}
 	}
+	dock_irq();
 	local_irq_restore(flags);
 
 	udelay(tx < 0 ? TX_ERR_DELAY_USEC(s->mfm_delay_ns) : CMD_DELAY_USEC);
@@ -489,33 +490,32 @@ static void dock_set_audio_switch(bool audio_on)
 			POGO_DIGITAL_AUDIO : POGO_NO_AUDIO);
 }
 
-static int dock_acquire(struct dock_state *s)
+static int dock_acquire(struct dock_state *s, bool check_docked)
 {
+	int ret = 0;
+
 	mutex_lock(&s->lock);
-	manta_pogo_switch_set(1);
-	dock_in();
-	if (dock_read()) {
-		/* Allow some time for the dock pull-down resistor to discharge
-		 * the line capacitance.
-		 */
-		usleep_range(1000, 2000);
-		if (dock_read()) {
-			mutex_unlock(&s->lock);
-			return -ENOENT;
-		}
+
+	if (check_docked && !s->powered_dock_present) {
+		mutex_unlock(&s->lock);
+		return -ENODEV;
 	}
+
+	manta_pogo_switch_set(1);
 
 	pr_debug("%s: acquired dock\n", __func__);
 
-	dock_out(0);
-	s->level = false;
+	s->level = dock_read();
+	if (s->level) {
+		udelay(s->mfm_delay_ns / 1000 * 2);
+		s->level = dock_read();
+	}
 
-	return 0;
+	return ret;
 }
 
 static void dock_release(struct dock_state *s)
 {
-	dock_in();
 	mutex_unlock(&s->lock);
 	pr_debug("%s: released dock\n", __func__);
 }
@@ -531,9 +531,6 @@ static int dock_check_status(struct dock_state *s,
 	int ret = 0;
 	int dock_stat, power;
 
-	if (!s->vbus_present || dock_acquire(s))
-		goto no_dock;
-
 	if (s->dock_connected_unknown) {
 		/* force a new dock notification if a command failed */
 		dock_set_audio_switch(false);
@@ -543,13 +540,13 @@ static int dock_check_status(struct dock_state *s,
 	pr_debug("%s: sending status command\n", __func__);
 
 	dock_stat = dock_send_cmd(s, DOCK_STATUS, false, 0);
-	dock_release(s);
 
 	pr_debug("%s: Dock status %02x\n", __func__, dock_stat);
 	if (dock_stat >= 0) {
 		dock_set_audio_switch(dock_stat & DOCK_STAT_AUDIO_CONNECTED);
 
 		if (charge_source) {
+			s->powered_dock_present = true;
 			power = (dock_stat >> DOCK_STAT_POWER_OFFSET) &
 					DOCK_STAT_POWER_MASK;
 			switch (power) {
@@ -566,10 +563,10 @@ static int dock_check_status(struct dock_state *s,
 			}
 		}
 
-		dock_irq();
 		goto done;
 	}
-no_dock:
+
+	dock_in();
 	ret = -ENOENT;
 	dock_set_audio_switch(false);
 done:
@@ -584,20 +581,23 @@ enum manta_charge_source manta_pogo_set_vbus(bool status)
 	enum manta_charge_source charge_source;
 	int ret;
 
-	s->vbus_present = status;
+	dock_acquire(s, false);
+
 	pr_debug("%s: status %d\n", __func__, status ? 1 : 0);
 
 	if (status) {
 		wake_lock(&s->wake_lock);
 		ret = dock_check_status(s, &charge_source);
 		if (ret < 0)
-			return (enum manta_charge_source) ret;
+			charge_source = (enum manta_charge_source) ret;
 	} else {
 		dock_in();
 		dock_set_audio_switch(false);
 		s->dock_connected_unknown = false;
 		charge_source = MANTA_CHARGE_SOURCE_NONE;
 	}
+
+	dock_release(s);
 
 	return charge_source;
 }
@@ -606,8 +606,12 @@ static void dock_work_proc(struct work_struct *work)
 {
 	struct dock_state *s = container_of(work, struct dock_state,
 			dock_work);
-
+	int ret;
+	ret = dock_acquire(s, true);
+	if (ret < 0)
+		return;
 	dock_check_status(s, NULL);
+	dock_release(s);
 }
 
 static irqreturn_t pogo_data_interrupt(int irq, void *data)
@@ -615,7 +619,7 @@ static irqreturn_t pogo_data_interrupt(int irq, void *data)
 	struct dock_state *s = data;
 	pr_debug("%s: irq %d\n", __func__, irq);
 
-	if (s->vbus_present) {
+	if (s->powered_dock_present) {
 		wake_lock(&s->wake_lock);
 		queue_work(s->dock_wq, &s->dock_work);
 	}
@@ -713,10 +717,10 @@ static void debounce_work_proc(struct work_struct *work)
 static ssize_t dev_attr_vbus_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
-	return sprintf(buf, "%d\n", ds.vbus_present ? 1 : 0);
+	return sprintf(buf, "%d\n", ds.powered_dock_present ? 1 : 0);
 }
 
-static ssize_t dev_attr_vbus_store(struct device *dev,
+static ssize_t dev_attr_powered_dock_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t size)
 {
 	if (size) {
@@ -725,8 +729,8 @@ static ssize_t dev_attr_vbus_store(struct device *dev,
 	} else
 		return -EINVAL;
 }
-static DEVICE_ATTR(vbus, S_IRUGO | S_IWUSR, dev_attr_vbus_show,
-		dev_attr_vbus_store);
+static DEVICE_ATTR(powered_dock, S_IRUGO | S_IWUSR,
+	dev_attr_powered_dock_show, dev_attr_powered_dock_store);
 #endif
 
 #ifdef DEBUG
@@ -755,7 +759,7 @@ static ssize_t dev_attr_dock_id_show(struct device *dev,
 	int ret;
 	u8 dock_id[4];
 
-	ret = dock_acquire(&ds);
+	ret = dock_acquire(&ds, true);
 	if (ret < 0)
 		goto fail;
 	ret = dock_read_multi(&ds, DOCK_ID_ADDR, dock_id, 4);
@@ -766,7 +770,6 @@ static ssize_t dev_attr_dock_id_show(struct device *dev,
 	ret = sprintf(buf, "%02x:%02x:%02x:%02x\n\n",
 		dock_id[0], dock_id[1], dock_id[2], dock_id[3]);
 fail:
-	dock_irq();
 	return ret;
 }
 
@@ -784,7 +787,7 @@ static ssize_t dev_attr_dock_id_store(struct device *dev,
 	for (i = 0; i < 4; i++)
 		dock_id[i] = val[i];
 
-	ret = dock_acquire(&ds);
+	ret = dock_acquire(&ds, true);
 	if (ret < 0)
 		goto fail;
 	ret = dock_write_multi(&ds, DOCK_ID_ADDR, dock_id, 4);
@@ -794,7 +797,6 @@ static ssize_t dev_attr_dock_id_store(struct device *dev,
 
 	ret = size;
 fail:
-	dock_irq();
 	return ret;
 }
 static DEVICE_ATTR(dock_id, S_IRUGO | S_IWUSR, dev_attr_dock_id_show,
@@ -830,7 +832,8 @@ void __init exynos5_manta_pogo_init(void)
 #ifdef DEBUG
 		ret = device_create_file(dock_switch.dev, &dev_attr_delay_ns);
 		WARN_ON(ret);
-		ret = device_create_file(dock_switch.dev, &dev_attr_vbus);
+		ret = device_create_file(dock_switch.dev,
+			&dev_attr_unpowered_dock);
 		WARN_ON(ret);
 #endif
 	}
@@ -845,7 +848,7 @@ int __init pogo_data_irq_subsys_init(void)
 	struct dock_state *s = &ds;
 	int ret, data_irq;
 
-	dock_irq();
+	dock_in();
 	s3c_gpio_setpull(_GPIO_DOCK, S3C_GPIO_PULL_NONE);
 
 	data_irq = gpio_to_irq(_GPIO_DOCK);
