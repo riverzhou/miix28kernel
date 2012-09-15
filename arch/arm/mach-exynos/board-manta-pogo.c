@@ -71,7 +71,7 @@
 #define DOCK_STAT_AUDIO_DISCONNECTED	0
 
 #define MFM_DELAY_NS_DEFAULT		(1000 * 10)
-#define RESPONSE_INTERVAL_NS		(1000 * 700)	/* 700us */
+#define RESPONSE_INTERVAL		5
 #define CMD_DELAY_USEC			100		/* 100us */
 #define TX_ERR_DELAY_USEC(delay_ns)	((delay_ns) / 1000 * 7 + CMD_DELAY_USEC)
 #define check_stop_bits(x, n) ((((x) >> ((n) - 2)) & 1) == (STOP_BITS & 1))
@@ -315,7 +315,7 @@ static int dock_command(struct dock_state *s, u16 cmd, int len, int retlen)
 
 	if (!tx) {
 		dock_in();
-		if (dock_sync(s, RESPONSE_INTERVAL_NS)) {
+		if (dock_sync(s, s->mfm_delay_ns * RESPONSE_INTERVAL)) {
 			ret = dock_get_bits(s, retlen * 2, &err);
 		} else {
 			pr_debug("%s: response sync error\n", __func__);
