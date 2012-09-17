@@ -54,15 +54,25 @@
 extern phys_addr_t manta_bootloader_fb_start;
 extern phys_addr_t manta_bootloader_fb_size;
 
+static void manta_lcd_on(void)
+{
+	gpio_set_value(GPIO_LCD_EN, 1);
+	usleep_range(250000, 250000);
+}
+
+static void manta_lcd_off(void)
+{
+	gpio_set_value(GPIO_LCD_EN, 0);
+	usleep_range(250000, 250000);
+}
+
 static void manta_lcd_set_power(struct plat_lcd_data *pd,
 				unsigned int power)
 {
-	if (power) {
-		gpio_set_value(GPIO_LCD_EN, 1);
-		usleep_range(250000, 250000);
-	} else {
-		gpio_set_value(GPIO_LCD_EN, 0);
-	}
+	if (power)
+		manta_lcd_on();
+	else
+		manta_lcd_off();
 }
 
 static struct plat_lcd_data manta_lcd_data = {
@@ -160,6 +170,8 @@ static struct s5p_dp_platdata manta_dp_data __initdata = {
 	.phy_exit       = s5p_dp_phy_exit,
 	.backlight_on   = manta_backlight_on,
 	.backlight_off  = manta_backlight_off,
+	.lcd_on		= manta_lcd_on,
+	.lcd_off	= manta_lcd_off,
 };
 
 /* LCD Backlight data */
