@@ -244,8 +244,8 @@ void __init exynos5_manta_display_init(void)
 	platform_add_devices(manta_display_devices,
 			     ARRAY_SIZE(manta_display_devices));
 
-	exynos5_fimd1_setup_clock(&s5p_device_fimd1.dev, "sclk_fimd",
-				  "mout_mpll_user", 267 * MHZ);
+	exynos5_fimd1_setup_clock(&s5p_device_fimd1.dev,
+				"sclk_fimd", "sclk_vpll", 268 * MHZ);
 
 	res = platform_get_resource(&s5p_device_fimd1, IORESOURCE_MEM, 1);
 	if (res) {
