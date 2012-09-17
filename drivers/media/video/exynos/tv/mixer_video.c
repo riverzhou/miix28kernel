@@ -466,6 +466,7 @@ static int mxr_g_ctrl(struct file *file, void *fh, struct v4l2_control *ctrl)
 
 	switch (ctrl->id) {
 	case V4L2_CID_TV_HPD_STATUS:
+	case V4L2_CID_TV_MAX_AUDIO_CHANNELS:
 		v4l2_subdev_call(to_outsd(mdev), core, g_ctrl, ctrl);
 		break;
 	default:

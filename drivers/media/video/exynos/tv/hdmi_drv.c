@@ -329,12 +329,25 @@ int hdmi_g_ctrl(struct v4l2_subdev *sd, struct v4l2_control *ctrl)
 {
 	struct hdmi_device *hdev = sd_to_hdmi_dev(sd);
 	struct device *dev = hdev->dev;
+	int ret = 0;
 
-	ctrl->value = switch_get_state(&hdev->hpd_switch);
-	dev_dbg(dev, "HDMI cable is %s\n", ctrl->value ?
-			"connected" : "disconnected");
+	switch (ctrl->id) {
+	case V4L2_CID_TV_HPD_STATUS:
+		ctrl->value = switch_get_state(&hdev->hpd_switch);
+		break;
+	case V4L2_CID_TV_GET_DVI_MODE:
+		ctrl->value = hdev->dvi_mode;
+		break;
+	case V4L2_CID_TV_MAX_AUDIO_CHANNELS:
+		ctrl->value = edid_max_audio_channels(hdev);
+		break;
+	default:
+		dev_err(dev, "invalid control id\n");
+		ret = -EINVAL;
+		break;
+	}
 
-	return 0;
+	return ret;
 }
 
 static int hdmi_s_dv_preset(struct v4l2_subdev *sd,

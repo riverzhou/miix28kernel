@@ -54,6 +54,7 @@ static struct edid_preset {
 
 static u32 preferred_preset = HDMI_DEFAULT_PRESET;
 static u32 edid_misc;
+static int max_audio_channels;
 
 static int edid_i2c_read(struct hdmi_device *hdev, u8 segment, u8 offset,
 						   u8 *buf, size_t len)
@@ -192,6 +193,7 @@ static void edid_use_default_preset(void)
 	for (i = 0; i < ARRAY_SIZE(edid_presets); i++)
 		edid_presets[i].supported =
 				(edid_presets[i].preset == preferred_preset);
+	max_audio_channels = 2;
 }
 
 int edid_update(struct hdmi_device *hdev)
@@ -200,6 +202,7 @@ int edid_update(struct hdmi_device *hdev)
 	struct edid_preset *preset;
 	bool first = true;
 	u8 *edid = NULL;
+	int channels_max = 0;
 	int ret = 0;
 	int i;
 
@@ -235,6 +238,23 @@ int edid_update(struct hdmi_device *hdev)
 	edid_misc = specs.misc;
 	pr_info("EDID: misc flags %08x", edid_misc);
 
+	for (i = 0; i < specs.audiodb_len; i++) {
+		if (specs.audiodb[i].format != FB_AUDIO_LPCM)
+			continue;
+		if (specs.audiodb[i].channel_count > channels_max)
+			channels_max = specs.audiodb[i].channel_count;
+	}
+
+	if (edid_misc & FB_MISC_HDMI) {
+		if (channels_max)
+			max_audio_channels = channels_max;
+		else
+			max_audio_channels = 2;
+	} else {
+		max_audio_channels = 0;
+	}
+	pr_info("EDID: Audio channels %d", max_audio_channels);
+
 out:
 	/* No supported preset found, use default */
 	if (first)
@@ -266,6 +286,11 @@ u32 edid_preferred_preset(struct hdmi_device *hdev)
 bool edid_supports_hdmi(struct hdmi_device *hdev)
 {
 	return edid_misc & FB_MISC_HDMI;
+}
+
+int edid_max_audio_channels(struct hdmi_device *hdev)
+{
+	return max_audio_channels;
 }
 
 static int __devinit edid_probe(struct i2c_client *client,
