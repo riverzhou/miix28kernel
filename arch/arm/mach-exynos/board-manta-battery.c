@@ -210,6 +210,7 @@ static void charger_gpio_init(void)
 
 	s3c_gpio_cfgpin(GPIO_USB_SEL1, S3C_GPIO_OUTPUT);
 	s3c_gpio_setpull(GPIO_USB_SEL1, S3C_GPIO_PULL_NONE);
+	s5p_gpio_set_pd_pull(GPIO_USB_SEL1, S5P_GPIO_PD_UPDOWN_DISABLE);
 	ret = gpio_request_one(GPIO_USB_SEL1, GPIOF_OUT_INIT_HIGH, "usb_sel1");
 	if (ret)
 		pr_err("%s: cannot request gpio%d\n", __func__, GPIO_USB_SEL1);
