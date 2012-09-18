@@ -135,6 +135,13 @@ static struct wm8994_drc_cfg wm1811_drc_cfgs[] = {
 	}
 };
 
+static struct wm8958_micd_rate manta_micd_rates[] = {
+	{ 32768,	true,	0,	1 },
+	{ 32768,	false,	0,	1 },
+	{ 44100 * 256,	true,	8,	8 },
+	{ 44100 * 256,	false,	8,	8 },
+};
+
 static struct wm8994_pdata wm1811_pdata = {
 	.gpio_defaults = {
 		[0] = WM8994_GP_FN_IRQ, /* GPIO1 IRQ output, CMOS mode */
@@ -161,6 +168,10 @@ static struct wm8994_pdata wm1811_pdata = {
 
 	.num_drc_cfgs = ARRAY_SIZE(wm1811_drc_cfgs),
 	.drc_cfgs = wm1811_drc_cfgs,
+
+	.num_micd_rates = ARRAY_SIZE(manta_micd_rates),
+	.micd_rates = manta_micd_rates,
+
 	/* Regulated mode at highest output voltage */
 	.micbias = {0x2f, 0x2f},
 	.micd_lvl_sel = 0xff,
