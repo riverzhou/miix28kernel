@@ -641,6 +641,10 @@ struct s5p_mfc_ctx {
 #define IS_TWOPORT(dev)		(dev->variant->port_num == 2 ? 1 : 0)
 #define IS_MFCV6(dev)		(dev->variant->version >= 0x60 ? 1 : 0)
 
+/* supported feature macros by F/W version */
+#define FW_HAS_BUS_RESET(dev)			((dev)->fw.date >= 0x120206)
+#define FW_HAS_VER_INFO(dev)			((dev)->fw.date >= 0x120328)
+
 struct s5p_mfc_fmt {
 	char *name;
 	u32 fourcc;

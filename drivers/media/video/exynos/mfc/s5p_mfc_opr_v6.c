@@ -109,7 +109,7 @@ int s5p_mfc_alloc_codec_buffers(struct s5p_mfc_ctx *ctx)
 	switch (ctx->codec_mode) {
 	case S5P_FIMV_CODEC_H264_DEC:
 	case S5P_FIMV_CODEC_H264_MVC_DEC:
-		if (dev->fw.date < 0x120206)
+		if (!FW_HAS_BUS_RESET(dev))
 			dec->mv_count = dec->total_dpb_count;
 		if (dev->fw.ver == 0x61)
 			ctx->scratch_buf_size =
