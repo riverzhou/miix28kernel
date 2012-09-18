@@ -16,6 +16,7 @@
 
 #include <linux/clk.h>
 #include <linux/delay.h>
+#include <linux/input.h>
 #include <linux/io.h>
 #include <linux/module.h>
 #include <linux/platform_device.h>
@@ -378,12 +379,43 @@ static int manta_late_probe(struct snd_soc_card *card)
 		dev_err(codec->dev, "Failed to disable S5P RP\n");
 
 	ret = snd_soc_jack_new(codec, "Headset",
-				SND_JACK_HEADSET | SND_JACK_MECHANICAL,
-				&machine->jack);
+				SND_JACK_HEADSET | SND_JACK_MECHANICAL |
+				SND_JACK_BTN_0 | SND_JACK_BTN_1 |
+				SND_JACK_BTN_2, &machine->jack);
 	if (ret) {
 		dev_err(codec->dev, "Failed to create jack: %d\n", ret);
 		return ret;
 	}
+
+	/*
+	 * Settings provided by Wolfson for Samsung-specific customization
+	 * of MICBIAS levels
+	 */
+	snd_soc_write(codec, 0x102, 0x3);
+	snd_soc_write(codec, 0xcb, 0x5151);
+	snd_soc_write(codec, 0xd3, 0x3f3f);
+	snd_soc_write(codec, 0xd4, 0x3f3f);
+	snd_soc_write(codec, 0xd5, 0x3f3f);
+	snd_soc_write(codec, 0xd6, 0x3226);
+	snd_soc_write(codec, 0x102, 0x0);
+	snd_soc_write(codec, 0xd1, 0x87);
+	snd_soc_write(codec, 0x3b, 0x9);
+	snd_soc_write(codec, 0x3c, 0x2);
+
+	ret = snd_jack_set_key(machine->jack.jack, SND_JACK_BTN_0,
+							KEY_MEDIA);
+	if (ret < 0)
+		dev_err(codec->dev, "Failed to set KEY_MEDIA: %d\n", ret);
+
+	ret = snd_jack_set_key(machine->jack.jack, SND_JACK_BTN_1,
+							KEY_VOLUMEDOWN);
+	if (ret < 0)
+		dev_err(codec->dev, "Failed to set KEY_VOLUMEDOWN: %d\n", ret);
+
+	ret = snd_jack_set_key(machine->jack.jack, SND_JACK_BTN_2,
+							KEY_VOLUMEUP);
+	if (ret < 0)
+		dev_err(codec->dev, "Failed to set KEY_VOLUMEUP: %d\n", ret);
 
 	wm8958_mic_detect(codec, &machine->jack, NULL, NULL);
 
