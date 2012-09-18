@@ -58,9 +58,9 @@
 	spin_unlock(&this->slock)
 
 enum fimc_is_frame_output {
-	FIMC_IS_FOUT_META,
-	FIMC_IS_FOUT_SCC,
-	FIMC_IS_FOUT_SCP,
+	FIMC_IS_FOUT_NONE,
+	FIMC_IS_FOUT_REQ,
+	FIMC_IS_FOUT_DONE,
 };
 
 enum fimc_is_frame_shot_state {
@@ -74,16 +74,25 @@ enum fimc_is_frame_shot_state {
 enum fimc_is_frame_reqeust {
 	/* SCC, SCP frame done,
 	   ISP meta done */
-	FIMC_IS_REQ_FRAME,
+	REQ_FRAME,
 	/* ISP shot done */
-	FIMC_IS_REQ_SHOT
+	REQ_SHOT
+};
+
+enum fimc_is_frame_init {
+	/* uninitialized memory */
+	FRAME_UNI_MEM,
+	/* initialized memory */
+	FRAME_INI_MEM,
+	/* configured memory */
+	FRAME_CFG_MEM
 };
 
 struct fimc_is_frame_shot {
 	struct list_head list;
 
-	/*sensor and isp use*/
-	bool init;
+	/* sensor and isp use */
+	enum fimc_is_frame_init init;
 	struct camera2_shot *shot;
 	struct camera2_shot_ext *shot_ext;
 	u32 kvaddr_shot;
@@ -91,21 +100,27 @@ struct fimc_is_frame_shot {
 	u32 cookie_shot;
 	u32 shot_size;
 
-	/*stream use*/
+	/* stream use */
 	struct camera2_stream *stream;
 	u32 stream_size;
 
+	/* common use */
 	u32 planes;
 	u32 kvaddr_buffer[4];
 	u32 dvaddr_buffer[4];
 
+	/* time measure */
 	struct timeval *tzone;
 
+	/* internal use */
 	u32 state;
 	u32 fcount;
 	u32 index;
 	unsigned long req_flag;
 	struct vb2_buffer *vb;
+
+	enum fimc_is_frame_output scc_out;
+	enum fimc_is_frame_output scp_out;
 
 	/* time measure internally */
 	struct timeval			time_queued;

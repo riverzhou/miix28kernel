@@ -46,7 +46,6 @@
 #include <mach/regs-pmu.h>
 #include <asm/delay.h>
 #include <kbase/src/platform/mali_kbase_platform.h>
-#include <kbase/src/platform/mali_kbase_runtime_pm.h>
 #include <kbase/src/platform/mali_kbase_dvfs.h>
 
 #include <kbase/src/common/mali_kbase_gator.h>
@@ -131,6 +130,7 @@ int kbase_platform_clock_on(struct kbase_device *kbdev)
 	{
 		(void) clk_enable(platform->sclk_g3d);
 	}
+	clk_g3d_status = 1;
 
 	return 0;
 }
@@ -156,6 +156,8 @@ int kbase_platform_clock_off(struct kbase_device *kbdev)
 	{
 		(void)clk_disable(platform->sclk_g3d);
 	}
+	clk_g3d_status = 0;
+
 	return 0;
 }
 
@@ -246,7 +248,7 @@ int kbase_platform_cmu_pmu_control(struct kbase_device *kbdev, int control)
 			panic("failed to turn off sclk_g3d\n");
 
 		platform->cmu_pmu_status = 0;
-#if MALI_RTPM_DEBUG
+#ifdef MALI_RTPM_DEBUG
 		printk( KERN_ERR "3D cmu_pmu_control - off\n" );
 #endif /* MALI_RTPM_DEBUG */
 	}
@@ -265,7 +267,7 @@ int kbase_platform_cmu_pmu_control(struct kbase_device *kbdev, int control)
 			panic("failed to turn on g3d power\n");
 
 		platform->cmu_pmu_status = 1;
-#if MALI_RTPM_DEBUG
+#ifdef MALI_RTPM_DEBUG
 		printk( KERN_ERR "3D cmu_pmu_control - on\n");
 #endif /* MALI_RTPM_DEBUG */
 	}
@@ -642,7 +644,7 @@ static ssize_t show_vol(struct device *dev, struct device_attribute *attr, char 
 		return -ENODEV;
 
 	kbase_platform_get_voltage(dev, &vol);
-	ret += snprintf(buf+ret, PAGE_SIZE-ret, "Current operating voltage for mali t6xx = %d", vol);
+	ret += snprintf(buf+ret, PAGE_SIZE-ret, "Current operating voltage for mali t6xx = %d, 0x%x", vol, __raw_readl(EXYNOS5_G3D_STATUS));
 
 	if (ret < PAGE_SIZE - 1)
 		ret += snprintf(buf+ret, PAGE_SIZE-ret, "\n");
@@ -957,55 +959,7 @@ static ssize_t set_asv(struct device *dev, struct device_attribute *attr, const 
 	return count;
 }
 
-extern int prev_level;
-extern long long prev_time;
-extern mali_time_in_state time_in_state[MALI_DVFS_STEP];
-static ssize_t show_time_in_state(struct device *dev, struct device_attribute *attr, char *buf)
-{
-	struct kbase_device *kbdev;
-	ssize_t ret = 0;
-	int i;
-	unsigned long long current_time;
 
-	kbdev = dev_get_drvdata(dev);
-
-
-	if (!kbdev)
-		return -ENODEV;
-
-	current_time = get_jiffies_64();
-#ifdef cputime64_add
-	time_in_state[prev_level].time = cputime64_add(time_in_state[prev_level].time, cputime_sub(current_time, prev_time));
-#endif
-	prev_time = current_time;
-
-	for(i = 0 ; i < MALI_DVFS_STEP ; i++) {
-		ret += snprintf(buf+ret, PAGE_SIZE-ret, "%d %llu\n", time_in_state[i].freq, time_in_state[i].time);
-	}
-
-	if (ret < PAGE_SIZE - 1)
-		ret += snprintf(buf+ret, PAGE_SIZE-ret, "\n");
-	else
-	{
-		buf[PAGE_SIZE-2] = '\n';
-		buf[PAGE_SIZE-1] = '\0';
-		ret = PAGE_SIZE-1;
-	}
-
-	return ret;
-}
-
-static ssize_t set_time_in_state(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
-{
-	int i;
-
-	for(i = 0 ; i < MALI_DVFS_STEP ; i++) {
-		time_in_state[i].time = 0;
-	}
-
-	printk("time_in_state value is reset complete.\n");
-	return count;
-}
 /** The sysfs file @c clock, fbdev.
  *
  * This is used for obtaining information about the mali t6xx operating clock & framebuffer address,
@@ -1116,6 +1070,13 @@ mali_error kbase_platform_init(struct kbase_device *kbdev)
 	kbdev->platform_context = (void *) platform;
 
 	platform->cmu_pmu_status = 0;
+#ifdef CONFIG_MALI_T6XX_DVFS
+	platform->utilisation = 0;
+	platform->time_busy = 0;
+	platform->time_idle = 0;
+	platform->time_tick = 0;
+#endif
+
 	spin_lock_init(&platform->cmu_pmu_lock);
 
 	if(kbase_platform_power_clock_init(kbdev))

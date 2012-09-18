@@ -268,6 +268,11 @@ static int exynos5_clk_ip_mfc_ctrl(struct clk *clk, int enable)
 	return s5p_gatectrl(EXYNOS5_CLKGATE_IP_MFC, clk, enable);
 }
 
+static int exynos5_clk_ip_g3d_ctrl(struct clk *clk, int enable)
+{
+	return s5p_gatectrl(EXYNOS5_CLKGATE_IP_G3D, clk, enable);
+}
+
 static int exynos5_clk_ip_peric_ctrl(struct clk *clk, int enable)
 {
 	return s5p_gatectrl(EXYNOS5_CLKGATE_IP_PERIC, clk, enable);
@@ -1004,6 +1009,11 @@ static struct clk exynos5_init_clocks_off[] = {
 		.devname	= "s5p-mfc",
 		.enable		= exynos5_clk_ip_mfc_ctrl,
 		.ctrlbit	= ((1 << 4) | (1 << 3) | (1 << 0)),
+	}, {
+		.name		= "g3d",
+		.devname	= "mali.0",
+		.enable		= exynos5_clk_ip_g3d_ctrl,
+		.ctrlbit	= ((1 << 1) | (1 << 0)),
 	}, {
 		.name		= "isp0",
 		.devname	= FIMC_IS_MODULE_NAME,
@@ -1845,7 +1855,7 @@ static struct clksrc_clk exynos5_clksrcs[] = {
 	}, {
 		.clk	= {
 			.name		= "sclk_g3d",
-			.devname	= "mali-t604.0",
+			.devname	= "mali.0",
 			.enable		= exynos5_clk_block_ctrl,
 			.ctrlbit	= (1 << 1),
 		},
@@ -1872,6 +1882,15 @@ static struct clksrc_clk exynos5_clksrcs[] = {
 		.sources = &exynos5_clkset_group,
 		.reg_src = { .reg = EXYNOS5_CLKSRC_GSCL, .shift = 28, .size = 4 },
 		.reg_div = { .reg = EXYNOS5_CLKDIV_GSCL, .shift = 28, .size = 4 },
+	}, {
+		.clk	= {
+			.name		= "sclk_bayer",
+			.enable		= exynos5_clksrc_mask_gscl_ctrl,
+			.ctrlbit	= (1 << 12),
+		},
+		.sources = &exynos5_clkset_group,
+		.reg_src = { .reg = EXYNOS5_CLKSRC_GSCL, .shift = 12, .size = 4 },
+		.reg_div = { .reg = EXYNOS5_CLKDIV_GSCL, .shift = 12, .size = 4 },
 	}, {
 		.clk	= {
 			.name		= "sclk_cam0",
