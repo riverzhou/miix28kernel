@@ -514,6 +514,8 @@ struct s5p_mfc_dec {
 	int sei_parse;
 	int eos_tag;
 
+	int internal_dpb;
+
 	/* For 6.x */
 	int remained;
 };
@@ -644,6 +646,8 @@ struct s5p_mfc_ctx {
 /* supported feature macros by F/W version */
 #define FW_HAS_BUS_RESET(dev)			((dev)->fw.date >= 0x120206)
 #define FW_HAS_VER_INFO(dev)			((dev)->fw.date >= 0x120328)
+#define FW_HAS_INITBUF_TILE_MODE(dev)		((dev)->fw.date >= 0x120629)
+#define FW_HAS_INITBUF_LOOP_FILTER(dev)		((dev)->fw.date >= 0x120831)
 
 struct s5p_mfc_fmt {
 	char *name;

@@ -460,6 +460,7 @@ int s5p_mfc_set_dec_frame_buffer(struct s5p_mfc_ctx *ctx)
 	struct s5p_mfc_buf *buf;
 	struct list_head *buf_queue;
 	unsigned char *dpb_vir;
+	unsigned int reg = 0;
 
 	buf_addr1 = ctx->port_a_phys;
 	buf_size1 = ctx->port_a_size;
@@ -480,6 +481,26 @@ int s5p_mfc_set_dec_frame_buffer(struct s5p_mfc_ctx *ctx)
 	if (ctx->codec_mode == S5P_FIMV_CODEC_H264_DEC ||
 			ctx->codec_mode == S5P_FIMV_CODEC_H264_MVC_DEC)
 		WRITEL(ctx->mv_size, S5P_FIMV_D_MV_BUFFER_SIZE);
+
+	if ((ctx->codec_mode == S5P_FIMV_CODEC_MPEG4_DEC) &&
+			FW_HAS_INITBUF_LOOP_FILTER(dev)) {
+		if (dec->loop_filter_mpeg4 &&
+				(dec->total_dpb_count >=
+					 ctx->dpb_count + NUM_MPEG4_LF_BUF)) {
+			if (!dec->internal_dpb) {
+				dec->internal_dpb = NUM_MPEG4_LF_BUF;
+				ctx->dpb_count += dec->internal_dpb;
+			}
+			reg |= (1 << S5P_FIMV_D_OPT_LF_CTRL_SHIFT);
+		} else if (dec->loop_filter_mpeg4) {
+			dec->loop_filter_mpeg4 = 0;
+			mfc_info("failed to enable loop filter\n");
+		}
+	}
+	if ((ctx->dst_fmt->fourcc == V4L2_PIX_FMT_NV12MT_16X16) &&
+			FW_HAS_INITBUF_TILE_MODE(dev))
+		reg |= (0x1 << S5P_FIMV_D_OPT_TILE_MODE_SHIFT);
+	WRITEL(reg, S5P_FIMV_D_INIT_BUFFER_OPTIONS);
 
 	frame_size = ctx->luma_size;
 	frame_size_ch = ctx->chroma_size;
@@ -1307,11 +1328,13 @@ int s5p_mfc_init_decode(struct s5p_mfc_ctx *ctx)
 		WRITEL(dec->display_delay, S5P_FIMV_D_DISPLAY_DELAY);
 	}
 	/* Setup loop filter, for decoding this is only valid for MPEG4 */
-	if (ctx->codec_mode == S5P_FIMV_CODEC_MPEG4_DEC) {
+	if ((ctx->codec_mode == S5P_FIMV_CODEC_MPEG4_DEC) &&
+			!FW_HAS_INITBUF_LOOP_FILTER(dev)) {
 		mfc_debug(2, "Set loop filter to: %d\n", dec->loop_filter_mpeg4);
 		reg |= (dec->loop_filter_mpeg4 << S5P_FIMV_D_OPT_LF_CTRL_SHIFT);
 	}
-	if (ctx->dst_fmt->fourcc == V4L2_PIX_FMT_NV12MT_16X16)
+	if ((ctx->dst_fmt->fourcc == V4L2_PIX_FMT_NV12MT_16X16) &&
+			!FW_HAS_INITBUF_TILE_MODE(dev))
 		reg |= (0x1 << S5P_FIMV_D_OPT_TILE_MODE_SHIFT);
 
 	WRITEL(reg, S5P_FIMV_D_DEC_OPTIONS);
