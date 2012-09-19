@@ -3850,8 +3850,8 @@ static int wm8994_codec_probe(struct snd_soc_codec *codec)
 		case 1:
 		case 2:
 		case 3:
-			wm8994->hubs.dcs_codes_l = -9;
-			wm8994->hubs.dcs_codes_r = -7;
+			wm8994->hubs.dcs_codes_l = -12;
+			wm8994->hubs.dcs_codes_r = -8;
 			break;
 		default:
 			break;
