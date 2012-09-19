@@ -434,17 +434,12 @@ exynos5250_set_volt(enum asv_type_id target_type, unsigned int target_freq,
 void __init exynos5_manta_adjust_mif_asv_table(void)
 {
 	int i;
-	unsigned int adj_mif_volt[] = { 1175000, 1125000, 1100000, 1037500 };
 
 	if (exynos5_manta_get_revision() > MANTA_REV_DOGFOOD02)
 		return;
 
-	if (exynos5_manta_get_revision() <= MANTA_REV_DOGFOOD01)
-		for (i = 0; i < ARRAY_SIZE(adj_mif_volt); i++)
-			adj_mif_volt[i] = 0;
-
-	for (i = 0; i < ARRAY_SIZE(adj_mif_volt); i++)
-		exynos5250_set_volt(ID_MIF, 800000, i, adj_mif_volt[i]);
+	for (i = 0; i < 4; i++)
+		exynos5250_set_volt(ID_MIF, 800000, i, 0);
 }
 
 void __init exynos5_manta_power_init(void)
