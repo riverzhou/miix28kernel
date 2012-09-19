@@ -928,6 +928,12 @@ void __init exynos5_manta_pogo_init(void)
 
 	s3c_gpio_cfgpin(GPIO_POGO_SEL1, S3C_GPIO_OUTPUT);
 	s3c_gpio_setpull(GPIO_POGO_SEL1, S3C_GPIO_PULL_NONE);
+	s5p_gpio_set_pd_cfg(GPIO_POGO_SEL1, S5P_GPIO_PD_PREV_STATE);
+	s5p_gpio_set_pd_pull(GPIO_POGO_SEL1, S5P_GPIO_PD_UPDOWN_DISABLE);
+
+	s5p_gpio_set_pd_cfg(GPIO_TA_CHECK_SEL, S5P_GPIO_PD_PREV_STATE);
+	s5p_gpio_set_pd_pull(GPIO_TA_CHECK_SEL, S5P_GPIO_PD_UPDOWN_DISABLE);
+
 	ret = gpio_request_array(manta_pogo_gpios,
 				 ARRAY_SIZE(manta_pogo_gpios));
 	if (ret)
