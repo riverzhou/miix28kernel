@@ -266,6 +266,7 @@ struct mxt_finger {
 	int y;
 	int area;
 	int pressure;
+	int vector;
 };
 
 struct mxt_reportid {
@@ -720,6 +721,8 @@ static void mxt_input_report(struct mxt_data *data)
 					finger[id].y);
 			input_report_abs(input_dev, ABS_MT_PRESSURE,
 					finger[id].pressure);
+			input_report_abs(input_dev, ABS_MT_ORIENTATION,
+					finger[id].vector);
 		} else {
 			finger[id].status = 0;
 		}
@@ -738,6 +741,7 @@ static void mxt_input_touchevent(struct mxt_data *data,
 	int y;
 	int area;
 	int pressure;
+	int vector;
 
 	if (id >= MXT_MAX_FINGER) {
 		dev_err(dev, "MXT_MAX_FINGER exceeded!\n");
@@ -773,6 +777,7 @@ static void mxt_input_touchevent(struct mxt_data *data,
 
 	area = message->message[4];
 	pressure = message->message[5];
+	vector = message->message[6];
 
 	dev_dbg(dev, "[%d] %s x: %d, y: %d, area: %d\n", id,
 		status & MXT_MOVE ? "moved" : "pressed",
@@ -784,6 +789,7 @@ static void mxt_input_touchevent(struct mxt_data *data,
 	finger[id].y = y;
 	finger[id].area = area;
 	finger[id].pressure = pressure;
+	finger[id].vector = vector;
 
 	mxt_input_report(data);
 }
@@ -1969,6 +1975,8 @@ static int __devinit mxt_probe(struct i2c_client *client,
 	input_set_abs_params(input_dev, ABS_MT_POSITION_Y,
 			     0, data->max_y, 0, 0);
 	input_set_abs_params(input_dev, ABS_MT_PRESSURE,
+			     0, 255, 0, 0);
+	input_set_abs_params(input_dev, ABS_MT_ORIENTATION,
 			     0, 255, 0, 0);
 
 	input_set_drvdata(input_dev, data);
