@@ -238,7 +238,7 @@ static int dock_send_bits(struct dock_state *s, u32 data, int count, int period)
 {
 	u32 t, t0, to;
 
-	dock_out2(s->level);
+	dock_out(s->level);
 	t = to = 0;
 	t0 = pogo_read_fast_timer();
 
@@ -305,8 +305,6 @@ static int dock_command(struct dock_state *s, u16 cmd, int len, int retlen)
 	int err = -1;
 	unsigned long flags;
 
-	dock_out(s->level = 0);
-
 	mfm = mfm_encode(data, len, false);
 	count = len * 2;
 
@@ -323,8 +321,10 @@ static int dock_command(struct dock_state *s, u16 cmd, int len, int retlen)
 			pr_debug("%s: response sync error\n", __func__);
 			ret = -1;
 		}
-	}
-	dock_irq();
+		dock_irq();
+	} else if (!s->level)
+		dock_irq();
+
 	local_irq_restore(flags);
 
 	udelay(tx < 0 ? TX_ERR_DELAY_USEC(s->mfm_delay_ns) : CMD_DELAY_USEC);
@@ -361,6 +361,12 @@ static int dock_command_retry(struct dock_state *s, u16 cmd, size_t len,
 			usleep_range(10000, 11000);
 	}
 	s->dock_connected_unknown = true;
+	if (s->level) {
+		/* put the line low so we can receive dock interrupts */
+		dock_out(s->level = false);
+		udelay(1);
+		dock_irq();
+	}
 	return -EIO;
 }
 
