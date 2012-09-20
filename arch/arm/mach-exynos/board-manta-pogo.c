@@ -118,7 +118,7 @@ struct dock_state {
 	struct work_struct dock_work;
 	struct wake_lock wake_lock;
 
-	spinlock_t debounce_lock;
+	wait_queue_head_t wait;
 	int dock_pd_irq;
 	bool debounce_pending;
 	int spdif_mux_state;
@@ -126,13 +126,18 @@ struct dock_state {
 	struct timer_list debounce_timer;
 	struct work_struct debounce_work;
 	struct wake_lock debounce_wake_lock;
+
+	struct mutex ta_check_lock;
+	int ta_check_wait;
+	bool ta_check_mode;
 };
 
 static struct dock_state ds = {
 	.lock		= __MUTEX_INITIALIZER(ds.lock),
 	.mfm_delay_ns	= MFM_DELAY_NS_DEFAULT,
-	.debounce_lock	= __SPIN_LOCK_INITIALIZER(ds.spdif_lock),
+	.wait		= __WAIT_QUEUE_HEAD_INITIALIZER(ds.wait),
 	.debounce_state	= POGO_DEBOUNCE_UNDOCKED,
+	.ta_check_lock	= __MUTEX_INITIALIZER(ds.ta_check_lock),
 };
 
 static struct gpio manta_pogo_gpios[] = {
@@ -429,9 +434,15 @@ static int dock_write_multi(struct dock_state *s, int addr, u8 *data,
 	return -EIO;
 }
 
-void manta_pogo_switch_set(int value)
+static void manta_pogo_spdif_config(bool charger_detect_mode)
 {
-	gpio_set_value(GPIO_POGO_SEL1, value);
+	if (charger_detect_mode) {
+		s3c_gpio_cfgpin(GPIO_POGO_SPDIF, S3C_GPIO_INPUT);
+		s3c_gpio_setpull(GPIO_POGO_SPDIF, S3C_GPIO_PULL_NONE);
+	} else {
+		s3c_gpio_cfgpin(GPIO_POGO_SPDIF, S3C_GPIO_SFN(0x4));
+		s3c_gpio_setpull(GPIO_POGO_SPDIF, S3C_GPIO_PULL_NONE);
+	}
 }
 
 static void pogo_dock_pd_interrupt_locked(int irq, void *data)
@@ -480,14 +491,77 @@ static void dock_set_audio_switch(bool audio_on)
 	struct dock_state *s = &ds;
 	unsigned long flags;
 
-	spin_lock_irqsave(&s->debounce_lock, flags);
+	spin_lock_irqsave(&s->wait.lock, flags);
 	dock_spdif_switch_set(audio_on);
 	if (audio_on && s->debounce_state == POGO_DEBOUNCE_UNDOCKED)
 		pogo_dock_pd_interrupt_locked(s->dock_pd_irq, s);
-	spin_unlock_irqrestore(&s->debounce_lock, flags);
+	spin_unlock_irqrestore(&s->wait.lock, flags);
 
 	switch_set_state(&usb_audio_switch, audio_on ?
 			POGO_DIGITAL_AUDIO : POGO_NO_AUDIO);
+}
+
+int manta_pogo_charge_detect_start(bool spdif_mode_and_gpio_in)
+{
+	struct dock_state *s = &ds;
+	unsigned long flags;
+	int ret = 0;
+
+	pr_debug("%s: %d\n", __func__, spdif_mode_and_gpio_in);
+
+	mutex_lock(&s->ta_check_lock);
+
+	spin_lock_irqsave(&s->wait.lock, flags);
+
+	if (s->debounce_state == POGO_DEBOUNCE_UNSTABLE ||
+		s->debounce_state == POGO_DEBOUNCE_WAIT_STABLE) {
+
+		s->ta_check_wait = 10;
+		ret = wait_event_interruptible_locked(s->wait,
+			s->debounce_state == POGO_DEBOUNCE_DOCKED ||
+			s->debounce_state == POGO_DEBOUNCE_UNDOCKED ||
+			!s->ta_check_wait);
+
+		if (!s->ta_check_wait || ret) {
+			mutex_unlock(&s->ta_check_lock);
+			ret = -EBUSY;
+			goto done;
+		}
+	}
+
+	s->ta_check_mode = true;
+	s->ta_check_wait = 0;
+
+	if (spdif_mode_and_gpio_in)
+		manta_pogo_spdif_config(true);
+	dock_spdif_switch_set(spdif_mode_and_gpio_in);
+	gpio_set_value(GPIO_POGO_SEL1, 0);
+done:
+	spin_unlock_irqrestore(&s->wait.lock, flags);
+
+	return ret;
+}
+
+void manta_pogo_charge_detect_end(void)
+{
+	struct dock_state *s = &ds;
+	unsigned long flags;
+
+	pr_debug("%s\n", __func__);
+
+	BUG_ON(!s->ta_check_mode);
+
+	spin_lock_irqsave(&s->wait.lock, flags);
+
+	s->ta_check_mode = false;
+
+	gpio_set_value(GPIO_POGO_SEL1, 1);
+	dock_spdif_switch_set(false);
+	manta_pogo_spdif_config(false);
+
+	spin_unlock_irqrestore(&s->wait.lock, flags);
+
+	mutex_unlock(&s->ta_check_lock);
 }
 
 static int dock_acquire(struct dock_state *s, bool check_docked)
@@ -500,8 +574,6 @@ static int dock_acquire(struct dock_state *s, bool check_docked)
 		mutex_unlock(&s->lock);
 		return -ENODEV;
 	}
-
-	manta_pogo_switch_set(1);
 
 	pr_debug("%s: acquired dock\n", __func__);
 
@@ -632,18 +704,19 @@ static irqreturn_t pogo_dock_pd_interrupt(int irq, void *data)
 	struct dock_state *s = data;
 	unsigned long flags;
 
-	pr_debug("%s: irq %d, state %d, gpio %d, mux %d\n",
+	pr_debug("%s: irq %d, state %d, gpio %d, mux %d, ta_mode %d\n",
 		__func__, irq, s->debounce_state,
-		gpio_get_value(GPIO_DOCK_PD_INT), s->spdif_mux_state);
+		gpio_get_value(GPIO_DOCK_PD_INT), s->spdif_mux_state,
+		s->ta_check_mode);
 
-	spin_lock_irqsave(&s->debounce_lock, flags);
+	spin_lock_irqsave(&s->wait.lock, flags);
 
-	if (s->spdif_mux_state)
+	if (s->spdif_mux_state || s->ta_check_mode)
 		s->debounce_pending = true;
 	else
 		pogo_dock_pd_interrupt_locked(irq, data);
 
-	spin_unlock_irqrestore(&s->debounce_lock, flags);
+	spin_unlock_irqrestore(&s->wait.lock, flags);
 
 	return IRQ_HANDLED;
 }
@@ -656,7 +729,7 @@ static void pogo_debounce_timer(unsigned long data)
 	pr_debug("%s: state %d, gpio %d\n", __func__, s->debounce_state,
 		gpio_get_value(GPIO_DOCK_PD_INT));
 
-	spin_lock_irqsave(&s->debounce_lock, flags);
+	spin_lock_irqsave(&s->wait.lock, flags);
 
 	switch (s->debounce_state) {
 	case POGO_DEBOUNCE_UNSTABLE:
@@ -671,18 +744,26 @@ static void pogo_debounce_timer(unsigned long data)
 		enable_irq(s->dock_pd_irq);
 		mod_timer(&s->debounce_timer,
 				jiffies + msecs_to_jiffies(DEBOUNCE_DELAY_MS));
+
+		if (s->ta_check_wait && !(--s->ta_check_wait))
+			wake_up_locked(&s->wait);
+
 		break;
 	case POGO_DEBOUNCE_WAIT_STABLE:
 		s->debounce_state = (s->spdif_mux_state ||
 			gpio_get_value(GPIO_DOCK_PD_INT)) ?
 			POGO_DEBOUNCE_DOCKED : POGO_DEBOUNCE_UNDOCKED;
+
+		if (s->ta_check_wait)
+			wake_up_locked(&s->wait);
+
 		queue_work(s->dock_wq, &s->debounce_work);
 		break;
 	default:
 		break;
 	}
 
-	spin_unlock_irqrestore(&s->debounce_lock, flags);
+	spin_unlock_irqrestore(&s->wait.lock, flags);
 }
 
 static void debounce_work_proc(struct work_struct *work)
@@ -692,9 +773,9 @@ static void debounce_work_proc(struct work_struct *work)
 	unsigned long flags;
 	int state;
 
-	spin_lock_irqsave(&s->debounce_lock, flags);
+	spin_lock_irqsave(&s->wait.lock, flags);
 	state = s->debounce_state;
-	spin_unlock_irqrestore(&s->debounce_lock, flags);
+	spin_unlock_irqrestore(&s->wait.lock, flags);
 
 	switch (state) {
 	case POGO_DEBOUNCE_DOCKED:
@@ -707,10 +788,10 @@ static void debounce_work_proc(struct work_struct *work)
 		break;
 	}
 
-	spin_lock_irqsave(&s->debounce_lock, flags);
+	spin_lock_irqsave(&s->wait.lock, flags);
 	if (state == s->debounce_state)
 		wake_unlock(&s->debounce_wake_lock);
-	spin_unlock_irqrestore(&s->debounce_lock, flags);
+	spin_unlock_irqrestore(&s->wait.lock, flags);
 }
 
 #ifdef DEBUG
@@ -825,6 +906,12 @@ void __init exynos5_manta_pogo_init(void)
 				 ARRAY_SIZE(manta_pogo_gpios));
 	if (ret)
 		pr_err("%s: cannot request gpios\n", __func__);
+
+	ret = gpio_request(GPIO_POGO_SPDIF, "pogo_spdif");
+	if (ret)
+		pr_err("%s: cannot request gpio POGO_SPDIF\n", __func__);
+
+	manta_pogo_spdif_config(false);
 
 	if (switch_dev_register(&dock_switch) == 0) {
 		ret = device_create_file(dock_switch.dev, &dev_attr_dock_id);

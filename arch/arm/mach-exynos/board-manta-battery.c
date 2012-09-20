@@ -53,7 +53,6 @@
 static int gpio_TA_nCHG = GPIO_TA_nCHG_ALPHA;
 
 /* Temporary, need pogo driver API to share these */
-#define GPIO_TA_CHECK_SEL	EXYNOS5_GPD1(5)
 #define GPIO_POGO_SPDIF		EXYNOS5_GPB1(0)
 
 enum charge_connector {
@@ -187,18 +186,6 @@ static void charger_gpio_init(void)
 					S5P_GPIO_PD_UPDOWN_DISABLE);
 	}
 
-#if 1 /* temporary, move to pogo driver */
-	if (hw_rev >= MANTA_REV_DOGFOOD02) {
-		s3c_gpio_cfgpin(GPIO_TA_CHECK_SEL, S3C_GPIO_OUTPUT);
-		s3c_gpio_setpull(GPIO_TA_CHECK_SEL, S3C_GPIO_PULL_NONE);
-		ret = gpio_request_one(GPIO_TA_CHECK_SEL, GPIOF_OUT_INIT_LOW,
-				       "ta_check_sel");
-		if (ret)
-			pr_err("%s: cannot request gpio%d\n", __func__,
-			       GPIO_TA_CHECK_SEL);
-	}
-#endif /* temporary */
-
 	s3c_gpio_cfgpin(gpio_TA_nCHG, S3C_GPIO_INPUT);
 	s3c_gpio_setpull(gpio_TA_nCHG, hw_rev >= MANTA_REV_PRE_ALPHA ?
 			 S3C_GPIO_PULL_NONE : S3C_GPIO_PULL_UP);
@@ -223,24 +210,19 @@ static int read_ta_adc(enum charge_connector conn, int ta_check_sel)
 	int adc_total = 0;
 	int i, j;
 	int ret;
-	int hw_rev = exynos5_manta_get_revision();
 
 	mutex_lock(&manta_bat_adc_lock);
 
 	/* switch to check adc */
 	if (conn == CHARGE_CONNECTOR_USB)
 		gpio_set_value(GPIO_USB_SEL1, 0);
-	else
-		manta_pogo_switch_set(0);
-
-	/* temporary, need pogo driver API */
-	if (hw_rev >= MANTA_REV_DOGFOOD02) {
-		if (ta_check_sel) {
-			s3c_gpio_cfgpin(GPIO_POGO_SPDIF, S3C_GPIO_INPUT);
-			s3c_gpio_setpull(GPIO_POGO_SPDIF, S3C_GPIO_PULL_NONE);
+	else {
+		ret = manta_pogo_charge_detect_start(ta_check_sel);
+		if (ret < 0) {
+			pr_err("%s: Failed to start pogo charger detection\n",
+				__func__);
+			goto fail_gpio;
 		}
-
-		gpio_set_value(GPIO_TA_CHECK_SEL, ta_check_sel);
 	}
 
 	msleep(100);
@@ -290,15 +272,9 @@ out:
 	if (conn == CHARGE_CONNECTOR_USB)
 		gpio_set_value(GPIO_USB_SEL1, 1);
 	else
-		manta_pogo_switch_set(1);
+		manta_pogo_charge_detect_end();
 
-	/* temporary, need pogo driver API */
-	if (hw_rev >= MANTA_REV_DOGFOOD02) {
-		gpio_set_value(GPIO_TA_CHECK_SEL, 1); /* TODO: restore */
-		if (ta_check_sel)
-			s3c_gpio_cfgpin(GPIO_POGO_SPDIF, S3C_GPIO_SFN(0x4));
-	}
-
+fail_gpio:
 	mutex_unlock(&manta_bat_adc_lock);
 	return ret;
 }
