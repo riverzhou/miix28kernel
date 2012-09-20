@@ -609,6 +609,13 @@ static int __devexit as3668_remove(struct i2c_client *client)
 	return 0;
 }
 
+static void as3668_shutdown(struct i2c_client *client)
+{
+	struct as3668_led *led = i2c_get_clientdata(client);
+
+	as3668_set_led_brightness(&led->ldev, LED_OFF);
+}
+
 static const struct i2c_device_id as3668_id[] = {
 	{"as3668", 0},
 	{}
@@ -622,6 +629,7 @@ static struct i2c_driver as3668_driver = {
 	},
 	.probe = as3668_probe,
 	.remove = __devexit_p(as3668_remove),
+	.shutdown = as3668_shutdown,
 	.id_table = as3668_id,
 };
 
