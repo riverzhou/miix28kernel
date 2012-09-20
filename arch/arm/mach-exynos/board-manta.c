@@ -53,6 +53,7 @@
 #include <mach/dwmci.h>
 #include <mach/ohci.h>
 #include <mach/tmu.h>
+#include <mach/exynos5_bus.h>
 
 #include "../../../drivers/staging/android/ram_console.h"
 #include "board-manta.h"
@@ -512,8 +513,13 @@ static struct dw_mci_board exynos_dwmci0_pdata __initdata = {
 };
 
 /* DEVFREQ controlling mif */
+static struct exynos5_bus_mif_platform_data manta_bus_mif_platform_data;
+
 static struct platform_device exynos_bus_mif_devfreq = {
 	.name                   = "exynos5-bus-mif",
+	.dev = {
+		.platform_data	= &manta_bus_mif_platform_data,
+	},
 };
 
 /* DEVFREQ controlling int */
@@ -678,6 +684,10 @@ static void __init exynos5_manta_ohci_init(void)
 static void __init manta_machine_init(void)
 {
 	manta_init_hw_rev();
+
+	if (manta_hw_rev <= MANTA_REV_DOGFOOD02)
+		manta_bus_mif_platform_data.max_freq = 667000;
+
 	exynos_serial_debug_init(2, 0);
 
 	manta_sysmmu_init();
