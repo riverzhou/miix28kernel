@@ -676,6 +676,7 @@ enum manta_charge_source manta_pogo_set_vbus(bool status)
 	} else {
 		dock_in();
 		dock_set_audio_switch(false);
+		s->powered_dock_present = false;
 		s->dock_connected_unknown = false;
 		charge_source = MANTA_CHARGE_SOURCE_NONE;
 	}
