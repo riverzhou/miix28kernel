@@ -24,6 +24,7 @@
 #include <linux/ktime.h>
 #include <linux/spinlock.h>
 #include <linux/device.h>
+#include <linux/cpufreq.h>
 
 #include <linux/workqueue.h>
 #include <linux/delay.h>
@@ -80,6 +81,8 @@
 
 #define DEBOUNCE_DELAY_MS		250
 
+#define DOCK_CPU_FREQ_MIN		400000
+
 /* GPIO configuration */
 #define GPIO_POGO_DATA_BETA		EXYNOS5_GPB0(0)
 #define GPIO_POGO_DATA_POST_BETA	EXYNOS5_GPX0(5)
@@ -131,6 +134,8 @@ struct dock_state {
 	struct mutex ta_check_lock;
 	int ta_check_wait;
 	bool ta_check_mode;
+
+	unsigned int cpufreq_min;
 };
 
 static struct dock_state ds = {
@@ -160,6 +165,17 @@ static struct gpio manta_pogo_gpios[] = {
 static u32 pogo_read_fast_timer(void)
 {
 	return sched_clock();
+}
+
+static void pogo_set_min_cpu_freq(unsigned int khz)
+{
+	struct dock_state *s = &ds;
+	int i;
+
+	s->cpufreq_min = khz;
+
+	for_each_online_cpu(i)
+		cpufreq_update_policy(i);
 }
 
 static u16 make_cmd(int id, bool write, int data)
@@ -305,6 +321,9 @@ static int dock_command(struct dock_state *s, u16 cmd, int len, int retlen)
 	int tx, ret;
 	int err = -1;
 	unsigned long flags;
+
+	if (!s->cpufreq_min)
+		pogo_set_min_cpu_freq(DOCK_CPU_FREQ_MIN);
 
 	mfm = mfm_encode(data, len, false);
 	count = len * 2;
@@ -595,6 +614,9 @@ static int dock_acquire(struct dock_state *s, bool check_docked)
 
 static void dock_release(struct dock_state *s)
 {
+	if (s->cpufreq_min)
+		pogo_set_min_cpu_freq(0);
+
 	mutex_unlock(&s->lock);
 	pr_debug("%s: released dock\n", __func__);
 }
@@ -914,6 +936,29 @@ fail:
 }
 static DEVICE_ATTR(dock_ver, S_IRUGO, dev_attr_dock_ver_show, NULL);
 
+static int pogo_cpufreq_notifier(struct notifier_block *nb,
+				 unsigned long event, void *data)
+{
+	struct dock_state *s = &ds;
+	struct cpufreq_policy *policy = data;
+
+	if (event != CPUFREQ_ADJUST)
+		goto done;
+
+	pr_debug("%s: adjusting cpu%d cpufreq to %d", __func__,
+			policy->cpu, s->cpufreq_min);
+
+	cpufreq_verify_within_limits(policy, s->cpufreq_min,
+			policy->cpuinfo.max_freq);
+
+done:
+	return 0;
+}
+
+static struct notifier_block pogo_cpufreq_notifier_block = {
+	.notifier_call = pogo_cpufreq_notifier,
+};
+
 void __init exynos5_manta_pogo_init(void)
 {
 	struct dock_state *s = &ds;
@@ -965,6 +1010,11 @@ void __init exynos5_manta_pogo_init(void)
 	}
 
 	WARN_ON(switch_dev_register(&usb_audio_switch));
+
+	ret = cpufreq_register_notifier(&pogo_cpufreq_notifier_block,
+				  CPUFREQ_POLICY_NOTIFIER);
+	if (ret)
+		pr_warn("%s: cannot register cpufreq notifier\n", __func__);
 
 	manta_pogo_set_vbus(0);
 }
