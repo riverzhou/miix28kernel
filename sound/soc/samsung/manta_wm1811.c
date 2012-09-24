@@ -360,9 +360,19 @@ static int manta_late_probe(struct snd_soc_card *card)
 {
 	struct snd_soc_codec *codec = card->rtd[0].codec;
 	struct snd_soc_dai *codec_dai = card->rtd[0].codec_dai;
+	struct snd_soc_dai *cpu_dai = card->rtd[0].cpu_dai;
 	struct manta_wm1811 *machine =
 				snd_soc_card_get_drvdata(codec->card);
 	int ret;
+
+	/*
+	 * Hack: permit the codec to open streams with the same number
+	 * of channels that the CPU DAI (samsung-i2s) supports, since
+	 * the HDMI block takes its audio from the i2s0 channel shared
+	 * with the codec.
+	 */
+	codec_dai->driver->playback.channels_max =
+			cpu_dai->driver->playback.channels_max;
 
 	ret = snd_soc_dai_set_sysclk(codec_dai, WM8994_SYSCLK_MCLK2,
 				MCLK2_FREQ, SND_SOC_CLOCK_IN);
