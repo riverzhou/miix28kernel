@@ -115,6 +115,7 @@ struct dock_state {
 	u32 last_edge_i[2];
 	bool level;
 	bool dock_connected_unknown;
+	bool ignore_data_irq_once;
 
 	u32 mfm_delay_ns;
 	bool powered_dock_present;
@@ -131,7 +132,6 @@ struct dock_state {
 	struct work_struct debounce_work;
 	struct wake_lock debounce_wake_lock;
 
-	struct mutex ta_check_lock;
 	int ta_check_wait;
 	bool ta_check_mode;
 
@@ -143,7 +143,6 @@ static struct dock_state ds = {
 	.mfm_delay_ns	= MFM_DELAY_NS_DEFAULT,
 	.wait		= __WAIT_QUEUE_HEAD_INITIALIZER(ds.wait),
 	.debounce_state	= POGO_DEBOUNCE_UNDOCKED,
-	.ta_check_lock	= __MUTEX_INITIALIZER(ds.ta_check_lock),
 };
 
 static struct gpio manta_pogo_gpios[] = {
@@ -339,6 +338,7 @@ static int dock_command(struct dock_state *s, u16 cmd, int len, int retlen)
 			ret = dock_get_bits(s, retlen * 2, &err);
 		} else {
 			pr_debug("%s: response sync error\n", __func__);
+			s->ignore_data_irq_once = s->level;
 			ret = -1;
 		}
 		dock_irq();
@@ -535,7 +535,7 @@ int manta_pogo_charge_detect_start(bool spdif_mode_and_gpio_in)
 
 	pr_debug("%s: %d\n", __func__, spdif_mode_and_gpio_in);
 
-	mutex_lock(&s->ta_check_lock);
+	mutex_lock(&s->lock);
 
 	spin_lock_irqsave(&s->wait.lock, flags);
 
@@ -549,7 +549,7 @@ int manta_pogo_charge_detect_start(bool spdif_mode_and_gpio_in)
 			!s->ta_check_wait);
 
 		if (!s->ta_check_wait || ret) {
-			mutex_unlock(&s->ta_check_lock);
+			mutex_unlock(&s->lock);
 			ret = -EBUSY;
 			goto done;
 		}
@@ -587,7 +587,7 @@ void manta_pogo_charge_detect_end(void)
 
 	spin_unlock_irqrestore(&s->wait.lock, flags);
 
-	mutex_unlock(&s->ta_check_lock);
+	mutex_unlock(&s->lock);
 }
 
 static int dock_acquire(struct dock_state *s, bool check_docked)
@@ -725,11 +725,17 @@ static irqreturn_t pogo_data_interrupt(int irq, void *data)
 	struct dock_state *s = data;
 	pr_debug("%s: irq %d\n", __func__, irq);
 
+	if (s->ignore_data_irq_once) {
+		pr_debug("%s: ignored unwanted data_irq\n", __func__);
+		s->ignore_data_irq_once = false;
+		goto done;
+	}
+
 	if (s->powered_dock_present) {
 		wake_lock(&s->wake_lock);
 		queue_work(s->dock_wq, &s->dock_work);
 	}
-
+done:
 	return IRQ_HANDLED;
 }
 
