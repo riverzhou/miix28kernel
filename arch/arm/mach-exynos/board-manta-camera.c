@@ -22,6 +22,7 @@
 #include <plat/s3c64xx-spi.h>
 #include <plat/cpu.h>
 #include <plat/devs.h>
+#include <plat/gpio-cfg.h>
 
 #include <mach/spi-clocks.h>
 #include <mach/gpio.h>
@@ -231,6 +232,24 @@ static struct spi_board_info spi1_board_info[] __initdata = {
 	}
 };
 
+static void manta_gpio_pull_up(bool pull_up)
+{
+	if (pull_up) {
+		s3c_gpio_cfgpin(EXYNOS5_GPA2(4), S3C_GPIO_SFN(2));
+		s3c_gpio_cfgpin(EXYNOS5_GPA2(6), S3C_GPIO_SFN(2));
+		s3c_gpio_cfgpin(EXYNOS5_GPA2(7), S3C_GPIO_SFN(2));
+		pr_debug("GPIO : spi function\n");
+	} else {
+		s3c_gpio_setpull(EXYNOS5_GPA2(4), S3C_GPIO_PULL_DOWN);
+		s3c_gpio_setpull(EXYNOS5_GPA2(6), S3C_GPIO_PULL_DOWN);
+		s3c_gpio_setpull(EXYNOS5_GPA2(7), S3C_GPIO_PULL_DOWN);
+		s3c_gpio_cfgpin(EXYNOS5_GPA2(4), S3C_GPIO_SFN(0));
+		s3c_gpio_cfgpin(EXYNOS5_GPA2(6), S3C_GPIO_SFN(0));
+		s3c_gpio_cfgpin(EXYNOS5_GPA2(7), S3C_GPIO_SFN(0));
+		pr_debug("GPIO : input\n");
+	}
+}
+
 static struct platform_device *camera_devices[] __initdata = {
 	&s3c64xx_device_spi1,
 	&exynos5_device_fimc_is,
@@ -252,6 +271,7 @@ void __init exynos5_manta_camera_init(void)
 	exynos_spi_clock_setup(&s3c64xx_device_spi1.dev, 1);
 
 	if (!exynos_spi_cfg_cs(spi1_csi[0].line, 1)) {
+		s3c64xx_spi1_pdata.gpio_pull_up = manta_gpio_pull_up;
 		s3c64xx_spi1_set_platdata(&s3c64xx_spi1_pdata,
 			EXYNOS_SPI_SRCCLK_SCLK, ARRAY_SIZE(spi1_csi));
 
