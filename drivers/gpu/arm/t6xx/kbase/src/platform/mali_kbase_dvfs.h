@@ -21,16 +21,17 @@
 /* Frequency that DVFS clock frequency decisions should be made */
 #define KBASE_PM_DVFS_FREQUENCY                 100
 
-#define MALI_DVFS_DEBUG 0
-#define MALI_DVFS_START_MAX_STEP 1
-
 #define MALI_DVFS_KEEP_STAY_CNT 10
-#define MALI_DVFS_TIME_INTERVAL 10
+#define MALI_DVFS_TIME_INTERVAL 5
+
+#define MALI_DVFS_CURRENT_FREQ 0
+#define MALI_DVFS_BL_CONFIG_FREQ 533
+#define MALI_DVFS_START_FREQ 450
 
 #ifdef CONFIG_MALI_T6XX_DVFS
 #define CONFIG_MALI_T6XX_FREQ_LOCK
 #ifdef CONFIG_CPU_FREQ
-//#define MALI_DVFS_ASV_ENABLE
+#define MALI_DVFS_ASV_ENABLE
 #endif
 #endif
 
@@ -51,9 +52,8 @@ int kbase_platform_dvfs_get_level(int freq);
 int kbase_platform_dvfs_init(struct kbase_device *dev);
 void kbase_platform_dvfs_term(void);
 int kbase_platform_dvfs_event(struct kbase_device *kbdev, u32 utilisation);
-int kbase_platform_dvfs_get_control_status(void);
-int kbase_platform_dvfs_set_control_status(int onoff);
-int kbase_pm_get_dvfs_utilisation(kbase_device *kbdev);
+int kbase_platform_dvfs_get_enable_status(void);
+int kbase_platform_dvfs_enable(bool enable, int freq);
 int kbase_platform_dvfs_get_utilisation(void);
 #endif
 
@@ -67,6 +67,5 @@ void mali_dvfs_freq_under_unlock(void);
 
 ssize_t show_time_in_state(struct device *dev, struct device_attribute *attr, char *buf);
 ssize_t set_time_in_state(struct device *dev, struct device_attribute *attr, const char *buf, size_t count);
-
 
 #endif /* _KBASE_DVFS_H_ */
