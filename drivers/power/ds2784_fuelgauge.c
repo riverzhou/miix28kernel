@@ -60,46 +60,8 @@ struct ds2784_info {
 static int ds2784_read(struct ds2784_info *di, char *buf, int addr,
 		       size_t count)
 {
-	int ret;
-
-	ret = w1_ds2784_read(di->w1_dev, buf, addr, count);
-
-#if 1 /* temporary HACK */
-	if (ret != count)
-		printk("%s: ret=%d count=%d\n", __func__, ret, count);
-#endif /* temporary HACK */
-
-	return ret;
+	return w1_ds2784_read(di->w1_dev, buf, addr, count);
 }
-
-#if 1 /* temporary HACK */
-static void ds2784_dump(struct ds2784_info *di)
-{
-	u8 reg;
-
-	ds2784_read(di, di->raw, 0x00, 0x1C);
-	ds2784_read(di, di->raw + 0x20, 0x20, 0x10);
-	ds2784_read(di, di->raw + 0x60, 0x60, 0x20);
-	ds2784_read(di, di->raw + 0xb0, 0xb0, 0x02);
-	pr_info("ds2784 regs...");
-
-	for (reg = 0x0; reg <= 0xb1; reg++) {
-		if ((reg >= 0x1c && reg <= 0x1f) ||
-			(reg >= 0x38 && reg <= 0x5f) ||
-			(reg >= 0x90 && reg <= 0xaf))
-				continue;
-
-		if (!(reg & 0x7)) {
-			pr_cont("\n");
-			pr_info("0x%02x:", reg);
-		}
-
-		pr_cont("\t0x%02x", di->raw[reg]);
-	}
-	pr_cont("\n");
-	return;
-}
-#endif /* temporary HACK */
 
 static int ds2784_get_soc(struct ds2784_info *di, int *soc)
 {
@@ -113,17 +75,6 @@ static int ds2784_get_soc(struct ds2784_info *di, int *soc)
 	di->status.percentage =	di->raw[DS2784_REG_RARC];
 	pr_debug("%s: level : %d\n", __func__, di->status.percentage);
 	*soc = di->status.percentage;
-#if 1 /* temporary HACK */
-	if (!di->status.percentage) {
-		static bool dumped = false;
-
-		pr_err("%s: SOC reads zero\n", __func__);
-		if (!dumped) {
-			ds2784_dump(di);
-			dumped = true;
-		}
-	}
-#endif /* temporary HACK */
 	return 0;
 }
 
@@ -240,10 +191,6 @@ static int ds2784_get_property(struct power_supply *psy,
 
 	case POWER_SUPPLY_PROP_CAPACITY:
 		ret = ds2784_get_soc(di, &val->intval);
-#if 1 /* temporary HACK */
-		if (val->intval < 3)
-			val->intval = 3;
-#endif /* temporary HACK */
 		break;
 
 	default:
