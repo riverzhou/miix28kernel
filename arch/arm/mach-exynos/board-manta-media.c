@@ -34,7 +34,7 @@ static struct platform_device *media_devices[] __initdata = {
 };
 
 static struct s5p_mfc_platdata manta_mfc_pd = {
-	.clock_rate = 300 * MHZ,
+	.clock_rate = 333 * MHZ,
 };
 
 static void __init manta_media_sysmmu_init(void)
