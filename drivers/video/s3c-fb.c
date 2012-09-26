@@ -1477,6 +1477,7 @@ int s3c_fb_set_vsync_int(struct fb_info *info,
 	bool prev_active = sfb->vsync_info.active;
 
 	sfb->vsync_info.active = active;
+	smp_wmb();
 
 	if (active && !prev_active)
 		s3c_fb_activate_vsync(sfb);
@@ -1558,6 +1559,7 @@ static u32 s3c_fb_red_length(int format)
 	switch (format) {
 	case S3C_FB_PIXEL_FORMAT_RGBA_8888:
 	case S3C_FB_PIXEL_FORMAT_RGBX_8888:
+	case S3C_FB_PIXEL_FORMAT_BGRA_8888:
 		return 8;
 
 	case S3C_FB_PIXEL_FORMAT_RGBA_5551:
@@ -1579,8 +1581,12 @@ static u32 s3c_fb_red_offset(int format)
 	case S3C_FB_PIXEL_FORMAT_RGBX_8888:
 	case S3C_FB_PIXEL_FORMAT_RGBA_5551:
 		return 0;
+
 	case S3C_FB_PIXEL_FORMAT_RGB_565:
 		return 11;
+
+	case S3C_FB_PIXEL_FORMAT_BGRA_8888:
+		return 16;
 
 	default:
 		pr_warn("s3c-fb: unrecognized pixel format %u\n", format);
@@ -1593,6 +1599,7 @@ static u32 s3c_fb_green_length(int format)
 	switch (format) {
 	case S3C_FB_PIXEL_FORMAT_RGBA_8888:
 	case S3C_FB_PIXEL_FORMAT_RGBX_8888:
+	case S3C_FB_PIXEL_FORMAT_BGRA_8888:
 		return 8;
 
 	case S3C_FB_PIXEL_FORMAT_RGBA_5551:
@@ -1604,7 +1611,7 @@ static u32 s3c_fb_green_length(int format)
 	default:
 		pr_warn("s3c-fb: unrecognized pixel format %u\n", format);
 		return 0;
-		}
+	}
 }
 
 static u32 s3c_fb_green_offset(int format)
@@ -1612,10 +1619,10 @@ static u32 s3c_fb_green_offset(int format)
 	switch (format) {
 	case S3C_FB_PIXEL_FORMAT_RGBA_8888:
 	case S3C_FB_PIXEL_FORMAT_RGBX_8888:
+	case S3C_FB_PIXEL_FORMAT_BGRA_8888:
 		return 8;
 
 	case S3C_FB_PIXEL_FORMAT_RGBA_5551:
-		return 5;
 	case S3C_FB_PIXEL_FORMAT_RGB_565:
 		return 5;
 	default:
@@ -1638,8 +1645,11 @@ static u32 s3c_fb_blue_offset(int format)
 
 	case S3C_FB_PIXEL_FORMAT_RGBA_5551:
 		return 10;
+
 	case S3C_FB_PIXEL_FORMAT_RGB_565:
+	case S3C_FB_PIXEL_FORMAT_BGRA_8888:
 		return 0;
+
 	default:
 		pr_warn("s3c-fb: unrecognized pixel format %u\n", format);
 		return 0;
@@ -1650,6 +1660,7 @@ static u32 s3c_fb_transp_length(int format)
 {
 	switch (format) {
 	case S3C_FB_PIXEL_FORMAT_RGBA_8888:
+	case S3C_FB_PIXEL_FORMAT_BGRA_8888:
 		return 8;
 
 	case S3C_FB_PIXEL_FORMAT_RGBA_5551:
@@ -1669,6 +1680,7 @@ static u32 s3c_fb_transp_offset(int format)
 {
 	switch (format) {
 	case S3C_FB_PIXEL_FORMAT_RGBA_8888:
+	case S3C_FB_PIXEL_FORMAT_BGRA_8888:
 		return 24;
 
 	case S3C_FB_PIXEL_FORMAT_RGBA_5551:
@@ -1679,6 +1691,7 @@ static u32 s3c_fb_transp_offset(int format)
 
 	case S3C_FB_PIXEL_FORMAT_RGB_565:
 		return 0;
+
 	default:
 		pr_warn("s3c-fb: unrecognized pixel format %u\n", format);
 		return 0;
@@ -1694,6 +1707,7 @@ static u32 s3c_fb_padding(int format)
 	case S3C_FB_PIXEL_FORMAT_RGBA_8888:
 	case S3C_FB_PIXEL_FORMAT_RGBA_5551:
 	case S3C_FB_PIXEL_FORMAT_RGB_565:
+	case S3C_FB_PIXEL_FORMAT_BGRA_8888:
 		return 0;
 
 	default:
@@ -1710,7 +1724,9 @@ static u32 s3c_fb_rgborder(int format)
 	case S3C_FB_PIXEL_FORMAT_RGBA_8888:
 	case S3C_FB_PIXEL_FORMAT_RGBA_5551:
 		return WIN_RGB_ORDER_RGB;
+
 	case S3C_FB_PIXEL_FORMAT_RGB_565:
+	case S3C_FB_PIXEL_FORMAT_BGRA_8888:
 		return WIN_RGB_ORDER_BGR;
 
 	default:
@@ -3198,12 +3214,11 @@ static int s3c_fb_wait_for_vsync_thread(void *data)
 
 	while (!kthread_should_stop()) {
 		ktime_t timestamp = sfb->vsync_info.timestamp;
-		int ret = wait_event_interruptible_timeout(sfb->vsync_info.wait,
+		int ret = wait_event_interruptible(sfb->vsync_info.wait,
 			!ktime_equal(timestamp, sfb->vsync_info.timestamp) &&
-			sfb->vsync_info.active,
-			msecs_to_jiffies(VSYNC_TIMEOUT_MSEC));
+			sfb->vsync_info.active);
 
-		if (ret > 0) {
+		if (!ret) {
 			exynos5_ppmu_trace();
 			sysfs_notify(&sfb->dev->kobj, NULL, "vsync");
 		}

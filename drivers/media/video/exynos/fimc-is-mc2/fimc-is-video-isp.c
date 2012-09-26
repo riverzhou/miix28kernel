@@ -71,8 +71,7 @@ static int fimc_is_isp_video_open(struct file *file)
 	dbg_isp("%s\n", __func__);
 
 	file->private_data = video;
-	fimc_is_video_open(&video->common, ischain,
-		VIDEO_ISP_READY_BUFFERS);
+	fimc_is_video_open(&video->common, ischain, VIDEO_ISP_READY_BUFFERS);
 
 	return 0;
 }
@@ -231,12 +230,18 @@ static int fimc_is_isp_video_qbuf(struct file *file, void *priv,
 {
 	int ret = 0;
 	struct fimc_is_video_isp *video = file->private_data;
+	struct fimc_is_video_common *common = &video->common;
 
 #ifdef DBG_STREAMING
 	/*dbg_isp("%s\n", __func__);*/
 #endif
 
-	ret = fimc_is_video_qbuf(&video->common, buf);
+	if (test_bit(FIMC_IS_VIDEO_STREAM_ON, &common->state))
+		ret = fimc_is_video_qbuf(common, buf);
+	else {
+		err("stream off state, can NOT qbuf");
+		ret = -EINVAL;
+	}
 
 	return ret;
 }
@@ -455,14 +460,12 @@ static int fimc_is_isp_buffer_prepare(struct vb2_buffer *vb)
 	return 0;
 }
 
-static inline void fimc_is_isp_lock(struct vb2_queue *vq)
+static inline void fimc_is_isp_wait_prepare(struct vb2_queue *q)
 {
-	/*dbg_isp("%s\n", __func__);*/
 }
 
-static inline void fimc_is_isp_unlock(struct vb2_queue *vq)
+static inline void fimc_is_isp_wait_finish(struct vb2_queue *q)
 {
-	/*dbg_isp("%s\n", __func__);*/
 }
 
 static int fimc_is_isp_start_streaming(struct vb2_queue *q,
@@ -508,7 +511,6 @@ static int fimc_is_isp_stop_streaming(struct vb2_queue *q)
 
 static void fimc_is_isp_buffer_queue(struct vb2_buffer *vb)
 {
-	u32 index;
 	struct fimc_is_video_isp *video = vb->vb2_queue->drv_priv;
 	struct fimc_is_video_common *common = &video->common;
 	struct fimc_is_device_ischain *ischain = common->device;
@@ -541,8 +543,8 @@ const struct vb2_ops fimc_is_isp_qops = {
 	.buf_prepare		= fimc_is_isp_buffer_prepare,
 	.buf_queue		= fimc_is_isp_buffer_queue,
 	.buf_finish		= fimc_is_isp_buffer_finish,
-	.wait_prepare		= fimc_is_isp_unlock,
-	.wait_finish		= fimc_is_isp_lock,
+	.wait_prepare		= fimc_is_isp_wait_prepare,
+	.wait_finish		= fimc_is_isp_wait_finish,
 	.start_streaming	= fimc_is_isp_start_streaming,
 	.stop_streaming		= fimc_is_isp_stop_streaming,
 };
