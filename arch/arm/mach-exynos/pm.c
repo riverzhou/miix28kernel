@@ -323,9 +323,6 @@ static int exynos_pm_suspend(void)
 {
 	unsigned long tmp;
 
-	if (soc_is_exynos5250())
-		exynos5_pmu_sysclk_save();
-
 	s3c_pm_do_save(exynos_core_save, ARRAY_SIZE(exynos_core_save));
 
 	/* Setting Central Sequence Register for power down mode */
@@ -399,9 +396,6 @@ static void exynos_pm_resume(void)
 	__raw_writel((1 << 28), EXYNOS5_PAD_RETENTION_GPIO_SYSMEM_OPTION);
 
 	s3c_pm_do_restore_core(exynos_core_save, ARRAY_SIZE(exynos_core_save));
-
-	if (soc_is_exynos5250())
-		exynos5_pmu_sysclk_restore();
 
 	bts_initialize(NULL);
 	if (!soc_is_exynos5250()) {
