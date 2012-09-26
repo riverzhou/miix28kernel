@@ -423,6 +423,9 @@ static int mxr_s_ctrl(struct file *file, void *fh, struct v4l2_control *ctrl)
 	case V4L2_CID_TV_CHROMA_VALUE:
 		layer->chroma_val = (u32)v;
 		break;
+	case V4L2_CID_TV_ENABLE_HDMI_AUDIO:
+		v4l2_subdev_call(to_outsd(mdev), core, s_ctrl, ctrl);
+		break;
 	case V4L2_CID_TV_HPD_STATUS:
 		v4l2_subdev_call(to_outsd(mdev), core, s_ctrl, ctrl);
 		break;
