@@ -764,10 +764,6 @@ static void mxt_input_touchevent(struct mxt_data *data,
 		return;
 	}
 
-	/* Check only AMP detection */
-	if (!(status & (MXT_PRESS | MXT_MOVE)))
-		return;
-
 	x = (message->message[1] << 4) | ((message->message[3] >> 4) & 0xf);
 	y = (message->message[2] << 4) | ((message->message[3] & 0xf));
 	if (data->max_x < 1024)
