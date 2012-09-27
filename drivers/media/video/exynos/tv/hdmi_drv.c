@@ -316,10 +316,6 @@ int hdmi_s_ctrl(struct v4l2_subdev *sd, struct v4l2_control *ctrl)
 	case V4L2_CID_TV_SET_ASPECT_RATIO:
 		hdev->aspect = ctrl->value;
 		break;
-	case V4L2_CID_TV_ENABLE_HDMI_AUDIO:
-		hdev->audio_enable = !!ctrl->value;
-		hdmi_audio_enable(hdev, hdev->audio_enable);
-		break;
 	default:
 		dev_err(dev, "invalid control id\n");
 		ret = -EINVAL;
