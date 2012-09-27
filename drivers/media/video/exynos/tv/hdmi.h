@@ -297,6 +297,8 @@ struct hdmi_device {
 	struct hdmi_infoframe infoframe[INFOFRAME_CNT];
 	/** audio on/off control flag */
 	int audio_enable;
+	/** number of audio channels */
+	int audio_channel_count;
 	/** audio sample rate */
 	int sample_rate;
 	/** audio bits per sample */

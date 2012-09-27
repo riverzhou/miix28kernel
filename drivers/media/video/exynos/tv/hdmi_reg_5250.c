@@ -2596,6 +2596,13 @@ void hdmi_reg_infoframe(struct hdmi_device *hdev,
 		hdmi_writeb(hdev, HDMI_AUI_HEADER1, infoframe->ver);
 		hdmi_writeb(hdev, HDMI_AUI_HEADER2, infoframe->len);
 		hdr_sum = infoframe->type + infoframe->ver + infoframe->len;
+		/* speaker placement */
+		if (hdev->audio_channel_count == 6)
+			hdmi_writeb(hdev, HDMI_AUI_BYTE(4), 0x0b);
+		else if (hdev->audio_channel_count == 8)
+			hdmi_writeb(hdev, HDMI_AUI_BYTE(4), 0x13);
+		else
+			hdmi_writeb(hdev, HDMI_AUI_BYTE(4), 0x00);
 		chksum = hdmi_chksum(hdev, HDMI_AUI_BYTE(1), infoframe->len, hdr_sum);
 		dev_dbg(dev, "AUI checksum = 0x%x\n", chksum);
 		hdmi_writeb(hdev, HDMI_AUI_CHECK_SUM, chksum);
@@ -2751,7 +2758,20 @@ void hdmi_reg_i2s_audio_init(struct hdmi_device *hdev)
 		HDMI_I2S_CONSUMER_FORMAT;
 	hdmi_write(hdev, HDMI_I2S_CH_ST_0, val);
 	hdmi_write(hdev, HDMI_I2S_CH_ST_1, HDMI_I2S_CD_PLAYER);
-	hdmi_write(hdev, HDMI_I2S_CH_ST_2, HDMI_I2S_SET_SOURCE_NUM(0));
+	hdmi_writeb(hdev, HDMI_I2S_CH_ST_2, HDMI_I2S_SET_SOURCE_NUM(0) |
+			HDMI_I2S_SET_CHANNEL_NUM(0x6));
+	hdmi_writeb(hdev, HDMI_ASP_CON,
+			HDMI_AUD_MODE_MULTI_CH | HDMI_AUD_SP_AUD2_EN |
+			HDMI_AUD_SP_AUD1_EN | HDMI_AUD_SP_AUD0_EN);
+	hdmi_writeb(hdev, HDMI_ASP_CHCFG0,
+			HDMI_SPK0R_SEL_I_PCM0R | HDMI_SPK0L_SEL_I_PCM0L);
+	hdmi_writeb(hdev, HDMI_ASP_CHCFG1,
+			HDMI_SPK0R_SEL_I_PCM1L | HDMI_SPK0L_SEL_I_PCM1R);
+	hdmi_writeb(hdev, HDMI_ASP_CHCFG2,
+			HDMI_SPK0R_SEL_I_PCM2R | HDMI_SPK0L_SEL_I_PCM2L);
+	hdmi_writeb(hdev, HDMI_ASP_CHCFG3,
+			HDMI_SPK0R_SEL_I_PCM3R | HDMI_SPK0L_SEL_I_PCM3L);
+
 	val = HDMI_I2S_CLK_ACCUR_LEVEL_1 |
 		HDMI_I2S_SET_SAMPLING_FREQ(sample_frq);
 	hdmi_write(hdev, HDMI_I2S_CH_ST_3, val);

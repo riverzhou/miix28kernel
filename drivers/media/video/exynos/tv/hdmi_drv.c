@@ -328,6 +328,19 @@ int hdmi_s_ctrl(struct v4l2_subdev *sd, struct v4l2_control *ctrl)
 		}
 		mutex_unlock(&hdev->mutex);
 		break;
+	case V4L2_CID_TV_SET_NUM_CHANNELS:
+		mutex_lock(&hdev->mutex);
+		if ((ctrl->value == 2) || (ctrl->value == 6) ||
+							(ctrl->value == 8)) {
+			hdev->audio_channel_count = ctrl->value;
+		} else {
+			dev_err(dev, "invalid channel count\n");
+			hdev->audio_channel_count = 2;
+		}
+		if (is_hdmi_streaming(hdev))
+			hdmi_set_infoframe(hdev);
+		mutex_unlock(&hdev->mutex);
+		break;
 	default:
 		dev_err(dev, "invalid control id\n");
 		ret = -EINVAL;
@@ -902,6 +915,7 @@ static int __devinit hdmi_probe(struct platform_device *pdev)
 
 	/* default audio configuration : disable audio */
 	hdmi_dev->audio_enable = 0;
+	hdmi_dev->audio_channel_count = 2;
 	hdmi_dev->sample_rate = DEFAULT_SAMPLE_RATE;
 	hdmi_dev->bits_per_sample = DEFAULT_BITS_PER_SAMPLE;
 	hdmi_dev->audio_codec = DEFAULT_AUDIO_CODEC;
