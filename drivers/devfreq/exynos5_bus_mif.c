@@ -46,6 +46,7 @@ enum mif_level_idx {
 	LV_1,
 	LV_2,
 	LV_3,
+	LV_4,
 	_LV_END
 };
 
@@ -78,6 +79,7 @@ static struct mif_bus_opp_table exynos5_mif_opp_table[] = {
 	{LV_1, 667000, 1000000, 0x2c48758f},
 	{LV_2, 400000, 1000000, 0x1A255349},
 	{LV_3, 160000, 1000000, 0x1A255349},
+	{LV_4, 100000, 1000000, 0x1A255349},
 	{0, 0, 0, 0},
 };
 
@@ -388,7 +390,8 @@ static int exynos5_bus_mif_suspend(struct device *dev)
 	/*
 	 * Set the frequency to the maximum enabled frequency, but set the
 	 * voltage to the maximum possible voltage in case the bootloader
-	 * sets the frequency to maximum during resume.
+	 * sets the frequency to maximum during resume.  Frequency can only
+	 * go up, so set voltage and timing before clock.
 	 */
 	mutex_lock(&data->lock);
 
@@ -445,7 +448,8 @@ static int exynos5_bus_mif_resume_noirq(struct device *dev)
 
 	/*
 	 * Set the frequency to the maximum enabled frequency in case the
-	 * bootloader raised it during resume.
+	 * bootloader raised it during resume.  Frequency can only go down,
+	 * so set timing after updating clock.
 	 */
 	mutex_lock(&data->lock);
 
@@ -470,17 +474,18 @@ static int exynos5_bus_mif_resume(struct device *dev)
 
 	/*
 	 * Restore the frequency and voltage to the values when suspend was
-	 * started.
+	 * started.  Frequency can only go down, so set timing and voltage
+	 * after updating clock.
 	 */
 	mutex_lock(&data->lock);
 
 	data->disabled = false;
 
-	err = exynos5_mif_set_dmc_timing(data->curr_freq);
+	err = exynos5_mif_setclk(data, data->curr_freq * 1000);
 	if (err)
 		goto unlock;
 
-	err = exynos5_mif_setclk(data, data->curr_freq * 1000);
+	err = exynos5_mif_set_dmc_timing(data->curr_freq);
 	if (err)
 		goto unlock;
 
