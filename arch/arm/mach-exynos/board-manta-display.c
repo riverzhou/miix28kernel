@@ -57,7 +57,7 @@ extern phys_addr_t manta_bootloader_fb_size;
 static void manta_lcd_on(void)
 {
 	gpio_set_value(GPIO_LCD_EN, 1);
-	usleep_range(250000, 250000);
+	usleep_range(200000, 200000);
 }
 
 static void manta_lcd_off(void)
