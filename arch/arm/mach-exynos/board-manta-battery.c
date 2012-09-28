@@ -62,6 +62,7 @@ enum charge_connector {
 	CHARGE_CONNECTOR_MAX,
 };
 
+static int manta_bat_battery_status;
 static enum manta_charge_source manta_bat_charge_source[CHARGE_CONNECTOR_MAX];
 static enum charge_connector manta_bat_charge_conn;
 static bool manta_bat_usb_online;
@@ -512,6 +513,7 @@ static void change_charger_status(void)
 	int ta_int;
 	union power_supply_propval pogo_connected = {0,};
 	union power_supply_propval usb_connected = {0,};
+	union power_supply_propval smb347_status = {0,};
 	int status_change = 0;
 	int hw_rev = exynos5_manta_get_revision();
 	int ret;
@@ -560,6 +562,24 @@ static void change_charger_status(void)
 			if (ret)
 				pr_err("%s: failed to change smb347-mains online\n",
 				       __func__);
+		}
+
+		if (manta_bat_smb347_battery) {
+			manta_bat_smb347_battery->get_property(
+					manta_bat_smb347_battery,
+					POWER_SUPPLY_PROP_STATUS,
+					&smb347_status);
+
+			if (smb347_status.intval != manta_bat_battery_status) {
+				if (smb347_status.intval ==
+					POWER_SUPPLY_STATUS_FULL &&
+					bat_callbacks &&
+					bat_callbacks->battery_set_full)
+					bat_callbacks->battery_set_full(
+						bat_callbacks);
+
+				manta_bat_battery_status = smb347_status.intval;
+			}
 		}
 	}
 
@@ -850,6 +870,9 @@ static struct android_bat_platform_data android_battery_pdata = {
 	.temp_high_recovery = 430,	/* 43c */
 	.temp_low_recovery = 30,		/* 3c */
 	.temp_low_threshold = 0,		/* 0c */
+	.full_charging_time = 12 * 60 * 60,
+	.recharging_time = 2 * 60 * 60,
+	.recharging_voltage = 4250 * 1000,
 };
 
 static struct platform_device android_device_battery = {
@@ -884,12 +907,13 @@ static char *manta_charge_source_str(enum manta_charge_source charge_source)
 static int manta_power_debug_dump(struct seq_file *s, void *unused)
 {
 	if (exynos5_manta_get_revision() > MANTA_REV_ALPHA) {
-		seq_printf(s, "ta_en=%d ta_nchg=%d ta_int=%d usbin=%d, dcin=%d\n",
-			gpio_get_value(GPIO_TA_EN),
-			gpio_get_value(gpio_TA_nCHG),
-			gpio_get_value(GPIO_TA_INT),
-			gpio_get_value(GPIO_OTG_VBUS_SENSE),
-			gpio_get_value(GPIO_VBUS_POGO_5V));
+		seq_printf(s, "ta_en=%d ta_nchg=%d ta_int=%d usbin=%d, dcin=%d st=%d\n",
+			   gpio_get_value(GPIO_TA_EN),
+			   gpio_get_value(gpio_TA_nCHG),
+			   gpio_get_value(GPIO_TA_INT),
+			   gpio_get_value(GPIO_OTG_VBUS_SENSE),
+			   gpio_get_value(GPIO_VBUS_POGO_5V),
+			   manta_bat_battery_status);
 	} else {
 		seq_printf(s, "ta_en=%d ta_nchg=%d ta_int=%d\n",
 			gpio_get_value(GPIO_TA_EN),
