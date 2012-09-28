@@ -393,6 +393,25 @@ static int exynos5_usb_phy20_exit(struct platform_device *pdev)
 	return 0;
 }
 
+static int exynos5_usb_host_phy20_init(struct platform_device *pdev)
+{
+	if (exynos_usb_phy_clock_enable(pdev))
+		return -EINVAL;
+
+	exynos5_usb_phy20_init(pdev);
+
+	return 0;
+}
+
+static int exynos5_usb_host_phy20_exit(struct platform_device *pdev)
+{
+	exynos5_usb_phy20_exit(pdev);
+
+	exynos_usb_phy_clock_disable(pdev);
+
+	return 0;
+}
+
 static int exynos_usb_dev_phy20_init(struct platform_device *pdev)
 {
 	if (exynos_usb_phy_clock_enable(pdev))
@@ -571,7 +590,7 @@ int s5p_usb_phy_init(struct platform_device *pdev, int type)
 
 	if (type == S5P_USB_PHY_HOST) {
 		if (soc_is_exynos5250()) {
-			ret = exynos5_usb_phy20_init(pdev);
+			ret = exynos5_usb_host_phy20_init(pdev);
 			set_exynos_usb_phy_tune(type);
 		} else {
 			ret = exynos4_usb_phy1_init(pdev);
@@ -594,7 +613,7 @@ int s5p_usb_phy_exit(struct platform_device *pdev, int type)
 
 	if (type == S5P_USB_PHY_HOST) {
 		if (soc_is_exynos5250())
-			ret = exynos5_usb_phy20_exit(pdev);
+			ret = exynos5_usb_host_phy20_exit(pdev);
 		else
 			ret = exynos4_usb_phy1_exit(pdev);
 	} else if (type == S5P_USB_PHY_DEVICE) {

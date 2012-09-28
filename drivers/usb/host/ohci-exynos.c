@@ -169,6 +169,8 @@ static int __devinit exynos_ohci_probe(struct platform_device *pdev)
 
 	platform_set_drvdata(pdev, exynos_ohci);
 
+	clk_disable(exynos_ohci->clk);
+
 	return 0;
 
 fail:
