@@ -281,6 +281,7 @@ static int hdmi_s_power(struct v4l2_subdev *sd, int on)
 
 		dev_info(hdev->dev, "HDMI interrupt changed to internal\n");
 	} else {
+		cancel_work_sync(&hdev->work);
 		hdmi_hpd_enable(hdev, 0);
 		disable_irq(hdev->int_irq);
 		cancel_work_sync(&hdev->hpd_work);
@@ -316,6 +317,16 @@ int hdmi_s_ctrl(struct v4l2_subdev *sd, struct v4l2_control *ctrl)
 		break;
 	case V4L2_CID_TV_SET_ASPECT_RATIO:
 		hdev->aspect = ctrl->value;
+		break;
+	case V4L2_CID_TV_ENABLE_HDMI_AUDIO:
+		mutex_lock(&hdev->mutex);
+		hdev->audio_enable = !!ctrl->value;
+		if (is_hdmi_streaming(hdev)) {
+			hdmi_set_infoframe(hdev);
+
+			hdmi_audio_enable(hdev, hdev->audio_enable);
+		}
+		mutex_unlock(&hdev->mutex);
 		break;
 	default:
 		dev_err(dev, "invalid control id\n");
@@ -810,6 +821,7 @@ static int __devinit hdmi_probe(struct platform_device *pdev)
 
 	INIT_WORK(&hdmi_dev->hpd_work, hdmi_hpd_work);
 	INIT_DELAYED_WORK(&hdmi_dev->hpd_work_ext, hdmi_hpd_work_ext);
+	mutex_init(&hdmi_dev->mutex);
 
 	/* setting v4l2 name to prevent WARN_ON in v4l2_device_register */
 	strlcpy(hdmi_dev->v4l2_dev.name, dev_name(dev),
@@ -888,8 +900,8 @@ static int __devinit hdmi_probe(struct platform_device *pdev)
 	/* FIXME: missing fail preset is not supported */
 	hdmi_dev->cur_conf = hdmi_preset2conf(hdmi_dev->cur_preset);
 
-	/* default audio configuration : enable audio */
-	hdmi_dev->audio_enable = 1;
+	/* default audio configuration : disable audio */
+	hdmi_dev->audio_enable = 0;
 	hdmi_dev->sample_rate = DEFAULT_SAMPLE_RATE;
 	hdmi_dev->bits_per_sample = DEFAULT_BITS_PER_SAMPLE;
 	hdmi_dev->audio_codec = DEFAULT_AUDIO_CODEC;

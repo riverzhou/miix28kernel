@@ -21,6 +21,7 @@
 #include <linux/io.h>
 #include <linux/clk.h>
 #include <linux/interrupt.h>
+#include <linux/mutex.h>
 #include <linux/regulator/consumer.h>
 #include <linux/switch.h>
 
@@ -261,7 +262,6 @@ struct hdcp_info {
 	u8 is_repeater;
 	u32 hdcp_start;
 	int hdcp_enable;
-	spinlock_t reset_lock;
 
 	enum HDCP_EVENT	event;
 	enum HDCP_STATE	auth_status;
@@ -320,6 +320,8 @@ struct hdmi_device {
 
 	/* choose DVI or HDMI mode */
 	int dvi_mode;
+
+	struct mutex mutex;
 };
 
 struct hdmi_conf {

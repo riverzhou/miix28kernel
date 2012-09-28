@@ -416,12 +416,13 @@ static int hdcp_reset_auth(struct hdmi_device *hdev)
 {
 	struct device *dev = hdev->dev;
 	u8 val;
-	unsigned long spin_flags;
 
-	if (!is_hdmi_streaming(hdev))
+	mutex_lock(&hdev->mutex);
+
+	if (!is_hdmi_streaming(hdev)) {
+		mutex_unlock(&hdev->mutex);
 		return -ENODEV;
-
-	spin_lock_irqsave(&hdev->hdcp_info.reset_lock, spin_flags);
+	}
 
 	hdev->hdcp_info.event		= HDCP_EVENT_STOP;
 	hdev->hdcp_info.auth_status	= NOT_AUTHENTICATED;
@@ -441,7 +442,7 @@ static int hdcp_reset_auth(struct hdmi_device *hdev)
 	hdmi_writeb(hdev, HDMI_HDCP_CHECK_RESULT, HDMI_HDCP_CLR_ALL_RESULTS);
 
 	/* need some delay (at least 1 frame) */
-	mdelay(16);
+	msleep(16);
 
 	hdcp_sw_reset(hdev);
 
@@ -449,7 +450,8 @@ static int hdcp_reset_auth(struct hdmi_device *hdev)
 		HDMI_WATCHDOG_INT_EN | HDMI_WTFORACTIVERX_INT_EN;
 	hdmi_write_mask(hdev, HDMI_STATUS_EN, ~0, val);
 	hdmi_write_mask(hdev, HDMI_HDCP_CTRL1, ~0, HDMI_HDCP_CP_DESIRED_EN);
-	spin_unlock_irqrestore(&hdev->hdcp_info.reset_lock, spin_flags);
+
+	mutex_unlock(&hdev->mutex);
 
 	return 0;
 }
@@ -916,13 +918,11 @@ irqreturn_t hdcp_irq_handler(struct hdmi_device *hdev)
 
 int hdcp_prepare(struct hdmi_device *hdev)
 {
-	hdev->hdcp_wq = create_workqueue("khdcpd");
+	hdev->hdcp_wq = create_singlethread_workqueue("khdcpd");
 	if (hdev->hdcp_wq == NULL)
 		return -ENOMEM;
 
 	INIT_WORK(&hdev->work, hdcp_work);
-
-	spin_lock_init(&hdev->hdcp_info.reset_lock);
 
 #if defined(CONFIG_VIDEO_EXYNOS_HDCP)
 	hdev->hdcp_info.hdcp_enable = 1;

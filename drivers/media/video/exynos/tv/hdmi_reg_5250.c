@@ -2778,7 +2778,7 @@ void hdmi_reg_i2s_audio_init(struct hdmi_device *hdev)
 void hdmi_audio_enable(struct hdmi_device *hdev, int on)
 {
 	if (on) {
-		if (hdev->dvi_mode)
+		if (hdev->dvi_mode || !hdev->audio_enable)
 			return;
 		hdmi_write_mask(hdev, HDMI_CON_0, ~0, HDMI_ASP_ENABLE);
 	} else
@@ -2806,7 +2806,7 @@ int hdmi_hpd_status(struct hdmi_device *hdev)
 
 int is_hdmi_streaming(struct hdmi_device *hdev)
 {
-	if (hdmi_hpd_status(hdev) && hdev->streaming)
+	if (hdev->streaming && hdmi_hpd_status(hdev))
 		return 1;
 	return 0;
 }
