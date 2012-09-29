@@ -68,6 +68,18 @@ static void manta_lcd_off(void)
 	usleep_range(250000, 250000);
 }
 
+static void manta_backlight_on(void)
+{
+	usleep_range(97000, 97000);
+	gpio_set_value(GPIO_LED_BL_RST, 1);
+}
+
+static void manta_backlight_off(void)
+{
+	/* LED_BACKLIGHT_RESET: XCI1RGB_5 => GPG0_5 */
+	gpio_set_value(GPIO_LED_BL_RST, 0);
+}
+
 static void manta_lcd_set_power(struct plat_lcd_data *pd,
 				unsigned int power)
 {
@@ -136,6 +148,8 @@ static struct s3c_fb_platdata manta_lcd1_pdata __initdata = {
 	.vidcon0	= VIDCON0_VIDOUT_RGB | VIDCON0_PNRMODE_RGB,
 	.vidcon1	= 0,
 	.setup_gpio	= manta_fimd_gpio_setup_24bpp,
+	.backlight_off  = manta_backlight_off,
+	.lcd_off	= manta_lcd_off,
 };
 
 static struct video_info manta_dp_config = {
@@ -154,24 +168,11 @@ static struct video_info manta_dp_config = {
 	.lane_count		= LANE_COUNT4,
 };
 
-static void manta_backlight_on(void)
-{
-	usleep_range(97000, 97000);
-	gpio_set_value(GPIO_LED_BL_RST, 1);
-}
-
-static void manta_backlight_off(void)
-{
-	/* LED_BACKLIGHT_RESET: XCI1RGB_5 => GPG0_5 */
-	gpio_set_value(GPIO_LED_BL_RST, 0);
-}
-
 static struct s5p_dp_platdata manta_dp_data __initdata = {
 	.video_info     = &manta_dp_config,
 	.phy_init       = s5p_dp_phy_init,
 	.phy_exit       = s5p_dp_phy_exit,
 	.backlight_on   = manta_backlight_on,
-	.backlight_off  = manta_backlight_off,
 	.lcd_on		= manta_lcd_on,
 	.lcd_off	= manta_lcd_off,
 };
