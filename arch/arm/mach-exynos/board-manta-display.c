@@ -53,11 +53,24 @@
 #define GPIO_APS_EN_18V		EXYNOS5_GPH1(6)
 #define GPIO_DP_HPD		EXYNOS5_GPX0(7)
 
+#define LCD_POWER_OFF_TIME_US   (500 * USEC_PER_MSEC)
+
 extern phys_addr_t manta_bootloader_fb_start;
 extern phys_addr_t manta_bootloader_fb_size;
 
+static ktime_t lcd_on_time;
+
 static void manta_lcd_on(void)
 {
+	s64 us = ktime_us_delta(lcd_on_time, ktime_get_boottime());
+	if (us > LCD_POWER_OFF_TIME_US) {
+		pr_warn("lcd on sleep time too long\n");
+		us = LCD_POWER_OFF_TIME_US;
+	}
+
+	if (us > 0)
+		usleep_range(us, us);
+
 	gpio_set_value(GPIO_LCD_EN, 1);
 	usleep_range(200000, 200000);
 }
@@ -65,7 +78,8 @@ static void manta_lcd_on(void)
 static void manta_lcd_off(void)
 {
 	gpio_set_value(GPIO_LCD_EN, 0);
-	usleep_range(250000, 250000);
+
+	lcd_on_time = ktime_add_us(ktime_get_boottime(), LCD_POWER_OFF_TIME_US);
 }
 
 static void manta_backlight_on(void)
