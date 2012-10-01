@@ -170,7 +170,7 @@ struct cntry_locales_custom {
 
 static struct cntry_locales_custom manta_wifi_translate_custom_table[] = {
 /* Table should be filled out based on custom platform regulatory requirement */
-	{"",   "XY", 4},  /* universal */
+	{"",   "XY", 7},  /* universal */
 	{"US", "US", 69}, /* input ISO "US" to : US regrev 69 */
 	{"CA", "US", 69}, /* input ISO "CA" to : US regrev 69 */
 	{"EU", "EU", 5},  /* European union countries */
