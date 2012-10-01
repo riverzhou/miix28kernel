@@ -199,6 +199,7 @@ static struct samsung_bl_gpio_info manta_bl_gpio_info = {
 static struct platform_pwm_backlight_data manta_bl_data = {
 	.pwm_id		= 0,
 	.pwm_period_ns	= 1000000,
+	.dft_brightness = 102,
 };
 
 static struct platform_device exynos_device_md0 = {
