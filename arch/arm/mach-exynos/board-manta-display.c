@@ -51,7 +51,6 @@
 #define GPIO_HDMI_DCDC_EN	EXYNOS5_GPA0(4)
 #define GPIO_HDMI_LS_EN		EXYNOS5_GPG0(7)
 #define GPIO_APS_EN_18V		EXYNOS5_GPH1(6)
-#define GPIO_DP_HPD		EXYNOS5_GPX0(7)
 
 #define LCD_POWER_OFF_TIME_US   (500 * USEC_PER_MSEC)
 
@@ -253,18 +252,13 @@ void __init exynos5_manta_display_init(void)
 	s5p_gpio_set_pd_pull(GPIO_LED_BL_RST, S5P_GPIO_PD_UPDOWN_DISABLE);
 
 	gpio_request_one(GPIO_LCD_PWM_IN_18V, GPIOF_OUT_INIT_LOW, "PWM_IN_18V");
-	s5p_gpio_set_pd_cfg(GPIO_LCD_PWM_IN_18V, S5P_GPIO_PD_PREV_STATE);
-	s5p_gpio_set_pd_pull(GPIO_LCD_PWM_IN_18V, S5P_GPIO_PD_UPDOWN_DISABLE);
+	s5p_gpio_set_pd_cfg(GPIO_LCD_PWM_IN_18V, S5P_GPIO_PD_INPUT);
+	s5p_gpio_set_pd_pull(GPIO_LCD_PWM_IN_18V, S5P_GPIO_PD_UP_ENABLE);
 	gpio_free(GPIO_LCD_PWM_IN_18V);
 
-	gpio_request_one(GPIO_DP_HPD, GPIOF_OUT_INIT_LOW, "DP_HPD");
-	s5p_gpio_set_pd_cfg(GPIO_DP_HPD, S5P_GPIO_PD_PREV_STATE);
-	s5p_gpio_set_pd_pull(GPIO_DP_HPD, S5P_GPIO_PD_UPDOWN_DISABLE);
-	gpio_free(GPIO_DP_HPD);
-
 	gpio_request_one(GPIO_APS_EN_18V, GPIOF_OUT_INIT_LOW, "APS_EN_18V");
-	s5p_gpio_set_pd_cfg(GPIO_APS_EN_18V, S5P_GPIO_PD_PREV_STATE);
-	s5p_gpio_set_pd_pull(GPIO_APS_EN_18V, S5P_GPIO_PD_UPDOWN_DISABLE);
+	s5p_gpio_set_pd_cfg(GPIO_APS_EN_18V, S5P_GPIO_PD_INPUT);
+	s5p_gpio_set_pd_pull(GPIO_APS_EN_18V, S5P_GPIO_PD_UP_ENABLE);
 	gpio_export(GPIO_APS_EN_18V, true);
 
 	samsung_bl_set(&manta_bl_gpio_info, &manta_bl_data);
