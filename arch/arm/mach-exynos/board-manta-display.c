@@ -265,6 +265,7 @@ void __init exynos5_manta_display_init(void)
 	gpio_request_one(GPIO_APS_EN_18V, GPIOF_OUT_INIT_LOW, "APS_EN_18V");
 	s5p_gpio_set_pd_cfg(GPIO_APS_EN_18V, S5P_GPIO_PD_PREV_STATE);
 	s5p_gpio_set_pd_pull(GPIO_APS_EN_18V, S5P_GPIO_PD_UPDOWN_DISABLE);
+	gpio_export(GPIO_APS_EN_18V, true);
 
 	samsung_bl_set(&manta_bl_gpio_info, &manta_bl_data);
 	s5p_fimd1_set_platdata(&manta_lcd1_pdata);
