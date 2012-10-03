@@ -37,7 +37,7 @@
 
 struct manta_wm1811 {
 	struct clk *clk;
-	bool clock_on;
+	unsigned int current_pll_out;
 	struct snd_soc_jack jack;
 };
 
@@ -132,7 +132,7 @@ static int manta_set_bias_level_post(struct snd_soc_card *card,
 	if (dapm->dev != codec_dai->dev)
 		return 0;
 
-	if (level == SND_SOC_BIAS_STANDBY) {
+	if ((level == SND_SOC_BIAS_STANDBY) && machine->current_pll_out) {
 		/*
 		 * Playback/capture has stopped, so switch to the slower
 		 * MCLK2 for reduced power consumption. hw_params handles
@@ -152,11 +152,10 @@ static int manta_set_bias_level_post(struct snd_soc_card *card,
 			return ret;
 		}
 
+		machine->current_pll_out = 0;
+
 		/* Stop the reference clock for the codec's FLL */
-		if (machine->clock_on) {
-			clk_disable(machine->clk);
-			machine->clock_on = false;
-		}
+		clk_disable(machine->clk);
 	}
 
 	return 0;
@@ -173,32 +172,6 @@ static int manta_wm1811_aif1_hw_params(struct snd_pcm_substream *substream,
 	unsigned int pll_out;
 	int ret;
 
-	/*
-	 * Make sure that we have a system clock not derived from the
-	 * FLL, since we cannot change the FLL when the system clock
-	 * is derived from it.
-	 */
-	ret = snd_soc_dai_set_sysclk(codec_dai, WM8994_SYSCLK_MCLK2,
-					MCLK2_FREQ, SND_SOC_CLOCK_IN);
-	if (ret < 0) {
-		pr_err("Failed to switch away from FLL: %d\n", ret);
-		return ret;
-	}
-
-	/* Start the reference clock for the codec's FLL */
-	if (!machine->clock_on) {
-		clk_enable(machine->clk);
-		machine->clock_on = true;
-	}
-
-	/* AIF1CLK should be >=3MHz for optimal performance */
-	if (params_format(params) == SNDRV_PCM_FORMAT_S24_LE)
-		pll_out = params_rate(params) * 384;
-	else if (params_rate(params) == 8000 || params_rate(params) == 11025)
-		pll_out = params_rate(params) * 512;
-	else
-		pll_out = params_rate(params) * 256;
-
 	ret = snd_soc_dai_set_fmt(codec_dai, SND_SOC_DAIFMT_I2S |
 					SND_SOC_DAIFMT_NB_NF |
 					SND_SOC_DAIFMT_CBM_CFM);
@@ -211,17 +184,46 @@ static int manta_wm1811_aif1_hw_params(struct snd_pcm_substream *substream,
 	if (ret < 0)
 		return ret;
 
-	/* Switch the FLL */
-	ret = snd_soc_dai_set_pll(codec_dai, WM8994_FLL1, WM8994_FLL_SRC_MCLK1,
-					MCLK1_FREQ, pll_out);
-	if (ret < 0)
-		dev_err(codec_dai->dev, "Unable to start FLL1\n");
+	/* AIF1CLK should be >=3MHz for optimal performance */
+	if (params_format(params) == SNDRV_PCM_FORMAT_S24_LE)
+		pll_out = params_rate(params) * 384;
+	else if (params_rate(params) == 8000 || params_rate(params) == 11025)
+		pll_out = params_rate(params) * 512;
+	else
+		pll_out = params_rate(params) * 256;
 
-	/* Then switch AIF1CLK to it */
-	ret = snd_soc_dai_set_sysclk(codec_dai, WM8994_SYSCLK_FLL1,
-					pll_out, SND_SOC_CLOCK_IN);
-	if (ret < 0)
-		dev_err(codec_dai->dev, "Unable to switch to FLL1\n");
+	if (machine->current_pll_out == 0) {
+		/* Start the reference clock for the codec's FLL */
+		clk_enable(machine->clk);
+	} else if (machine->current_pll_out != pll_out) {
+		/*
+		 * Make sure that we have a system clock not derived from the
+		 * FLL, since we cannot change the FLL when the system clock
+		 * is derived from it.
+		 */
+		ret = snd_soc_dai_set_sysclk(codec_dai, WM8994_SYSCLK_MCLK2,
+					MCLK2_FREQ, SND_SOC_CLOCK_IN);
+		if (ret < 0) {
+			pr_err("Failed to switch away from FLL: %d\n", ret);
+			return ret;
+		}
+	}
+
+	if (machine->current_pll_out != pll_out) {
+		/* Switch the FLL */
+		ret = snd_soc_dai_set_pll(codec_dai, WM8994_FLL1,
+				WM8994_FLL_SRC_MCLK1, MCLK1_FREQ, pll_out);
+		if (ret < 0)
+			dev_err(codec_dai->dev, "Unable to start FLL1\n");
+
+		/* Then switch AIF1CLK to it */
+		ret = snd_soc_dai_set_sysclk(codec_dai, WM8994_SYSCLK_FLL1,
+				pll_out, SND_SOC_CLOCK_IN);
+		if (ret < 0)
+			dev_err(codec_dai->dev, "Unable to switch to FLL1\n");
+
+		machine->current_pll_out = pll_out;
+	}
 
 	return 0;
 }
