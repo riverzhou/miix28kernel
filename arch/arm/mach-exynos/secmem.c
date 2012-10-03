@@ -13,7 +13,10 @@
 #include <linux/cma.h>
 #include <linux/uaccess.h>
 #include <linux/fs.h>
+#include <linux/miscdevice.h>
+#include <linux/mutex.h>
 #include <linux/pm_runtime.h>
+#include <linux/sched.h>
 #include <linux/slab.h>
 #include <linux/mm.h>
 #include <linux/dma-mapping.h>
@@ -27,13 +30,12 @@
 #include <linux/export.h>
 
 #define SECMEM_DEV_NAME	"s5p-smem"
-struct miscdevice secmem;
 struct secmem_crypto_driver_ftn *crypto_driver;
 #if defined(CONFIG_ION)
 extern struct ion_device *ion_exynos;
 #endif
 
-static char *secmem_info[] = {
+static char *secmem_regions[] = {
 #if defined(CONFIG_SOC_EXYNOS5250)
 	"mfc_sh",   	/* 0 */
 	"msgbox_sh",	/* 1 */
@@ -46,19 +48,75 @@ static char *secmem_info[] = {
 	NULL
 };
 
-static bool drm_onoff;
+static bool		drm_onoff;
+static DEFINE_MUTEX(drm_lock);
+
+struct secmem_info {
+	struct device	*dev;
+	bool		drm_enabled;
+};
+
+static int secmem_open(struct inode *inode, struct file *file)
+{
+	struct miscdevice *miscdev = file->private_data;
+	struct device *dev = miscdev->this_device;
+	struct secmem_info *info;
+
+	info = kzalloc(sizeof(struct secmem_info), GFP_KERNEL);
+	if (!info)
+		return -ENOMEM;
+
+	info->dev = dev;
+	file->private_data = info;
+	return 0;
+}
+
+static void drm_enable_locked(struct secmem_info *info, bool enable)
+{
+	if (drm_onoff != enable) {
+		if (enable)
+			pm_runtime_forbid(info->dev->parent);
+		else
+			pm_runtime_allow(info->dev->parent);
+		drm_onoff = enable;
+		/*
+		 * this will only allow this instance to turn drm_off either by
+		 * calling the ioctl or by closing the fd
+		 */
+		info->drm_enabled = enable;
+	} else {
+		pr_err("%s: DRM is already %s\n", __func__,
+		       drm_onoff ? "on" : "off");
+	}
+}
+
+static int secmem_release(struct inode *inode, struct file *file)
+{
+	struct secmem_info *info = file->private_data;
+
+	/* disable drm if we were the one to turn it on */
+	mutex_lock(&drm_lock);
+	if (info->drm_enabled)
+		drm_enable_locked(info, false);
+	mutex_unlock(&drm_lock);
+
+	kfree(info);
+	return 0;
+}
 
 static long secmem_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 {
+	struct secmem_info *info = filp->private_data;
+
 	switch (cmd) {
 	case SECMEM_IOC_CHUNKINFO:
 	{
-		struct cma_info info;
+		struct cma_info cinfo;
 		struct secchunk_info minfo;
 		char **mname;
 		int nbufs = 0;
 
-		for (mname = secmem_info; *mname != NULL; mname++)
+		for (mname = secmem_regions; *mname != NULL; mname++)
 			nbufs++;
 
 		if (nbufs == 0)
@@ -74,12 +132,12 @@ static long secmem_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 			minfo.index = -1; /* No more memory region */
 		} else {
 
-			if (cma_info(&info, secmem.this_device,
-					secmem_info[minfo.index]))
+			if (cma_info(&cinfo, info->dev,
+					secmem_regions[minfo.index]))
 				return -EINVAL;
 
-			minfo.base = info.lower_bound;
-			minfo.size = info.total_size;
+			minfo.base = cinfo.lower_bound;
+			minfo.size = cinfo.total_size;
 		}
 
 		if (copy_to_user((void __user *)arg, &minfo, sizeof(minfo)))
@@ -127,6 +185,7 @@ static long secmem_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 	}
 #endif
 	case SECMEM_IOC_GET_DRM_ONOFF:
+		smp_rmb();
 		if (copy_to_user((void __user *)arg, &drm_onoff, sizeof(int)))
 			return -EFAULT;
 		break;
@@ -137,19 +196,17 @@ static long secmem_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		if (copy_from_user(&val, (int __user *)arg, sizeof(int)))
 			return -EFAULT;
 
-		if (val) {
-			if (drm_onoff == false) {
-				drm_onoff = true;
-				pm_runtime_forbid(secmem.parent);
-			} else
-				printk(KERN_ERR "%s: DRM is already on\n", __func__);
-		} else {
-			if (drm_onoff == true) {
-				drm_onoff = false;
-				pm_runtime_allow(secmem.parent);
-			} else
-				printk(KERN_ERR "%s: DRM is already off\n", __func__);
+		mutex_lock(&drm_lock);
+		if ((info->drm_enabled && !val) ||
+		    (!info->drm_enabled && val)) {
+			/*
+			 * 1. if we enabled drm, then disable it
+			 * 2. if we don't already hdrm enabled,
+			 *    try to enable it.
+			 */
+			drm_enable_locked(info, val);
 		}
+		mutex_unlock(&drm_lock);
 		break;
 	}
 	case SECMEM_IOC_GET_CRYPTO_LOCK:
@@ -195,12 +252,14 @@ void secmem_crypto_deregister(void)
 EXPORT_SYMBOL(secmem_crypto_deregister);
 
 static const struct file_operations secmem_fops = {
+	.open		= secmem_open,
+	.release	= secmem_release,
 	.unlocked_ioctl = secmem_ioctl,
 };
 
 extern struct platform_device exynos5_device_gsc0;
 
-struct miscdevice secmem = {
+static struct miscdevice secmem = {
 	.minor	= MISC_DYNAMIC_MINOR,
 	.name	= SECMEM_DEV_NAME,
 	.fops	= &secmem_fops,

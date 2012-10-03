@@ -545,6 +545,7 @@ struct gsc_dev {
 	struct exynos_entity_data	md_data;
 	bool				protected_content;
 	struct exynos5_bus_int_handle	*int_poll_hd;
+	struct exynos5_bus_int_handle	*int_min_hd;
 	struct exynos5_bus_mif_handle	*mif_min_hd;
 
 };
@@ -818,5 +819,7 @@ int gsc_wait_stop(struct gsc_dev *dev);
 void gsc_disp_fifo_sw_reset(struct gsc_dev *dev);
 void gsc_pixelasync_sw_reset(struct gsc_dev *dev);
 
+int gsc_bus_request_get(struct gsc_dev *gsc);
+void gsc_bus_request_put(struct gsc_dev *gsc);
 
 #endif /* GSC_CORE_H_ */
