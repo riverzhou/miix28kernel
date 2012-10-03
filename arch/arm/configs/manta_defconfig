@@ -43,6 +43,7 @@ CONFIG_NR_CPUS=2
 CONFIG_PREEMPT=y
 CONFIG_AEABI=y
 CONFIG_HIGHMEM=y
+CONFIG_COMPACTION=y
 CONFIG_ARM_FLUSH_CONSOLE_ON_RESTART=y
 CONFIG_CMDLINE="vmalloc=512M debug_core.break_on_panic=0 debug_core.break_on_exception=0 no_console_suspend s3c2410-wdt.tmr_atboot=1 s3c2410-wdt.tmr_margin=30"
 CONFIG_CMDLINE_EXTEND=y
