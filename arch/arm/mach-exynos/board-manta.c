@@ -461,10 +461,7 @@ static void exynos_dwmci0_cfg_gpio(int width)
 	for (gpio = EXYNOS5_GPC0(0); gpio < EXYNOS5_GPC0(2); gpio++) {
 		s3c_gpio_cfgpin(gpio, S3C_GPIO_SFN(2));
 		s3c_gpio_setpull(gpio, S3C_GPIO_PULL_NONE);
-		if (gpio == EXYNOS5_GPC0(0))
-			s5p_gpio_set_drvstr(gpio, S5P_GPIO_DRVSTR_LV3);
-		else
-			s5p_gpio_set_drvstr(gpio, S5P_GPIO_DRVSTR_LV2);
+		s5p_gpio_set_drvstr(gpio, S5P_GPIO_DRVSTR_LV3);
 	}
 
 	switch (width) {
@@ -472,20 +469,20 @@ static void exynos_dwmci0_cfg_gpio(int width)
 		for (gpio = EXYNOS5_GPC1(0); gpio <= EXYNOS5_GPC1(3); gpio++) {
 			s3c_gpio_cfgpin(gpio, S3C_GPIO_SFN(2));
 			s3c_gpio_setpull(gpio, S3C_GPIO_PULL_NONE);
-			s5p_gpio_set_drvstr(gpio, S5P_GPIO_DRVSTR_LV2);
+			s5p_gpio_set_drvstr(gpio, S5P_GPIO_DRVSTR_LV3);
 		}
 	case 4:
 		for (gpio = EXYNOS5_GPC0(3); gpio <= EXYNOS5_GPC0(6); gpio++) {
 			s3c_gpio_cfgpin(gpio, S3C_GPIO_SFN(2));
 			s3c_gpio_setpull(gpio, S3C_GPIO_PULL_NONE);
-			s5p_gpio_set_drvstr(gpio, S5P_GPIO_DRVSTR_LV2);
+			s5p_gpio_set_drvstr(gpio, S5P_GPIO_DRVSTR_LV3);
 		}
 		break;
 	case 1:
 		gpio = EXYNOS5_GPC0(3);
 		s3c_gpio_cfgpin(gpio, S3C_GPIO_SFN(2));
 		s3c_gpio_setpull(gpio, S3C_GPIO_PULL_NONE);
-		s5p_gpio_set_drvstr(gpio, S5P_GPIO_DRVSTR_LV2);
+		s5p_gpio_set_drvstr(gpio, S5P_GPIO_DRVSTR_LV3);
 	default:
 		break;
 	}
