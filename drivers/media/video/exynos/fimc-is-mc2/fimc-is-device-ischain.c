@@ -73,8 +73,8 @@
 #define DEFAULT_PREVIEW_VIDEO_HEIGHT		(480)
 
 static struct pm_qos_request pm_qos_req_cpu;
-static struct pm_qos_request pm_qos_req_mem;
 static struct exynos5_bus_int_handle *isp_int_handle_min;
+static struct exynos5_bus_mif_handle *isp_mif_handle_min;
 
 #ifdef FW_DEBUG
 #define DEBUG_FS_ROOT_NAME	"fimc-is"
@@ -1920,9 +1920,16 @@ int fimc_is_ischain_open(struct fimc_is_device_ischain *this,
 
 	/* 4. Disable AFTR cpu low power idle enter */
 	pm_qos_add_request(&pm_qos_req_cpu, PM_QOS_CPU_DMA_LATENCY, 100);
-	/* 3200 is 667Mhz bus , 6400 is 800Mhz */
-	pm_qos_add_request(&pm_qos_req_mem, PM_QOS_MEMORY_THROUGHPUT, 3200);
-	/* internal buf lock to 266Mhz */
+
+	/* memory minimun clock : 667Mhz */
+	if (!isp_mif_handle_min) {
+		isp_mif_handle_min = exynos5_bus_mif_min(667000);
+		if (!isp_mif_handle_min)
+			err("exynos5_bus_mif_min is fail");
+	} else
+		err("exynos5_bus_mif_min is already applied");
+
+	/* internal bus lock to 266Mhz */
 	if (!isp_int_handle_min) {
 		isp_int_handle_min = exynos5_bus_int_min(266000);
 		if (!isp_int_handle_min)
@@ -1985,7 +1992,14 @@ int fimc_is_ischain_close(struct fimc_is_device_ischain *this)
 
 	/* 6. Enable AFTR cpu low power idle enter */
 	pm_qos_remove_request(&pm_qos_req_cpu);
-	pm_qos_remove_request(&pm_qos_req_mem);
+
+	/* memory clock unlock */
+	if (isp_mif_handle_min) {
+		exynos5_bus_mif_put(isp_mif_handle_min);
+		isp_mif_handle_min = NULL;
+	} else
+		err("exynos5_bus_mif_put is already applied");
+
 	/* internal bus unlock */
 	if (isp_int_handle_min) {
 		exynos5_bus_int_put(isp_int_handle_min);
@@ -2378,7 +2392,10 @@ static int fimc_is_ischain_s_chain3_size(struct fimc_is_device_ischain *this,
 	indexes++;
 
 	/* sclaer can't apply stride to each plane, only y plane.
-	cb, cr plane should be half of y plane, it's automatically set */
+	cb, cr plane should be half of y plane, it's automatically set
+	3 plane : all plane can be 32 stride or 16, 8
+	2 plane : y plane only can be 32, 16 stride, other should be half of y
+	1 plane : all plane can be 8 plane */
 	if (video->frame.width_stride[0]) {
 		scp_param->output_crop.cmd = SCALER_CROP_COMMAND_ENABLE;
 		scp_param->output_crop.pos_x = 0;
@@ -3356,6 +3373,11 @@ int fimc_is_ischain_scc_start(struct fimc_is_device_ischain *this)
 	scc_param->dma_output.cmd = DMA_OUTPUT_COMMAND_ENABLE;
 	scc_param->dma_output.dma_out_mask = video->buf_mask;
 	scc_param->dma_output.buffer_number = video->buffers;
+#ifdef USE_FRAME_SYNC
+	scc_param->dma_output.plane = video->frame.format.num_planes - 1;
+#else
+	scc_param->dma_output.plane = video->frame.format.num_planes;
+#endif
 	scc_param->dma_output.buffer_address =
 		this->minfo.dvaddr_shared + 447*sizeof(u32);
 	lindex |= LOWBIT_OF(PARAM_SCALERC_DMA_OUTPUT);
@@ -3449,6 +3471,11 @@ int fimc_is_ischain_scp_start(struct fimc_is_device_ischain *this)
 	scp_param->dma_output.cmd = DMA_OUTPUT_COMMAND_ENABLE;
 	scp_param->dma_output.dma_out_mask = video->buf_mask;
 	scp_param->dma_output.buffer_number = video->buffers;
+#ifdef USE_FRAME_SYNC
+	scp_param->dma_output.plane = video->frame.format.num_planes - 1;
+#else
+	scp_param->dma_output.plane = video->frame.format.num_planes;
+#endif
 	scp_param->dma_output.buffer_address =
 		this->minfo.dvaddr_shared + 400*sizeof(u32);
 
