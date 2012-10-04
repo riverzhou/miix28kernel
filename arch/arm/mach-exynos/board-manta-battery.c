@@ -1014,7 +1014,7 @@ void __init exynos5_manta_battery_init(void)
 	if (hw_rev >= MANTA_REV_DOGFOOD02) {
 		s3c_gpio_cfgpin(GPIO_1WIRE_SLEEP, S3C_GPIO_OUTPUT);
 		s3c_gpio_setpull(GPIO_1WIRE_SLEEP, S3C_GPIO_PULL_NONE);
-		s5p_gpio_set_pd_cfg(GPIO_1WIRE_SLEEP, S5P_GPIO_PD_OUTPUT0);
+		s5p_gpio_set_pd_cfg(GPIO_1WIRE_SLEEP, S5P_GPIO_PD_INPUT);
 		s5p_gpio_set_pd_pull(GPIO_1WIRE_SLEEP,
 				     S5P_GPIO_PD_UPDOWN_DISABLE);
 		ds2483_pdata.slpz_gpio = GPIO_1WIRE_SLEEP;
