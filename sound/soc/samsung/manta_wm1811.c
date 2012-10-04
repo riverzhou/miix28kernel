@@ -153,9 +153,6 @@ static int manta_set_bias_level_post(struct snd_soc_card *card,
 		}
 
 		machine->current_pll_out = 0;
-
-		/* Stop the reference clock for the codec's FLL */
-		clk_disable(machine->clk);
 	}
 
 	return 0;
@@ -192,24 +189,23 @@ static int manta_wm1811_aif1_hw_params(struct snd_pcm_substream *substream,
 	else
 		pll_out = params_rate(params) * 256;
 
-	if (machine->current_pll_out == 0) {
-		/* Start the reference clock for the codec's FLL */
-		clk_enable(machine->clk);
-	} else if (machine->current_pll_out != pll_out) {
+	if (machine->current_pll_out != pll_out) {
 		/*
 		 * Make sure that we have a system clock not derived from the
 		 * FLL, since we cannot change the FLL when the system clock
 		 * is derived from it.
 		 */
-		ret = snd_soc_dai_set_sysclk(codec_dai, WM8994_SYSCLK_MCLK2,
+		if (machine->current_pll_out) {
+			ret = snd_soc_dai_set_sysclk(codec_dai,
+					WM8994_SYSCLK_MCLK2,
 					MCLK2_FREQ, SND_SOC_CLOCK_IN);
-		if (ret < 0) {
-			pr_err("Failed to switch away from FLL: %d\n", ret);
-			return ret;
+			if (ret < 0) {
+				pr_err("Failed to switch away from FLL: %d\n",
+									ret);
+				return ret;
+			}
 		}
-	}
 
-	if (machine->current_pll_out != pll_out) {
 		/* Switch the FLL */
 		ret = snd_soc_dai_set_pll(codec_dai, WM8994_FLL1,
 				WM8994_FLL_SRC_MCLK1, MCLK1_FREQ, pll_out);
@@ -437,9 +433,13 @@ static int manta_late_probe(struct snd_soc_card *card)
 static int manta_card_suspend_post(struct snd_soc_card *card)
 {
 	struct snd_soc_codec *codec = card->rtd->codec;
+	struct manta_wm1811 *machine =
+				snd_soc_card_get_drvdata(codec->card);
 
 	snd_soc_update_bits(codec, WM8994_AIF1_MASTER_SLAVE,
 					WM8994_AIF1_TRI_MASK, WM8994_AIF1_TRI);
+
+	clk_disable(machine->clk);
 
 	return 0;
 }
@@ -447,6 +447,10 @@ static int manta_card_suspend_post(struct snd_soc_card *card)
 static int manta_card_resume_pre(struct snd_soc_card *card)
 {
 	struct snd_soc_codec *codec = card->rtd->codec;
+	struct manta_wm1811 *machine =
+				snd_soc_card_get_drvdata(codec->card);
+
+	clk_enable(machine->clk);
 
 	snd_soc_update_bits(codec, WM8994_AIF1_MASTER_SLAVE,
 					WM8994_AIF1_TRI_MASK, 0);
@@ -495,6 +499,9 @@ static int __devinit snd_manta_probe(struct platform_device *pdev)
 		goto err_clk_get;
 	}
 
+	/* Start the reference clock for the codec's FLL */
+	clk_enable(machine->clk);
+
 	ret = snd_soc_register_dais(&pdev->dev, manta_ext_dai,
 						ARRAY_SIZE(manta_ext_dai));
 	if (ret != 0)
@@ -531,6 +538,7 @@ static int __devexit snd_manta_remove(struct platform_device *pdev)
 	struct manta_wm1811 *machine = snd_soc_card_get_drvdata(&manta);
 
 	snd_soc_unregister_card(&manta);
+	clk_disable(machine->clk);
 	clk_put(machine->clk);
 	kfree(machine);
 
