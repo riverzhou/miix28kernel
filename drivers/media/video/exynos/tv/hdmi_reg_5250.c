@@ -2290,7 +2290,10 @@ void hdmi_reg_init(struct hdmi_device *hdev)
 	/* RGB888 is default output format of HDMI,
 	 * look to CEA-861-D, table 7 for more detail */
 	hdmi_writeb(hdev, HDMI_AVI_BYTE(1), 0 << 5);
-	hdmi_write_mask(hdev, HDMI_CON_1, 2, 3 << 5);
+	if (hdev->color_range == 0 || hdev->color_range == 2)
+		hdmi_write_mask(hdev, HDMI_CON_1, 0, 3 << 5);
+	else
+		hdmi_write_mask(hdev, HDMI_CON_1, 1 << 5, 3 << 5);
 }
 
 void hdmi_set_dvi_mode(struct hdmi_device *hdev)
@@ -2565,7 +2568,7 @@ void hdmi_reg_infoframe(struct hdmi_device *hdev,
 		hdmi_writeb(hdev, HDMI_AVI_HEADER2, infoframe->len);
 		hdr_sum = infoframe->type + infoframe->ver + infoframe->len;
 		hdmi_writeb(hdev, HDMI_AVI_BYTE(1), hdev->output_fmt << 5 |
-				AVI_ACTIVE_FORMAT_VALID);
+				AVI_ACTIVE_FORMAT_VALID | AVI_UNDERSCAN);
 		if (hdev->aspect == HDMI_ASPECT_RATIO_4_3 &&
 				(hdev->cur_preset == V4L2_DV_480P59_94 ||
 				 hdev->cur_preset == V4L2_DV_480P60)) {
@@ -2583,7 +2586,11 @@ void hdmi_reg_infoframe(struct hdmi_device *hdev,
 		}
 
 		hdmi_writeb(hdev, HDMI_AVI_BYTE(2), aspect_ratio |
-				AVI_SAME_AS_PIC_ASPECT_RATIO);
+				AVI_SAME_AS_PIC_ASPECT_RATIO | AVI_ITU709);
+		if (hdev->color_range == 0 || hdev->color_range == 2)
+			hdmi_writeb(hdev, HDMI_AVI_BYTE(3), AVI_FULL_RANGE);
+		else
+			hdmi_writeb(hdev, HDMI_AVI_BYTE(3), AVI_LIMITED_RANGE);
 		dev_dbg(dev, "VIC code = %d\n", vic);
 		hdmi_writeb(hdev, HDMI_AVI_BYTE(4), vic);
 		chksum = hdmi_chksum(hdev, HDMI_AVI_BYTE(1), infoframe->len, hdr_sum);

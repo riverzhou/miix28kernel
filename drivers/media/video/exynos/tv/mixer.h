@@ -120,6 +120,13 @@ enum mxr_geometry_stage {
 	MXR_GEOMETRY_SOURCE,
 };
 
+enum s5p_mixer_rgb {
+	MIXER_RGB601_0_255,
+	MIXER_RGB601_16_235,
+	MIXER_RGB709_0_255,
+	MIXER_RGB709_16_235
+};
+
 /** description of transformation from source to destination image */
 struct mxr_geometry {
 	/** cropping for source image */
@@ -404,6 +411,8 @@ struct mxr_device {
 	int frame_packing;
 
 	struct exynos5_bus_mif_handle *mif_handle;
+
+	int color_range;
 };
 
 #if defined(CONFIG_VIDEOBUF2_CMA_PHYS)
@@ -532,6 +541,7 @@ void mxr_vsync_enable_update(struct mxr_device *mdev);
 void mxr_vsync_disable_update(struct mxr_device *mdev);
 void mxr_reg_reset(struct mxr_device *mdev);
 void mxr_reg_set_layer_prio(struct mxr_device *mdev);
+void mxr_reg_set_color_range(struct mxr_device *mdev);
 void mxr_reg_set_layer_blend(struct mxr_device *mdev, int sub_mxr, int num,
 		int en);
 void mxr_reg_layer_alpha(struct mxr_device *mdev, int sub_mxr, int num, u32 a);

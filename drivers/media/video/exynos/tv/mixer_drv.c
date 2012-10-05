@@ -146,6 +146,7 @@ static int mxr_streamer_get(struct mxr_device *mdev, struct v4l2_subdev *sd)
 	/* Alpha blending configuration always can be changed
 	 * whenever streaming */
 	mxr_set_alpha_blend(mdev);
+	mxr_reg_set_color_range(mdev);
 	mxr_reg_set_layer_prio(mdev);
 
 	if ((mdev->n_streamer == 1 && local == 1) ||
@@ -1378,6 +1379,7 @@ static int __devinit mxr_probe(struct platform_device *pdev)
 
 	/* setup pointer to master device */
 	mdev->dev = dev;
+	mdev->color_range = 3;
 
 	/* use only sub mixer0 as default */
 	mdev->sub_mxr[MXR_SUB_MIXER0].use = 1;

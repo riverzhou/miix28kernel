@@ -446,6 +446,10 @@ static int mxr_s_ctrl(struct file *file, void *fh, struct v4l2_control *ctrl)
 		if (layer->pipe.state == MXR_PIPELINE_STREAMING)
 			mxr_reg_set_layer_prio(mdev);
 		break;
+	case V4L2_CID_TV_SET_COLOR_RANGE:
+		mdev->color_range = v;
+		v4l2_subdev_call(to_outsd(mdev), core, s_ctrl, ctrl);
+		break;
 	case V4L2_CID_TV_UPDATE:
 		ret = mxr_update(mdev);
 		break;

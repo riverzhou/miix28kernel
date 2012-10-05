@@ -40,10 +40,14 @@
 #define HDMI_AVI_LENGTH		0x0d
 #define HDMI_AUI_LENGTH		0x0a
 
+#define AVI_UNDERSCAN			(2 << 0)
 #define AVI_ACTIVE_FORMAT_VALID		(1 << 4)
 #define AVI_PIC_ASPECT_RATIO_4_3	(1 << 4)
 #define AVI_PIC_ASPECT_RATIO_16_9	(2 << 4)
 #define AVI_SAME_AS_PIC_ASPECT_RATIO	8
+#define AVI_LIMITED_RANGE		(1 << 2)
+#define AVI_FULL_RANGE			(2 << 2)
+#define AVI_ITU709			(2 << 6)
 
 /* HDMI audio configuration value */
 #define DEFAULT_SAMPLE_RATE	44100
@@ -324,6 +328,7 @@ struct hdmi_device {
 	int dvi_mode;
 
 	struct mutex mutex;
+	int color_range;
 };
 
 struct hdmi_conf {

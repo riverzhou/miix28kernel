@@ -688,6 +688,19 @@ void mxr_reg_set_mbus_fmt(struct mxr_device *mdev,
 	spin_unlock_irqrestore(&mdev->reg_slock, flags);
 }
 
+void mxr_reg_set_color_range(struct mxr_device *mdev)
+{
+	mxr_write(mdev, MXR_CM_COEFF_Y,
+			(1 << 30) | (94 << 20) | (314 << 10) | (32 << 0));
+	mxr_write(mdev, MXR_CM_COEFF_CB,
+			(972 << 20) | (851 << 10) | (225 << 0));
+	mxr_write(mdev, MXR_CM_COEFF_CR,
+			(225 << 20) | (820 << 10) | (1004 << 0));
+
+	mxr_write_mask(mdev, MXR_CFG, mdev->color_range << 9,
+				      MXR_CFG_COLOR_RANGE_MASK);
+}
+
 void mxr_reg_local_path_clear(struct mxr_device *mdev)
 {
 	u32 val;
