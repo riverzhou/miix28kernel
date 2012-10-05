@@ -84,6 +84,8 @@ static struct wake_lock manta_bat_chgdetect_wakelock;
 static DEFINE_MUTEX(manta_bat_charger_detect_lock);
 static DEFINE_MUTEX(manta_bat_adc_lock);
 
+static bool manta_bat_suspended;
+
 static inline int manta_source_to_android(enum manta_charge_source src)
 {
 	switch (src) {
@@ -1079,14 +1081,19 @@ static int exynos5_manta_battery_pm_event(struct notifier_block *notifier,
 			disable_irq(gpio_to_irq(GPIO_OTG_VBUS_SENSE));
 			disable_irq(gpio_to_irq(GPIO_VBUS_POGO_5V));
 		}
+		manta_bat_suspended = true;
 		break;
 
 	case PM_POST_SUSPEND:
-		if (hw_rev <= MANTA_REV_ALPHA) {
-			enable_irq(gpio_to_irq(GPIO_TA_INT));
-		} else {
-			enable_irq(gpio_to_irq(GPIO_OTG_VBUS_SENSE));
-			enable_irq(gpio_to_irq(GPIO_VBUS_POGO_5V));
+		if (manta_bat_suspended) {
+			if (hw_rev <= MANTA_REV_ALPHA) {
+				enable_irq(gpio_to_irq(GPIO_TA_INT));
+			} else {
+				enable_irq(gpio_to_irq(GPIO_OTG_VBUS_SENSE));
+				enable_irq(gpio_to_irq(GPIO_VBUS_POGO_5V));
+			}
+
+			manta_bat_suspended = false;
 		}
 		break;
 
