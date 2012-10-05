@@ -466,10 +466,15 @@ static ssize_t es305_sleep_store(struct device *dev,
 	if (!!state ^ es305->asleep) {
 		/* requested sleep state is different to current state */
 		mutex_lock(&es305->lock);
-		if (state)
-			ret = es305_sleep(es305);
-		else
+		if (state) {
+			if (es305->passthrough != 0)
+				ret = es305_set_passthrough(es305,
+							es305->passthrough);
+			else
+				ret = es305_sleep(es305);
+		} else {
 			ret = es305_wake(es305);
+		}
 		if (ret < 0) {
 			dev_err(es305->dev, "unable to change sleep state\n");
 			mutex_unlock(&es305->lock);
