@@ -52,9 +52,6 @@
 
 static int gpio_TA_nCHG = GPIO_TA_nCHG_ALPHA;
 
-/* Temporary, need pogo driver API to share these */
-#define GPIO_POGO_SPDIF		EXYNOS5_GPB1(0)
-
 enum charge_connector {
 	CHARGE_CONNECTOR_NONE,
 	CHARGE_CONNECTOR_POGO,
