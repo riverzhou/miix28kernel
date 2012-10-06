@@ -81,7 +81,7 @@
 
 #define DEBOUNCE_DELAY_MS		250
 
-#define DOCK_CPU_FREQ_MIN		400000
+#define DOCK_CPU_FREQ_MIN		800000
 
 /* GPIO configuration */
 #define GPIO_POGO_DATA_BETA		EXYNOS5_GPB0(0)
