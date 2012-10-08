@@ -496,7 +496,7 @@ static struct dw_mci_board exynos_dwmci0_pdata __initdata = {
 	.bus_hz			= 50 * 1000 * 1000,
 	.max_bus_hz		= 200 * 1000 * 1000,
 	.caps			= MMC_CAP_UHS_DDR50 | MMC_CAP_1_8V_DDR |
-				  MMC_CAP_8_BIT_DATA | MMC_CAP_CMD23,
+				  MMC_CAP_8_BIT_DATA | MMC_CAP_CMD23 | MMC_CAP_ERASE,
 	.caps2 			= MMC_CAP2_HS200_1_8V_SDR | MMC_CAP2_PACKED_WR,
 	.desc_sz		= 4,
 	.fifo_depth             = 0x80,
