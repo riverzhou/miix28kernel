@@ -141,6 +141,19 @@ struct mxr_buffer {
 	struct list_head	wait;
 };
 
+struct mxr_layer_update {
+	bool			update;
+	struct mxr_buffer	*buffer;
+	const struct mxr_format	*fmt;
+	struct mxr_geometry	geo;
+};
+
+struct mxr_update {
+	struct work_struct       work;
+	struct mxr_device        *mdev;
+	struct mxr_layer_update  layers[MXR_MAX_LAYERS];
+};
+
 /** TV graphic layer pipeline state */
 enum mxr_pipeline_state {
 	/** graphic layer is not shown */
@@ -174,7 +187,8 @@ struct mxr_layer_ops {
 	/** setting buffer to HW */
 	void (*buffer_set)(struct mxr_layer *, struct mxr_buffer *);
 	/** setting format and geometry in HW */
-	void (*format_set)(struct mxr_layer *);
+	void (*format_set)(struct mxr_layer *, const struct mxr_format *fmt,
+					       struct mxr_geometry *geo);
 	/** streaming stop/start */
 	void (*stream_set)(struct mxr_layer *, int);
 	/** adjusting geometry */
@@ -217,8 +231,6 @@ struct mxr_layer {
 
 	/** list for buffers waiting on a fence */
 	struct list_head fence_wait_list;
-	struct workqueue_struct *fence_wq;
-	struct work_struct fence_work;
 
 	/** buffer currently owned by hardware in temporary registers */
 	struct mxr_buffer *update_buf;
@@ -300,11 +312,6 @@ struct mxr_resources {
 	struct clk *sclk_hdmi;
 };
 
-/* event flags used  */
-enum mxr_devide_flags {
-	MXR_EVENT_VSYNC = 0,
-};
-
 /** videobuf2 context of mixer */
 struct mxr_vb2 {
 	const struct vb2_mem_ops *ops;
@@ -354,13 +361,15 @@ struct mxr_device {
 	const struct mxr_vb2 *vb2;
 	/** context of allocator */
 	void *alloc_ctx;
-	/** event wait queue */
-	wait_queue_head_t event_queue;
-	/** state flags */
-	unsigned long event_flags;
+
+	/** vsync wait queue */
+	wait_queue_head_t vsync_wait;
+	ktime_t           vsync_timestamp;
 
 	/** spinlock for protection of registers */
 	spinlock_t reg_slock;
+
+	struct workqueue_struct *update_wq;
 
 	/** mutex for protection of fields below */
 	struct mutex mutex;
@@ -519,6 +528,8 @@ void mxr_get_mbus_fmt(struct mxr_device *mdev,
 
 void mxr_layer_sync(struct mxr_device *mdev, int en);
 void mxr_vsync_set_update(struct mxr_device *mdev, int en);
+void mxr_vsync_enable_update(struct mxr_device *mdev);
+void mxr_vsync_disable_update(struct mxr_device *mdev);
 void mxr_reg_reset(struct mxr_device *mdev);
 void mxr_reg_set_layer_prio(struct mxr_device *mdev);
 void mxr_reg_set_layer_blend(struct mxr_device *mdev, int sub_mxr, int num,
@@ -533,7 +544,7 @@ irqreturn_t mxr_irq_handler(int irq, void *dev_data);
 void mxr_reg_s_output(struct mxr_device *mdev, int cookie);
 void mxr_reg_streamon(struct mxr_device *mdev);
 void mxr_reg_streamoff(struct mxr_device *mdev);
-int mxr_reg_wait4vsync(struct mxr_device *mdev);
+int mxr_reg_wait4update(struct mxr_device *mdev);
 void mxr_reg_set_mbus_fmt(struct mxr_device *mdev,
 	struct v4l2_mbus_framefmt *fmt, u32 dvi_mode);
 void mxr_reg_local_path_clear(struct mxr_device *mdev);

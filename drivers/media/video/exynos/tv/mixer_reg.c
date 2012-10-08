@@ -75,6 +75,17 @@ void mxr_layer_sync(struct mxr_device *mdev, int en)
 		MXR_STATUS_LAYER_SYNC);
 }
 
+void mxr_vsync_enable_update(struct mxr_device *mdev)
+{
+	mxr_write_mask(mdev, MXR_CFG,    ~0, MXR_CFG_LAYER_UPDATE);
+	mxr_write_mask(mdev, MXR_STATUS, ~0, MXR_STATUS_SYNC_ENABLE);
+}
+
+void mxr_vsync_disable_update(struct mxr_device *mdev)
+{
+	mxr_write_mask(mdev, MXR_STATUS, 0, MXR_STATUS_SYNC_ENABLE);
+}
+
 void mxr_vsync_set_update(struct mxr_device *mdev, int en)
 {
 	/* block update on vsync */
@@ -317,10 +328,6 @@ void mxr_reg_vp_format(struct mxr_device *mdev,
 void mxr_reg_graph_buffer(struct mxr_device *mdev, int idx, dma_addr_t addr)
 {
 	u32 val = addr ? ~0 : 0;
-	unsigned long flags;
-
-	spin_lock_irqsave(&mdev->reg_slock, flags);
-	mxr_vsync_set_update(mdev, MXR_DISABLE);
 
 	if (idx == 0) {
 		mxr_write_mask(mdev, MXR_CFG, val, MXR_CFG_GRP0_ENABLE);
@@ -335,9 +342,6 @@ void mxr_reg_graph_buffer(struct mxr_device *mdev, int idx, dma_addr_t addr)
 		mxr_write_mask(mdev, MXR_CFG, val, MXR_CFG_MX1_GRP1_ENABLE);
 		mxr_write(mdev, MXR1_GRAPHIC_BASE(1), addr);
 	}
-
-	mxr_vsync_set_update(mdev, MXR_ENABLE);
-	spin_unlock_irqrestore(&mdev->reg_slock, flags);
 }
 
 void mxr_reg_vp_buffer(struct mxr_device *mdev,
@@ -524,42 +528,6 @@ void mxr_reg_colorkey_val(struct mxr_device *mdev, int sub_mxr, int num, u32 v)
 	spin_unlock_irqrestore(&mdev->reg_slock, flags);
 }
 
-static void mxr_irq_layer_handle(struct mxr_layer *layer)
-{
-	struct list_head *head = &layer->enq_list;
-	struct mxr_pipeline *pipe = &layer->pipe;
-	struct mxr_buffer *done;
-
-	/* skip non-existing layer */
-	if (layer == NULL)
-		return;
-
-	spin_lock(&layer->enq_slock);
-	if (pipe->state == MXR_PIPELINE_IDLE)
-		goto done;
-
-	done = layer->shadow_buf;
-	layer->shadow_buf = layer->update_buf;
-
-	if (list_empty(head)) {
-		if (pipe->state != MXR_PIPELINE_STREAMING)
-			layer->update_buf = NULL;
-	} else {
-		struct mxr_buffer *next;
-		next = list_first_entry(head, struct mxr_buffer, list);
-		list_del(&next->list);
-		layer->update_buf = next;
-	}
-
-	layer->ops.buffer_set(layer, layer->update_buf);
-
-	if (done && done != layer->shadow_buf)
-		vb2_buffer_done(&done->vb, VB2_BUF_STATE_DONE);
-
-done:
-	spin_unlock(&layer->enq_slock);
-}
-
 u32 mxr_irq_underrun_handle(struct mxr_device *mdev, u32 val)
 {
 	if (val & MXR_INT_STATUS_MX0_VIDEO) {
@@ -588,15 +556,15 @@ u32 mxr_irq_underrun_handle(struct mxr_device *mdev, u32 val)
 irqreturn_t mxr_irq_handler(int irq, void *dev_data)
 {
 	struct mxr_device *mdev = dev_data;
-	u32 i, val;
+	u32 val;
 
 	spin_lock(&mdev->reg_slock);
 	val = mxr_read(mdev, MXR_INT_STATUS);
 
 	/* wake up process waiting for VSYNC */
 	if (val & MXR_INT_STATUS_VSYNC) {
-		set_bit(MXR_EVENT_VSYNC, &mdev->event_flags);
-		wake_up(&mdev->event_queue);
+		mdev->vsync_timestamp = ktime_get();
+		wake_up_interruptible_all(&mdev->vsync_wait);
 	}
 
 	/* clear interrupts.
@@ -608,24 +576,6 @@ irqreturn_t mxr_irq_handler(int irq, void *dev_data)
 	mxr_write(mdev, MXR_INT_STATUS, val);
 
 	spin_unlock(&mdev->reg_slock);
-	/* leave on non-vsync event */
-	if (~val & MXR_INT_CLEAR_VSYNC)
-		return IRQ_HANDLED;
-
-	for (i = 0; i < MXR_MAX_SUB_MIXERS; ++i) {
-#if defined(CONFIG_ARCH_EXYNOS4)
-		mxr_irq_layer_handle(mdev->sub_mxr[i].layer[MXR_LAYER_VIDEO]);
-#endif
-		mxr_irq_layer_handle(mdev->sub_mxr[i].layer[MXR_LAYER_GRP0]);
-		mxr_irq_layer_handle(mdev->sub_mxr[i].layer[MXR_LAYER_GRP1]);
-	}
-
-	if (test_bit(MXR_EVENT_VSYNC, &mdev->event_flags)) {
-		spin_lock(&mdev->reg_slock);
-		mxr_write_mask(mdev, MXR_CFG, ~0, MXR_CFG_LAYER_UPDATE);
-		spin_unlock(&mdev->reg_slock);
-	}
-
 	return IRQ_HANDLED;
 }
 
@@ -663,15 +613,20 @@ void mxr_reg_streamoff(struct mxr_device *mdev)
 	spin_unlock_irqrestore(&mdev->reg_slock, flags);
 }
 
-int mxr_reg_wait4vsync(struct mxr_device *mdev)
+static int mxr_update_pending(struct mxr_device *mdev)
 {
+	return MXR_CFG_LAYER_UPDATE_COUNT(mxr_read(mdev, MXR_CFG));
+}
+
+int mxr_reg_wait4update(struct mxr_device *mdev)
+{
+	ktime_t timestamp = mdev->vsync_timestamp;
 	int ret;
 
-	clear_bit(MXR_EVENT_VSYNC, &mdev->event_flags);
-	/* TODO: consider adding interruptible */
-	ret = wait_event_timeout(mdev->event_queue,
-		test_bit(MXR_EVENT_VSYNC, &mdev->event_flags),
-		msecs_to_jiffies(1000));
+	ret = wait_event_interruptible_timeout(mdev->vsync_wait,
+		!ktime_equal(timestamp, mdev->vsync_timestamp)
+				&& !mxr_update_pending(mdev),
+		msecs_to_jiffies(100));
 	if (ret > 0)
 		return 0;
 	if (ret < 0)

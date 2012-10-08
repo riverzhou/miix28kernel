@@ -129,7 +129,7 @@
 
 /* bits for MXR_CFG */
 #define MXR_CFG_LAYER_UPDATE            (1 << 31)
-#define MXR_CFG_LAYER_UPDATE_COUNTER    (3 << 29)
+#define MXR_CFG_LAYER_UPDATE_COUNT(x)   (((x) >> 29) & 3)
 #define MXR_CFG_MX1_GRP1_ENABLE		(1 << 15)
 #define MXR_CFG_MX1_GRP0_ENABLE		(1 << 14)
 #define MXR_CFG_MX1_VIDEO_ENABLE	(1 << 13)
