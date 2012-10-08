@@ -133,6 +133,9 @@ static int manta_set_bias_level_post(struct snd_soc_card *card,
 		return 0;
 
 	if ((level == SND_SOC_BIAS_STANDBY) && machine->current_pll_out) {
+		pr_info("%s current_pll_out=%d\n", __func__,
+						machine->current_pll_out);
+
 		/*
 		 * Playback/capture has stopped, so switch to the slower
 		 * MCLK2 for reduced power consumption. hw_params handles
@@ -172,14 +175,18 @@ static int manta_wm1811_aif1_hw_params(struct snd_pcm_substream *substream,
 	ret = snd_soc_dai_set_fmt(codec_dai, SND_SOC_DAIFMT_I2S |
 					SND_SOC_DAIFMT_NB_NF |
 					SND_SOC_DAIFMT_CBM_CFM);
-	if (ret < 0)
+	if (ret < 0) {
+		dev_err(codec_dai->dev, "Unable to set codec DAIFMT\n");
 		return ret;
+	}
 
 	ret = snd_soc_dai_set_fmt(cpu_dai, SND_SOC_DAIFMT_I2S |
 					SND_SOC_DAIFMT_NB_NF |
 					SND_SOC_DAIFMT_CBM_CFM);
-	if (ret < 0)
+	if (ret < 0) {
+		dev_err(codec_dai->dev, "Unable to set CPU DAIFMT\n");
 		return ret;
+	}
 
 	/* AIF1CLK should be >=3MHz for optimal performance */
 	if (params_format(params) == SNDRV_PCM_FORMAT_S24_LE)
@@ -188,6 +195,9 @@ static int manta_wm1811_aif1_hw_params(struct snd_pcm_substream *substream,
 		pll_out = params_rate(params) * 512;
 	else
 		pll_out = params_rate(params) * 256;
+
+	pr_info("%s current_pll_out=%d pll_out=%d\n", __func__,
+					machine->current_pll_out, pll_out);
 
 	if (machine->current_pll_out != pll_out) {
 		/*
