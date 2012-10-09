@@ -37,7 +37,7 @@
 
 struct manta_wm1811 {
 	struct clk *clk;
-	unsigned int current_pll_out;
+	unsigned int pll_out;
 	struct snd_soc_jack jack;
 };
 
@@ -120,6 +120,95 @@ const struct snd_soc_dapm_route manta_paths[] = {
 	{ "AIF1DAC1R", NULL, "S5P RP" },
 };
 
+static int manta_start_fll1(struct snd_soc_dai *codec_dai,
+						struct manta_wm1811 *machine)
+{
+	int ret;
+
+	/*
+	 * Make sure that we have a system clock not derived from the
+	 * FLL, since we cannot change the FLL when the system clock
+	 * is derived from it.
+	 */
+	ret = snd_soc_dai_set_sysclk(codec_dai,
+					WM8994_SYSCLK_MCLK2,
+					MCLK2_FREQ, SND_SOC_CLOCK_IN);
+	if (ret < 0) {
+		dev_err(codec_dai->dev, "Failed to switch away from FLL: %d\n",
+									ret);
+		return ret;
+	}
+
+	/* Switch the FLL */
+	ret = snd_soc_dai_set_pll(codec_dai, WM8994_FLL1,
+				WM8994_FLL_SRC_MCLK1, MCLK1_FREQ,
+				machine->pll_out);
+	if (ret < 0) {
+		dev_err(codec_dai->dev, "Unable to start FLL1\n");
+		return ret;
+	}
+
+	/* Then switch AIF1CLK to it */
+	ret = snd_soc_dai_set_sysclk(codec_dai, WM8994_SYSCLK_FLL1,
+				machine->pll_out, SND_SOC_CLOCK_IN);
+	if (ret < 0) {
+		dev_err(codec_dai->dev, "Unable to switch to FLL1\n");
+		return ret;
+	}
+
+	return 0;
+}
+
+static int manta_stop_fll1(struct snd_soc_dai *codec_dai,
+						struct manta_wm1811 *machine)
+{
+	int ret;
+
+	/*
+	 * Playback/capture has stopped, so switch to the slower
+	 * MCLK2 for reduced power consumption. hw_params handles
+	 * turning the FLL back on when needed.
+	 */
+	ret = snd_soc_dai_set_sysclk(codec_dai, WM8994_SYSCLK_MCLK2,
+					MCLK2_FREQ, SND_SOC_CLOCK_IN);
+	if (ret < 0) {
+		dev_err(codec_dai->dev, "Failed to switch away from FLL: %d\n",
+									ret);
+		return ret;
+	}
+
+	ret = snd_soc_dai_set_pll(codec_dai, WM8994_FLL1,
+					0, 0, 0);
+	if (ret < 0) {
+		dev_err(codec_dai->dev, "Failed to stop FLL: %d\n", ret);
+		return ret;
+	}
+
+	return 0;
+}
+
+static int manta_set_bias_level(struct snd_soc_card *card,
+					struct snd_soc_dapm_context *dapm,
+					enum snd_soc_bias_level level)
+{
+	struct snd_soc_dai *codec_dai = card->rtd[0].codec_dai;
+	struct manta_wm1811 *machine =
+				snd_soc_card_get_drvdata(card);
+	int ret = 0;
+
+	if (dapm->dev != codec_dai->dev)
+		return 0;
+
+	if ((level == SND_SOC_BIAS_PREPARE) &&
+			(dapm->bias_level == SND_SOC_BIAS_STANDBY)) {
+		pr_info("%s starting FLL1, pll_out=%d\n", __func__,
+							machine->pll_out);
+		ret = manta_start_fll1(codec_dai, machine);
+	}
+
+	return ret;
+}
+
 static int manta_set_bias_level_post(struct snd_soc_card *card,
 					struct snd_soc_dapm_context *dapm,
 					enum snd_soc_bias_level level)
@@ -127,38 +216,19 @@ static int manta_set_bias_level_post(struct snd_soc_card *card,
 	struct snd_soc_dai *codec_dai = card->rtd[0].codec_dai;
 	struct manta_wm1811 *machine =
 				snd_soc_card_get_drvdata(card);
-	int ret;
+	int ret = 0;
 
 	if (dapm->dev != codec_dai->dev)
 		return 0;
 
-	if ((level == SND_SOC_BIAS_STANDBY) && machine->current_pll_out) {
-		pr_info("%s current_pll_out=%d\n", __func__,
-						machine->current_pll_out);
-
-		/*
-		 * Playback/capture has stopped, so switch to the slower
-		 * MCLK2 for reduced power consumption. hw_params handles
-		 * turning the FLL back on when needed.
-		 */
-		ret = snd_soc_dai_set_sysclk(codec_dai, WM8994_SYSCLK_MCLK2,
-						MCLK2_FREQ, SND_SOC_CLOCK_IN);
-		if (ret < 0) {
-			pr_err("Failed to switch away from FLL: %d\n", ret);
-			return ret;
-		}
-
-		ret = snd_soc_dai_set_pll(codec_dai, WM8994_FLL1,
-						0, 0, 0);
-		if (ret < 0) {
-			pr_err("Failed to stop FLL: %d\n", ret);
-			return ret;
-		}
-
-		machine->current_pll_out = 0;
+	if (level == SND_SOC_BIAS_STANDBY) {
+		pr_info("%s stopping FLL1\n", __func__);
+		ret = manta_stop_fll1(codec_dai, machine);
 	}
 
-	return 0;
+	dapm->bias_level = level;
+
+	return ret;
 }
 
 static int manta_wm1811_aif1_hw_params(struct snd_pcm_substream *substream,
@@ -169,8 +239,16 @@ static int manta_wm1811_aif1_hw_params(struct snd_pcm_substream *substream,
 	struct snd_soc_dai *codec_dai = rtd->codec_dai;
 	struct manta_wm1811 *machine =
 				snd_soc_card_get_drvdata(rtd->codec->card);
-	unsigned int pll_out;
 	int ret;
+
+	machine->pll_out = params_rate(params) * 512;
+
+	pr_info("%s starting FLL1, pll_out=%d\n", __func__, machine->pll_out);
+	ret = manta_start_fll1(codec_dai, machine);
+	if (ret < 0) {
+		dev_err(codec_dai->dev, "Unable to start FLL1\n");
+		return ret;
+	}
 
 	ret = snd_soc_dai_set_fmt(codec_dai, SND_SOC_DAIFMT_I2S |
 					SND_SOC_DAIFMT_NB_NF |
@@ -186,49 +264,6 @@ static int manta_wm1811_aif1_hw_params(struct snd_pcm_substream *substream,
 	if (ret < 0) {
 		dev_err(codec_dai->dev, "Unable to set CPU DAIFMT\n");
 		return ret;
-	}
-
-	/* AIF1CLK should be >=3MHz for optimal performance */
-	if (params_format(params) == SNDRV_PCM_FORMAT_S24_LE)
-		pll_out = params_rate(params) * 384;
-	else if (params_rate(params) == 8000 || params_rate(params) == 11025)
-		pll_out = params_rate(params) * 512;
-	else
-		pll_out = params_rate(params) * 256;
-
-	pr_info("%s current_pll_out=%d pll_out=%d\n", __func__,
-					machine->current_pll_out, pll_out);
-
-	if (machine->current_pll_out != pll_out) {
-		/*
-		 * Make sure that we have a system clock not derived from the
-		 * FLL, since we cannot change the FLL when the system clock
-		 * is derived from it.
-		 */
-		if (machine->current_pll_out) {
-			ret = snd_soc_dai_set_sysclk(codec_dai,
-					WM8994_SYSCLK_MCLK2,
-					MCLK2_FREQ, SND_SOC_CLOCK_IN);
-			if (ret < 0) {
-				pr_err("Failed to switch away from FLL: %d\n",
-									ret);
-				return ret;
-			}
-		}
-
-		/* Switch the FLL */
-		ret = snd_soc_dai_set_pll(codec_dai, WM8994_FLL1,
-				WM8994_FLL_SRC_MCLK1, MCLK1_FREQ, pll_out);
-		if (ret < 0)
-			dev_err(codec_dai->dev, "Unable to start FLL1\n");
-
-		/* Then switch AIF1CLK to it */
-		ret = snd_soc_dai_set_sysclk(codec_dai, WM8994_SYSCLK_FLL1,
-				pll_out, SND_SOC_CLOCK_IN);
-		if (ret < 0)
-			dev_err(codec_dai->dev, "Unable to switch to FLL1\n");
-
-		machine->current_pll_out = pll_out;
 	}
 
 	return 0;
@@ -474,6 +509,7 @@ static struct snd_soc_card manta = {
 	.dai_link = manta_dai,
 	.num_links = ARRAY_SIZE(manta_dai),
 
+	.set_bias_level = manta_set_bias_level,
 	.set_bias_level_post = manta_set_bias_level_post,
 
 	.controls = manta_controls,
@@ -511,6 +547,8 @@ static int __devinit snd_manta_probe(struct platform_device *pdev)
 
 	/* Start the reference clock for the codec's FLL */
 	clk_enable(machine->clk);
+
+	machine->pll_out = 44100 * 512; /* default sample rate */
 
 	ret = snd_soc_register_dais(&pdev->dev, manta_ext_dai,
 						ARRAY_SIZE(manta_ext_dai));
