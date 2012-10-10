@@ -62,6 +62,7 @@ enum charge_connector {
 static int manta_bat_battery_status;
 static enum manta_charge_source manta_bat_charge_source[CHARGE_CONNECTOR_MAX];
 static enum charge_connector manta_bat_charge_conn;
+static bool manta_bat_dock;
 static bool manta_bat_usb_online;
 static bool manta_bat_pogo_online;
 static bool manta_bat_otg_enabled;
@@ -318,7 +319,6 @@ static enum manta_charge_source check_samsung_charger(
 	union power_supply_propval prop;
 
 	if (conn == CHARGE_CONNECTOR_POGO) {
-		/* todo: check dock int */
 		ta_adc = read_ta_adc(conn, 0);
 		pr_debug("%s: ta_adc conn=%d ta_check=0 val=%d\n", __func__,
 			 conn, ta_adc);
@@ -359,11 +359,14 @@ static enum manta_charge_source check_samsung_charger(
 static enum manta_charge_source
 detect_charge_source(enum charge_connector conn, bool online)
 {
-	enum manta_charge_source charge_source, dock_charge_source;
+	enum manta_charge_source charge_source;
+	int ret;
+
+	manta_bat_dock = false;
 
 	if (!online) {
 		if (conn == CHARGE_CONNECTOR_POGO)
-			manta_pogo_set_vbus(online);
+			manta_pogo_set_vbus(online, NULL);
 		return MANTA_CHARGE_SOURCE_NONE;
 	}
 
@@ -371,9 +374,8 @@ detect_charge_source(enum charge_connector conn, bool online)
 
 	if (conn == CHARGE_CONNECTOR_POGO &&
 	    charge_source == MANTA_CHARGE_SOURCE_USB) {
-		dock_charge_source = manta_pogo_set_vbus(online);
-		if ((int) dock_charge_source >= 0)
-			return dock_charge_source;
+		ret = manta_pogo_set_vbus(online, &charge_source);
+		manta_bat_dock = ret >= 0;
 	}
 
 	return charge_source;
@@ -920,7 +922,7 @@ static int manta_power_debug_dump(struct seq_file *s, void *unused)
 			gpio_get_value(GPIO_TA_INT));
 	}
 
-	seq_printf(s, "%susb: type=%s; %spogo: type=%s adc=%d,%d\n",
+	seq_printf(s, "%susb: type=%s; %spogo: type=%s%s adc=%d,%d\n",
 		   manta_bat_charge_conn == CHARGE_CONNECTOR_USB ? "*" : "",
 		   manta_bat_otg_enabled ? "otg" :
 		   manta_charge_source_str(
@@ -928,6 +930,7 @@ static int manta_power_debug_dump(struct seq_file *s, void *unused)
 		   manta_bat_charge_conn == CHARGE_CONNECTOR_POGO ? "*" : "",
 		   manta_charge_source_str(
 			   manta_bat_charge_source[CHARGE_CONNECTOR_POGO]),
+		   manta_bat_dock ? "(d)" : "",
 		   read_ta_adc(CHARGE_CONNECTOR_POGO, 0),
 		   read_ta_adc(CHARGE_CONNECTOR_POGO, 1));
 	return 0;

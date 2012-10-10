@@ -680,11 +680,10 @@ done:
 	return ret;
 }
 
-enum manta_charge_source manta_pogo_set_vbus(bool status)
+int manta_pogo_set_vbus(bool status, enum manta_charge_source *charge_source)
 {
 	struct dock_state *s = &ds;
-	enum manta_charge_source charge_source;
-	int ret;
+	int ret = 0;
 
 	dock_acquire(s, false);
 
@@ -692,20 +691,19 @@ enum manta_charge_source manta_pogo_set_vbus(bool status)
 
 	if (status) {
 		wake_lock(&s->wake_lock);
-		ret = dock_check_status(s, &charge_source);
-		if (ret < 0)
-			charge_source = (enum manta_charge_source) ret;
+		ret = dock_check_status(s, charge_source);
 	} else {
 		dock_in();
 		dock_set_audio_switch(false);
 		s->powered_dock_present = false;
 		s->dock_connected_unknown = false;
-		charge_source = MANTA_CHARGE_SOURCE_NONE;
+
+		if (charge_source)
+			*charge_source = MANTA_CHARGE_SOURCE_NONE;
 	}
 
 	dock_release(s);
-
-	return charge_source;
+	return ret;
 }
 
 static void dock_work_proc(struct work_struct *work)
@@ -845,7 +843,7 @@ static ssize_t dev_attr_powered_dock_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t size)
 {
 	if (size) {
-		manta_pogo_set_vbus(buf[0] == '1');
+		manta_pogo_set_vbus(buf[0] == '1', NULL);
 		return size;
 	} else
 		return -EINVAL;
@@ -1022,7 +1020,7 @@ void __init exynos5_manta_pogo_init(void)
 	if (ret)
 		pr_warn("%s: cannot register cpufreq notifier\n", __func__);
 
-	manta_pogo_set_vbus(0);
+	manta_pogo_set_vbus(0, NULL);
 }
 
 int __init pogo_data_irq_subsys_init(void)

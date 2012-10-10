@@ -65,7 +65,7 @@ int exynos5_manta_get_revision(void);
 int manta_stmpe811_read_adc_data(u8 channel);
 extern int manta_bat_otg_enable(bool enable);
 void manta_otg_set_usb_state(bool connected);
-enum manta_charge_source manta_pogo_set_vbus(bool status);
+int manta_pogo_set_vbus(bool status, enum manta_charge_source *charge_source);
 extern int manta_pogo_charge_detect_start(bool spdif_mode_and_gpio_in);
 extern void manta_pogo_charge_detect_end(void);
 void bcm_bt_lpm_exit_lpm_locked(struct uart_port *uport);
