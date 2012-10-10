@@ -35,6 +35,12 @@
 #define GPIO_WLAN_PMENA		EXYNOS5_GPV1(0)
 #define GPIO_WLAN_IRQ		EXYNOS5_GPX2(5)
 
+#define WLAN_SDIO_CMD		EXYNOS5_GPC2(1)
+#define WLAN_SDIO_DATA0	EXYNOS5_GPC2(3)
+#define WLAN_SDIO_DATA1	EXYNOS5_GPC2(4)
+#define WLAN_SDIO_DATA2	EXYNOS5_GPC2(5)
+#define WLAN_SDIO_DATA3	EXYNOS5_GPC2(6)
+
 extern void bt_wlan_lock(void);
 extern void bt_wlan_unlock(void);
 
@@ -46,6 +52,25 @@ static struct resource manta_wifi_resources[] = {
 		.flags	= IORESOURCE_IRQ | IORESOURCE_IRQ_HIGHLEVEL |
 			  IORESOURCE_IRQ_SHAREABLE,
 	},
+};
+
+struct wifi_gpio_sleep_data {
+	uint num;
+	uint cfg;
+	uint pull;
+};
+
+static struct wifi_gpio_sleep_data manta_sleep_wifi_gpios[] = {
+	/* WLAN_SDIO_CMD */
+	{WLAN_SDIO_CMD, S5P_GPIO_PD_INPUT, S5P_GPIO_PD_UPDOWN_DISABLE},
+	/* WLAN_SDIO_D(0) */
+	{WLAN_SDIO_DATA0, S5P_GPIO_PD_INPUT, S5P_GPIO_PD_UPDOWN_DISABLE},
+	/* WLAN_SDIO_D(1) */
+	{WLAN_SDIO_DATA1, S5P_GPIO_PD_INPUT, S5P_GPIO_PD_UPDOWN_DISABLE},
+	/* WLAN_SDIO_D(2) */
+	{WLAN_SDIO_DATA2, S5P_GPIO_PD_INPUT, S5P_GPIO_PD_UPDOWN_DISABLE},
+	/* WLAN_SDIO_D(3) */
+	{WLAN_SDIO_DATA3, S5P_GPIO_PD_INPUT, S5P_GPIO_PD_UPDOWN_DISABLE},
 };
 
 static void (*wifi_status_cb)(struct platform_device *, int state);
@@ -300,6 +325,7 @@ static struct platform_device *manta_wlan_devs[] __initdata = {
 static void __init manta_wlan_gpio(void)
 {
 	int gpio;
+	int i;
 
 	pr_debug("%s: start\n", __func__);
 
@@ -320,6 +346,14 @@ static void __init manta_wlan_gpio(void)
 
 	manta_wifi_resources[0].start = gpio_to_irq(gpio);
 	manta_wifi_resources[0].end = gpio_to_irq(gpio);
+
+	/* Setup sleep GPIO for wifi */
+	for (i = 0; i < ARRAY_SIZE(manta_sleep_wifi_gpios); i++) {
+		gpio = manta_sleep_wifi_gpios[i].num;
+		s5p_gpio_set_pd_cfg(gpio, manta_sleep_wifi_gpios[i].cfg);
+		s5p_gpio_set_pd_pull(gpio, manta_sleep_wifi_gpios[i].pull);
+	}
+
 }
 
 void __init exynos5_manta_wlan_init(void)
