@@ -940,6 +940,25 @@ fail:
 }
 static DEVICE_ATTR(dock_ver, S_IRUGO, dev_attr_dock_ver_show, NULL);
 
+static ssize_t dev_attr_dock_status_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	int ret;
+
+	ret = dock_acquire(&ds, true);
+	if (ret < 0)
+		goto fail;
+	ret = dock_send_cmd(&ds, DOCK_STATUS, false, 0);
+	dock_release(&ds);
+	if (ret < 0)
+		goto fail;
+
+	ret = sprintf(buf, "0x%02x\n", ret);
+fail:
+	return ret;
+}
+static DEVICE_ATTR(dock_status, S_IRUGO, dev_attr_dock_status_show, NULL);
+
 static int pogo_cpufreq_notifier(struct notifier_block *nb,
 				 unsigned long event, void *data)
 {
@@ -1003,6 +1022,9 @@ void __init exynos5_manta_pogo_init(void)
 		ret = device_create_file(dock_switch.dev, &dev_attr_dock_id);
 		WARN_ON(ret);
 		ret = device_create_file(dock_switch.dev, &dev_attr_dock_ver);
+		WARN_ON(ret);
+		ret = device_create_file(dock_switch.dev,
+					 &dev_attr_dock_status);
 		WARN_ON(ret);
 #ifdef DEBUG
 		ret = device_create_file(dock_switch.dev, &dev_attr_delay_ns);
