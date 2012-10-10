@@ -393,12 +393,103 @@ static int exynos5_usb_phy20_exit(struct platform_device *pdev)
 	return 0;
 }
 
+static int s5p_usb_otg_phy_tune(struct s3c_hsotg_plat *pdata, int def_mode)
+{
+	u32 phytune;
+
+	if (!pdata)
+		return -EINVAL;
+
+	pr_debug("usb: %s read original tune\n", __func__);
+	phytune = readl(EXYNOS5_PHY_OTG_TUNE);
+	if (!pdata->def_phytune) {
+		pdata->def_phytune = phytune;
+		pr_debug("usb: %s save default phytune (0x%x)\n",
+				__func__, pdata->def_phytune);
+	}
+
+	pr_debug("usb: %s original tune=0x%x\n",
+			__func__, phytune);
+
+	pr_debug("usb: %s tune_mask=0x%x, tune=0x%x\n",
+			__func__, pdata->phy_tune_mask, pdata->phy_tune);
+
+	if (pdata->phy_tune_mask) {
+		if (def_mode) {
+			pr_debug("usb: %s set defult tune=0x%x\n",
+					__func__, pdata->def_phytune);
+			writel(pdata->def_phytune, EXYNOS5_PHY_OTG_TUNE);
+		} else {
+			phytune &= ~(pdata->phy_tune_mask);
+			phytune |= pdata->phy_tune;
+			udelay(10);
+			pr_debug("usb: %s custom tune=0x%x\n",
+					__func__, phytune);
+			writel(phytune, EXYNOS5_PHY_OTG_TUNE);
+		}
+		phytune = readl(EXYNOS5_PHY_OTG_TUNE);
+		pr_debug("usb: %s modified tune=0x%x\n",
+				__func__, phytune);
+	} else {
+		pr_debug("usb: %s default tune\n", __func__);
+	}
+
+	return 0;
+}
+
+static void set_exynos5_usb_host_phy_tune(void)
+{
+	u32 phytune;
+
+	phytune = readl(EXYNOS5_PHY_HOST_TUNE0);
+	pr_debug("usb: %s old phy tune for host =0x%x\n",
+			__func__, phytune);
+
+	/* sqrxtune [14:12] 3b110 : -15% */
+	phytune &= ~HOST_TUNE0_SQRXTUNE(0x7);
+	phytune |= HOST_TUNE0_SQRXTUNE(0x6);
+	udelay(10);
+	writel(phytune, EXYNOS5_PHY_HOST_TUNE0);
+	phytune = readl(EXYNOS5_PHY_HOST_TUNE0);
+
+	pr_debug("usb: %s new phy tune for host =0x%x\n",
+				__func__, phytune);
+}
+
+static void set_exynos5_usb_device_phy_tune(void)
+{
+	u32 phytune;
+
+	phytune = readl(EXYNOS5_PHY_OTG_TUNE);
+	pr_debug("usb: %s old phy tune for device =0x%x\n",
+				__func__, phytune);
+
+	/* sqrxtune [13:11] 3b110 : -15% */
+	phytune &= ~OTG_TUNE_SQRXTUNE(0x7);
+	phytune |= OTG_TUNE_SQRXTUNE(0x6);
+	/* txpreempamptune [22:21] 2b10 : 2X */
+	phytune &= ~OTG_TUNE_TXPREEMPAMPTUNE(0x3);
+	phytune |= OTG_TUNE_TXPREEMPAMPTUNE(0x2);
+	/* txvreftune [ 3: 0] 8b1000 : +10% */
+	phytune &= ~OTG_TUNE_TXVREFTUNE(0xf);
+	phytune |= OTG_TUNE_TXVREFTUNE(0x8);
+	udelay(10);
+	writel(phytune, EXYNOS5_PHY_OTG_TUNE);
+	phytune = readl(EXYNOS5_PHY_OTG_TUNE);
+
+	pr_debug("usb: %s new phy tune for device =0x%x\n",
+				__func__, phytune);
+}
+
 static int exynos5_usb_host_phy20_init(struct platform_device *pdev)
 {
 	if (exynos_usb_phy_clock_enable(pdev))
 		return -EINVAL;
 
 	exynos5_usb_phy20_init(pdev);
+
+	/* usb host phy tune */
+	set_exynos5_usb_host_phy_tune();
 
 	return 0;
 }
@@ -414,6 +505,8 @@ static int exynos5_usb_host_phy20_exit(struct platform_device *pdev)
 
 static int exynos_usb_dev_phy20_init(struct platform_device *pdev)
 {
+	int ret = 0;
+
 	if (exynos_usb_phy_clock_enable(pdev))
 		return -EINVAL;
 
@@ -422,15 +515,27 @@ static int exynos_usb_dev_phy20_init(struct platform_device *pdev)
 	/* usb mode change from host to device */
 	exynos_usb_mux_change(pdev, 0);
 
+	/* usb device phy tune */
+	set_exynos5_usb_device_phy_tune();
+	/* set custom usb device phy tune */
+	if (pdev->dev.platform_data)
+		ret = s5p_usb_otg_phy_tune(pdev->dev.platform_data, 0);
+
 	exynos_usb_phy_clock_disable(pdev);
 
-	return 0;
+	return ret;
 }
 
 static int exynos_usb_dev_phy20_exit(struct platform_device *pdev)
 {
+	int ret = 0;
+
 	if (exynos_usb_phy_clock_enable(pdev))
 		return -EINVAL;
+
+	/* set custom usb device phy tune */
+	if (pdev->dev.platform_data)
+		ret = s5p_usb_otg_phy_tune(pdev->dev.platform_data, 1);
 
 	exynos5_usb_phy20_exit(pdev);
 
@@ -439,7 +544,7 @@ static int exynos_usb_dev_phy20_exit(struct platform_device *pdev)
 
 	exynos_usb_phy_clock_disable(pdev);
 
-	return 0;
+	return ret;
 }
 
 static int exynos5_usb_phy30_init(struct platform_device *pdev)
@@ -503,104 +608,17 @@ static int exynos5_usb_phy30_exit(struct platform_device *pdev)
 	return 0;
 }
 
-static int s5p_usb_otg_phy_tune(struct s3c_hsotg_plat *pdata, int def_mode)
-{
-	u32 phytune;
-
-	if (!pdata)
-		return -EINVAL;
-
-	pr_debug("usb: %s read original tune\n", __func__);
-	phytune = readl(EXYNOS5_PHY_OTG_TUNE);
-	if (!pdata->def_phytune) {
-		pdata->def_phytune = phytune;
-		pr_debug("usb: %s save default phytune (0x%x)\n",
-				__func__, pdata->def_phytune);
-	}
-
-	pr_debug("usb: %s original tune=0x%x\n",
-			__func__, phytune);
-
-	pr_debug("usb: %s tune_mask=0x%x, tune=0x%x\n",
-			__func__, pdata->phy_tune_mask, pdata->phy_tune);
-
-	if (pdata->phy_tune_mask) {
-		if (def_mode) {
-			pr_debug("usb: %s set defult tune=0x%x\n",
-					__func__, pdata->def_phytune);
-			writel(pdata->def_phytune, EXYNOS5_PHY_OTG_TUNE);
-		} else {
-			phytune &= ~(pdata->phy_tune_mask);
-			phytune |= pdata->phy_tune;
-			udelay(10);
-			pr_debug("usb: %s custom tune=0x%x\n",
-					__func__, phytune);
-			writel(phytune, EXYNOS5_PHY_OTG_TUNE);
-		}
-		phytune = readl(EXYNOS5_PHY_OTG_TUNE);
-		pr_debug("usb: %s modified tune=0x%x\n",
-				__func__, phytune);
-	} else {
-		pr_debug("usb: %s default tune\n", __func__);
-	}
-
-	return 0;
-}
-
-static void set_exynos_usb_phy_tune(int type)
-{
-	u32 phytune;
-
-	if (!soc_is_exynos5250()) {
-		pr_debug("usb: %s it is not exynos5250.(t=%d)\n",
-						__func__, type);
-		return;
-	}
-
-	if (type == S5P_USB_PHY_DEVICE) {
-		phytune = readl(EXYNOS5_PHY_OTG_TUNE);
-		pr_debug("usb: %s old phy tune for device =0x%x\n",
-					__func__, phytune);
-		/* sqrxtune [13:11] 3b110 : -15% */
-		phytune &= ~OTG_TUNE_SQRXTUNE(0x7);
-		phytune |= OTG_TUNE_SQRXTUNE(0x6);
-		udelay(10);
-		writel(phytune, EXYNOS5_PHY_OTG_TUNE);
-		phytune = readl(EXYNOS5_PHY_OTG_TUNE);
-		pr_debug("usb: %s new phy tune for device =0x%x\n",
-					__func__, phytune);
-	} else if (type == S5P_USB_PHY_HOST) {
-		phytune = readl(EXYNOS5_PHY_HOST_TUNE0);
-		pr_debug("usb: %s old phy tune for host =0x%x\n",
-				__func__, phytune);
-		/* sqrxtune [14:12] 3b110 : -15% */
-		phytune &= ~HOST_TUNE0_SQRXTUNE(0x7);
-		phytune |= HOST_TUNE0_SQRXTUNE(0x6);
-		udelay(10);
-		writel(phytune, EXYNOS5_PHY_HOST_TUNE0);
-		phytune = readl(EXYNOS5_PHY_HOST_TUNE0);
-		pr_debug("usb: %s new phy tune for host =0x%x\n",
-					__func__, phytune);
-	}
-}
-
 int s5p_usb_phy_init(struct platform_device *pdev, int type)
 {
 	int ret = -EINVAL;
 
 	if (type == S5P_USB_PHY_HOST) {
-		if (soc_is_exynos5250()) {
+		if (soc_is_exynos5250())
 			ret = exynos5_usb_host_phy20_init(pdev);
-			set_exynos_usb_phy_tune(type);
-		} else {
+		else
 			ret = exynos4_usb_phy1_init(pdev);
-		}
 	} else if (type == S5P_USB_PHY_DEVICE) {
 		ret = exynos_usb_dev_phy20_init(pdev);
-		set_exynos_usb_phy_tune(type);
-		/* set custom usb phy tune */
-		if (pdev->dev.platform_data)
-			ret = s5p_usb_otg_phy_tune(pdev->dev.platform_data, 0);
 	} else if (type == S5P_USB_PHY_DRD)
 		ret = exynos5_usb_phy30_init(pdev);
 
@@ -617,9 +635,6 @@ int s5p_usb_phy_exit(struct platform_device *pdev, int type)
 		else
 			ret = exynos4_usb_phy1_exit(pdev);
 	} else if (type == S5P_USB_PHY_DEVICE) {
-		/* set custom usb phy tune */
-		if (pdev->dev.platform_data)
-			ret = s5p_usb_otg_phy_tune(pdev->dev.platform_data, 1);
 		ret = exynos_usb_dev_phy20_exit(pdev);
 	} else if (type == S5P_USB_PHY_DRD) {
 		ret = exynos5_usb_phy30_exit(pdev);
