@@ -461,14 +461,14 @@ static int manta_late_probe(struct snd_soc_card *card)
 		dev_err(codec->dev, "Failed to set KEY_MEDIA: %d\n", ret);
 
 	ret = snd_jack_set_key(machine->jack.jack, SND_JACK_BTN_1,
-							KEY_VOLUMEDOWN);
-	if (ret < 0)
-		dev_err(codec->dev, "Failed to set KEY_VOLUMEDOWN: %d\n", ret);
-
-	ret = snd_jack_set_key(machine->jack.jack, SND_JACK_BTN_2,
 							KEY_VOLUMEUP);
 	if (ret < 0)
 		dev_err(codec->dev, "Failed to set KEY_VOLUMEUP: %d\n", ret);
+
+	ret = snd_jack_set_key(machine->jack.jack, SND_JACK_BTN_2,
+							KEY_VOLUMEDOWN);
+	if (ret < 0)
+		dev_err(codec->dev, "Failed to set KEY_VOLUMEDOWN: %d\n", ret);
 
 	wm8958_mic_detect(codec, &machine->jack, NULL, NULL);
 
