@@ -88,6 +88,8 @@ int exynos5_manta_get_revision(void)
 	return manta_hw_rev;
 }
 
+static char manta_board_info_string[255];
+
 static void manta_init_hw_rev(void)
 {
 	int ret;
@@ -101,10 +103,13 @@ static void manta_init_hw_rev(void)
 	for (i = 0; i < ARRAY_SIZE(manta_hw_rev_gpios); i++)
 		manta_hw_rev |= gpio_get_value(manta_hw_rev_gpios[i].gpio) << i;
 
-	pr_info("Manta HW revision: %d, CPU EXYNOS5250 Rev%d.%d\n",
+	snprintf(manta_board_info_string, sizeof(manta_board_info_string) - 1,
+		"Manta HW revision: %d, CPU EXYNOS5250 Rev%d.%d",
 		manta_hw_rev,
 		samsung_rev() >> 4,
 		samsung_rev() & 0xf);
+	pr_info("%s\n", manta_board_info_string);
+	mach_panic_string = manta_board_info_string;
 }
 
 static struct ram_console_platform_data ramconsole_pdata;
