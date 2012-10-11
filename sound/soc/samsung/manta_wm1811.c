@@ -200,11 +200,8 @@ static int manta_set_bias_level(struct snd_soc_card *card,
 		return 0;
 
 	if ((level == SND_SOC_BIAS_PREPARE) &&
-			(dapm->bias_level == SND_SOC_BIAS_STANDBY)) {
-		pr_info("%s starting FLL1, pll_out=%d\n", __func__,
-							machine->pll_out);
+			(dapm->bias_level == SND_SOC_BIAS_STANDBY))
 		ret = manta_start_fll1(codec_dai, machine);
-	}
 
 	return ret;
 }
@@ -221,10 +218,8 @@ static int manta_set_bias_level_post(struct snd_soc_card *card,
 	if (dapm->dev != codec_dai->dev)
 		return 0;
 
-	if (level == SND_SOC_BIAS_STANDBY) {
-		pr_info("%s stopping FLL1\n", __func__);
+	if (level == SND_SOC_BIAS_STANDBY)
 		ret = manta_stop_fll1(codec_dai, machine);
-	}
 
 	dapm->bias_level = level;
 
@@ -243,7 +238,6 @@ static int manta_wm1811_aif1_hw_params(struct snd_pcm_substream *substream,
 
 	machine->pll_out = params_rate(params) * 512;
 
-	pr_info("%s starting FLL1, pll_out=%d\n", __func__, machine->pll_out);
 	ret = manta_start_fll1(codec_dai, machine);
 	if (ret < 0) {
 		dev_err(codec_dai->dev, "Unable to start FLL1\n");
