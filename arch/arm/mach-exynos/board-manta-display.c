@@ -186,6 +186,7 @@ static struct s5p_dp_platdata manta_dp_data __initdata = {
 	.phy_init       = s5p_dp_phy_init,
 	.phy_exit       = s5p_dp_phy_exit,
 	.backlight_on   = manta_backlight_on,
+	.backlight_off  = manta_backlight_off,
 	.lcd_on		= manta_lcd_on,
 	.lcd_off	= manta_lcd_off,
 };
