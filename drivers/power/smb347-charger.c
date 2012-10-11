@@ -1424,6 +1424,7 @@ static int smb347_battery_set_property(struct power_supply *psy,
 		if (val->intval)
 			ret |= CFG_INPUT_SOURCE_PRIORITY;
 		ret = smb347_write(smb, CFG_VARIOUS_FUNCTION, ret);
+		smb347_hw_init(smb);
 		if (ret < 0)
 			goto priority_fail;
 		ret = 0;
