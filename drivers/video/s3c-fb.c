@@ -1185,6 +1185,7 @@ static void s3c_fb_enable_irq(struct s3c_fb *sfb)
 	void __iomem *regs = sfb->regs;
 	u32 irq_ctrl_reg;
 
+	pm_runtime_get_sync(sfb->dev);
 	irq_ctrl_reg = readl(regs + VIDINTCON0);
 
 	irq_ctrl_reg |= VIDINTCON0_INT_ENABLE;
@@ -1206,6 +1207,7 @@ static void s3c_fb_enable_irq(struct s3c_fb *sfb)
 	irq_ctrl_reg |= VIDINTCON0_FRAMESEL1_NONE;
 
 	writel(irq_ctrl_reg, regs + VIDINTCON0);
+	pm_runtime_put_sync(sfb->dev);
 }
 
 /**
@@ -1217,6 +1219,7 @@ static void s3c_fb_disable_irq(struct s3c_fb *sfb)
 	void __iomem *regs = sfb->regs;
 	u32 irq_ctrl_reg;
 
+	pm_runtime_get_sync(sfb->dev);
 	irq_ctrl_reg = readl(regs + VIDINTCON0);
 
 #ifdef CONFIG_DEBUG_FS
@@ -1226,6 +1229,7 @@ static void s3c_fb_disable_irq(struct s3c_fb *sfb)
 	irq_ctrl_reg &= ~VIDINTCON0_INT_ENABLE;
 
 	writel(irq_ctrl_reg, regs + VIDINTCON0);
+	pm_runtime_put_sync(sfb->dev);
 }
 
 static void s3c_fb_activate_vsync(struct s3c_fb *sfb)
@@ -1351,6 +1355,7 @@ int s3c_fb_set_window_position(struct fb_info *info,
 	void __iomem *regs = sfb->regs;
 	u32 data;
 
+	pm_runtime_get_sync(sfb->dev);
 	shadow_protect_win(win, 1);
 
 	if (!s3c_fb_validate_x_alignment(sfb, user_window.x, var->xres,
@@ -1365,6 +1370,7 @@ int s3c_fb_set_window_position(struct fb_info *info,
 	writel(data, regs + VIDOSD_B(win_no, sfb->variant));
 
 	shadow_protect_win(win, 0);
+	pm_runtime_put_sync(sfb->dev);
 	return 0;
 }
 
@@ -1388,6 +1394,7 @@ int s3c_fb_set_plane_alpha_blending(struct fb_info *info,
 			(((user_alpha.green & 0xf)) << 8) |
 			(((user_alpha.blue & 0xf)) << 0));
 
+	pm_runtime_get_sync(sfb->dev);
 	shadow_protect_win(win, 1);
 
 	data = readl(regs + sfb->variant.wincon + (win_no * 4));
@@ -1412,6 +1419,7 @@ int s3c_fb_set_plane_alpha_blending(struct fb_info *info,
 	}
 
 	shadow_protect_win(win, 0);
+	pm_runtime_put_sync(sfb->dev);
 
 	return 0;
 }
@@ -1433,6 +1441,7 @@ int s3c_fb_set_chroma_key(struct fb_info *info,
 			((user_chroma.green & 0xff) << 8) |
 			((user_chroma.blue & 0xff) << 0));
 
+	pm_runtime_get_sync(sfb->dev);
 	shadow_protect_win(win, 1);
 
 	if (user_chroma.enabled)
@@ -1445,6 +1454,7 @@ int s3c_fb_set_chroma_key(struct fb_info *info,
 	writel(data, keycon + WKEYCON1);
 
 	shadow_protect_win(win, 0);
+	pm_runtime_put_sync(sfb->dev);
 
 	return 0;
 }
@@ -2071,7 +2081,7 @@ static void s3c_fd_fence_wait(struct s3c_fb *sfb, struct sync_fence *fence)
 		return;
 
 	if (err == -ETIME)
-		err = sync_fence_wait(fence, -1);
+		err = sync_fence_wait(fence, 10 * MSEC_PER_SEC);
 
 	if (err < 0)
 		dev_warn(sfb->dev, "error waiting on fence: %d\n", err);
@@ -3263,7 +3273,6 @@ static int __devinit s3c_fb_copy_bootloader_fb(struct platform_device *pdev,
 		struct dma_buf *dest_buf)
 {
 	struct resource *res;
-	void __iomem *to_io;
 	int ret = 0;
 	size_t i;
 
@@ -3283,10 +3292,10 @@ static int __devinit s3c_fb_copy_bootloader_fb(struct platform_device *pdev,
 	for (i = 0; i < resource_size(res); i += PAGE_SIZE) {
 		void *page = phys_to_page(res->start + i);
 		void *from_virt = kmap(page);
-		to_io = dma_buf_kmap(dest_buf, i / PAGE_SIZE);
-		memcpy_toio(to_io, from_virt, PAGE_SIZE);
+		void *to_virt = dma_buf_kmap(dest_buf, i / PAGE_SIZE);
+		memcpy(to_virt, from_virt, PAGE_SIZE);
 		kunmap(page);
-		dma_buf_kunmap(dest_buf, i / PAGE_SIZE, to_io);
+		dma_buf_kunmap(dest_buf, i / PAGE_SIZE, to_virt);
 	}
 
 	dma_buf_end_cpu_access(dest_buf, 0, resource_size(res), DMA_TO_DEVICE);
@@ -3301,7 +3310,6 @@ err:
 static int __devinit s3c_fb_clear_fb(struct s3c_fb *sfb,
 		struct dma_buf *dest_buf, size_t size)
 {
-	void __iomem *to_io;
 	size_t i;
 
 	int ret = dma_buf_begin_cpu_access(dest_buf, 0, dest_buf->size,
@@ -3313,9 +3321,9 @@ static int __devinit s3c_fb_clear_fb(struct s3c_fb *sfb,
 	}
 
 	for (i = 0; i < dest_buf->size / PAGE_SIZE; i++) {
-		to_io = dma_buf_kmap(dest_buf, i);
-		memset_io(to_io, 0, PAGE_SIZE);
-		dma_buf_kunmap(dest_buf, i, to_io);
+		void *to_virt = dma_buf_kmap(dest_buf, i);
+		memset(to_virt, 0, PAGE_SIZE);
+		dma_buf_kunmap(dest_buf, i, to_virt);
 	}
 
 	dma_buf_end_cpu_access(dest_buf, 0, size, DMA_TO_DEVICE);
