@@ -867,10 +867,10 @@ static struct android_bat_platform_data android_battery_pdata = {
 	.get_voltage_now = manta_bat_get_voltage_now,
 	.get_current_now = manta_bat_get_current_now,
 
-	.temp_high_threshold = 500,	/* 50c */
-	.temp_high_recovery = 430,	/* 43c */
-	.temp_low_recovery = 30,		/* 3c */
-	.temp_low_threshold = 0,		/* 0c */
+	.temp_high_threshold = 600,	/* 60c */
+	.temp_high_recovery = 420,	/* 42c */
+	.temp_low_recovery = 0,		/* 0c */
+	.temp_low_threshold = -50,	/* -5c */
 	.full_charging_time = 12 * 60 * 60,
 	.recharging_time = 2 * 60 * 60,
 	.recharging_voltage = 4250 * 1000,
