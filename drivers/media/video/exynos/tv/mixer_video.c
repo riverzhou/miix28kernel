@@ -945,7 +945,7 @@ static int buffer_fence_wait(struct mxr_device *mdev, struct mxr_buffer *buffer)
 	ret = sync_fence_wait(fence, 1000);
 	if (ret == -ETIME) {
 		mxr_warn(mdev, "sync_fence_wait timeout");
-		ret = sync_fence_wait(fence, -1);
+		ret = sync_fence_wait(fence, 10 * MSEC_PER_SEC);
 	}
 	if (ret)
 		mxr_warn(mdev, "sync_fence_wait error");
