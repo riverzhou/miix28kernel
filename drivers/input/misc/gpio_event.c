@@ -231,7 +231,7 @@ static void __exit gpio_event_exit(void)
 	platform_driver_unregister(&gpio_event_driver);
 }
 
-module_init(gpio_event_init);
+subsys_initcall(gpio_event_init);
 module_exit(gpio_event_exit);
 
 MODULE_DESCRIPTION("GPIO Event Driver");
