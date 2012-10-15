@@ -2785,27 +2785,18 @@ static void wm8994_aif_shutdown(struct snd_pcm_substream *substream,
 				struct snd_soc_dai *dai)
 {
 	struct snd_soc_codec *codec = dai->codec;
-	int rate_reg = 0;
 
-	switch (dai->id) {
-	case 1:
-		rate_reg = WM8994_AIF1_RATE;
-		break;
-	case 2:
-		rate_reg = WM8994_AIF2_RATE;
-		break;
-	default:
-		break;
-	}
+	if (dai->id != 1)
+		return;
 
 	/* If the DAI is idle then configure the divider tree for the
 	 * lowest output rate to save a little power if the clock is
 	 * still active (eg, because it is system clock).
 	 */
-	if (rate_reg && !dai->playback_active && !dai->capture_active)
-		snd_soc_update_bits(codec, rate_reg,
+	if (!dai->playback_active && !dai->capture_active)
+		snd_soc_update_bits(codec, WM8994_AIF1_RATE,
 				    WM8994_AIF1_SR_MASK |
-				    WM8994_AIF1CLK_RATE_MASK, 0x9);
+				    WM8994_AIF1CLK_RATE_MASK, 0x1);
 }
 
 static int wm8994_aif_mute(struct snd_soc_dai *codec_dai, int mute)
@@ -4079,6 +4070,13 @@ static int wm8994_codec_probe(struct snd_soc_codec *codec)
 					ARRAY_SIZE(wm8958_intercon));
 		break;
 	}
+
+	/*
+	 * Set AIF1_RATE to low value so headset detection works at the
+	 * correct rate.
+	 */
+	snd_soc_update_bits(codec, WM8994_AIF1_RATE, WM8994_AIF1_SR_MASK |
+						WM8994_AIF1CLK_RATE_MASK, 0x1);
 
 	return 0;
 
