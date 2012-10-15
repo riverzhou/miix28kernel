@@ -406,6 +406,7 @@ static int manta_late_probe(struct snd_soc_card *card)
 	struct snd_soc_dai *cpu_dai = card->rtd[0].cpu_dai;
 	struct manta_wm1811 *machine =
 				snd_soc_card_get_drvdata(codec->card);
+	struct wm8994_priv *wm8994 = snd_soc_codec_get_drvdata(codec);
 	int ret;
 
 	/*
@@ -416,6 +417,14 @@ static int manta_late_probe(struct snd_soc_card *card)
 	 */
 	codec_dai->driver->playback.channels_max =
 			cpu_dai->driver->playback.channels_max;
+
+	/*
+	 * Hack: For using DCS cache from wm1811
+	 * because current wm1811 driver does not use cached value
+	 * and it increases audio warmup time for headphone routing.
+	 * it can help decreasing warmup time
+	 */
+	wm8994->hubs.no_cache_dac_hp_direct = false;
 
 	ret = snd_soc_dai_set_sysclk(codec_dai, WM8994_SYSCLK_MCLK2,
 				MCLK2_FREQ, SND_SOC_CLOCK_IN);
