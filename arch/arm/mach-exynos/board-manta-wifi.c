@@ -101,22 +101,29 @@ static int manta_wifi_set_carddetect(int val)
 	return 0;
 }
 
-static int manta_wifi_power_state;
+static int manta_wifi_power_state = -1;
 
 static int manta_wifi_power(int on)
 {
 	int ret = 0;
+	int sleep_before_on = 600;
+	int sleep_after_on = 500;
 
 	bt_wlan_lock();
 	pr_debug("%s: %d\n", __func__, on);
 
+	if (manta_wifi_power_state == -1) { /* On probe */
+		sleep_before_on = 50;
+		sleep_after_on = 300;
+	}
+
 	if (on)
-		msleep(600);
+		msleep(sleep_before_on);
 	else
 		msleep(50);
 	gpio_set_value(GPIO_WLAN_PMENA, on);
 	if (on)
-		msleep(500);
+		msleep(sleep_after_on);
 	else
 		msleep(50);
 
