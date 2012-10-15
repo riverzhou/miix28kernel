@@ -675,8 +675,6 @@ static int dock_check_status(struct dock_state *s,
 	ret = -ENOENT;
 	dock_set_audio_switch(false);
 done:
-	wake_unlock(&s->wake_lock);
-
 	return ret;
 }
 
@@ -690,7 +688,6 @@ int manta_pogo_set_vbus(bool status, enum manta_charge_source *charge_source)
 	pr_debug("%s: status %d\n", __func__, status ? 1 : 0);
 
 	if (status) {
-		wake_lock(&s->wake_lock);
 		ret = dock_check_status(s, charge_source);
 	} else {
 		dock_in();
@@ -710,12 +707,9 @@ static void dock_work_proc(struct work_struct *work)
 {
 	struct dock_state *s = container_of(work, struct dock_state,
 			dock_work);
-	int ret;
-	ret = dock_acquire(s, true);
-	if (ret < 0)
-		return;
-	dock_check_status(s, NULL);
-	dock_release(s);
+	wake_lock(&s->wake_lock);
+	manta_force_update_pogo_charger();
+	wake_unlock(&s->wake_lock);
 }
 
 static irqreturn_t pogo_data_interrupt(int irq, void *data)

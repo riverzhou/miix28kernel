@@ -70,5 +70,6 @@ extern int manta_pogo_charge_detect_start(bool spdif_mode_and_gpio_in);
 extern void manta_pogo_charge_detect_end(void);
 void bcm_bt_lpm_exit_lpm_locked(struct uart_port *uport);
 void exynos5_manta_adjust_mif_asv_table(void);
+void manta_force_update_pogo_charger(void);
 
 #endif

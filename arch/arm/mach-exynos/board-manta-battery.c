@@ -357,7 +357,8 @@ static enum manta_charge_source check_samsung_charger(
 }
 
 static enum manta_charge_source
-detect_charge_source(enum charge_connector conn, bool online)
+detect_charge_source(enum charge_connector conn, bool online,
+	bool force_dock_redetect)
 {
 	enum manta_charge_source charge_source;
 	int ret;
@@ -370,7 +371,8 @@ detect_charge_source(enum charge_connector conn, bool online)
 		return MANTA_CHARGE_SOURCE_NONE;
 	}
 
-	charge_source = check_samsung_charger(conn);
+	charge_source = force_dock_redetect ?
+			MANTA_CHARGE_SOURCE_USB : check_samsung_charger(conn);
 
 	if (conn == CHARGE_CONNECTOR_POGO &&
 	    charge_source == MANTA_CHARGE_SOURCE_USB) {
@@ -381,7 +383,8 @@ detect_charge_source(enum charge_connector conn, bool online)
 	return charge_source;
 }
 
-static int update_charging_status(bool usb_connected, bool pogo_connected)
+static int update_charging_status(bool usb_connected, bool pogo_connected,
+	bool force_dock_redetect)
 {
 	enum charge_connector old_charge_conn;
 	int ret = 0;
@@ -390,18 +393,20 @@ static int update_charging_status(bool usb_connected, bool pogo_connected)
 		manta_bat_usb_online = usb_connected;
 		manta_bat_charge_source[CHARGE_CONNECTOR_USB] =
 			detect_charge_source(CHARGE_CONNECTOR_USB,
-					     usb_connected);
+					     usb_connected,
+					     false);
 		manta_otg_set_usb_state(
 			manta_bat_charge_source[CHARGE_CONNECTOR_USB] ==
 			MANTA_CHARGE_SOURCE_USB);
 		ret = 1;
 	}
 
-	if (manta_bat_pogo_online != pogo_connected) {
+	if (manta_bat_pogo_online != pogo_connected || force_dock_redetect) {
 		manta_bat_pogo_online = pogo_connected;
 		manta_bat_charge_source[CHARGE_CONNECTOR_POGO] =
 			detect_charge_source(CHARGE_CONNECTOR_POGO,
-					     pogo_connected);
+					     pogo_connected,
+					     force_dock_redetect);
 		ret = 1;
 	}
 
@@ -509,7 +514,7 @@ static void exynos5_manta_set_priority(void)
 		       __func__, ret);
 }
 
-static void change_charger_status(void)
+static void change_charger_status(bool force_dock_redetect)
 {
 	int ta_int;
 	union power_supply_propval pogo_connected = {0,};
@@ -602,13 +607,14 @@ static void change_charger_status(void)
 		if (exynos5_manta_get_revision() >= MANTA_REV_PRE_ALPHA) {
 			status_change =
 				update_charging_status(usb_connected.intval,
-						       pogo_connected.intval);
+						       pogo_connected.intval,
+						       force_dock_redetect);
 			manta_bat_sync_charge_enable();
 		} else {
-			status_change = update_charging_status(true, false);
+			status_change = update_charging_status(true, false, false);
 		}
 	} else {
-		status_change = update_charging_status(false, false);
+		status_change = update_charging_status(false, false, false);
 	}
 
 	pr_debug("%s: ta_int(%d), charge_conn(%d), charge_source(%d)\n",
@@ -634,6 +640,11 @@ static void change_charger_status(void)
 	}
 
 	mutex_unlock(&manta_bat_charger_detect_lock);
+}
+
+void manta_force_update_pogo_charger(void)
+{
+	change_charger_status(true);
 }
 
 static char *exynos5_manta_supplicant[] = { "manta-board" };
@@ -681,7 +692,7 @@ static void manta_bat_unregister_callbacks(void)
 
 static int manta_bat_poll_charge_source(void)
 {
-	change_charger_status();
+	change_charger_status(false);
 	return manta_source_to_android(
 		manta_bat_charge_source[manta_bat_charge_conn]);
 }
@@ -847,7 +858,7 @@ static irqreturn_t ta_int_intr(int irq, void *arg)
 {
 	wake_lock(&manta_bat_chgdetect_wakelock);
 	msleep(600);
-	change_charger_status();
+	change_charger_status(false);
 	wake_unlock(&manta_bat_chgdetect_wakelock);
 	return IRQ_HANDLED;
 }
@@ -1051,7 +1062,7 @@ void __init exynos5_manta_battery_init(void)
 
 static void exynos5_manta_power_changed(struct power_supply *psy)
 {
-	change_charger_status();
+	change_charger_status(false);
 }
 
 static int exynos5_manta_power_get_property(struct power_supply *psy,
@@ -1170,7 +1181,7 @@ static int __init exynos5_manta_battery_late_init(void)
 	wakeup_source_init(&manta_bat_vbus_ws, "vbus");
 
 	/* Poll initial charger state */
-	change_charger_status();
+	change_charger_status(false);
 	return 0;
 }
 
