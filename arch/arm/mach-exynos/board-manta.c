@@ -403,12 +403,14 @@ static void __init exynos_reserve_mem(void)
 		{
 			.name = "drm_mfc_sh",
 			.size = SZ_1M,
+			.alignment = SZ_1M,
 		},
 #endif
 #ifdef CONFIG_ION_EXYNOS_DRM_MSGBOX_SH
 		{
 			.name = "drm_msgbox_sh",
 			.size = SZ_1M,
+			.alignment = SZ_1M,
 		},
 #endif
 #endif
@@ -423,6 +425,7 @@ static void __init exynos_reserve_mem(void)
 		       .name = "drm_fimd_video",
 		       .size = CONFIG_ION_EXYNOS_DRM_MEMSIZE_FIMD_VIDEO *
 			       SZ_1K,
+		       .alignment = SZ_1M,
 	       },
 #endif
 #ifdef CONFIG_ION_EXYNOS_DRM_MEMSIZE_MFC_OUTPUT
@@ -430,6 +433,7 @@ static void __init exynos_reserve_mem(void)
 		       .name = "drm_mfc_output",
 		       .size = CONFIG_ION_EXYNOS_DRM_MEMSIZE_MFC_OUTPUT *
 			       SZ_1K,
+		       .alignment = SZ_1M,
 	       },
 #endif
 #ifdef CONFIG_ION_EXYNOS_DRM_MEMSIZE_MFC_INPUT
@@ -437,18 +441,21 @@ static void __init exynos_reserve_mem(void)
 		       .name = "drm_mfc_input",
 		       .size = CONFIG_ION_EXYNOS_DRM_MEMSIZE_MFC_INPUT *
 			       SZ_1K,
+		       .alignment = SZ_1M,
 	       },
 #endif
 #ifdef CONFIG_ION_EXYNOS_DRM_MFC_FW
                {
                        .name = "drm_mfc_fw",
                        .size = SZ_1M,
+		       .alignment = SZ_1M,
                },
 #endif
 #ifdef CONFIG_ION_EXYNOS_DRM_SECTBL
                {
                        .name = "drm_sectbl",
                        .size = SZ_1M,
+		       .alignment = SZ_1M,
                },
 #endif
                {
@@ -480,8 +487,6 @@ static void __init exynos_reserve_mem(void)
 		"s5p-mfc-v6/f=fw;"
 		"s5p-mfc-v6/a=b1;";
 
-	exynos_cma_region_reserve(regions, regions_secure, 0, map);
-
 	if (manta_bootloader_fb_start) {
 		int err = memblock_reserve(manta_bootloader_fb_start,
 				manta_bootloader_fb_size);
@@ -490,6 +495,8 @@ static void __init exynos_reserve_mem(void)
 	} else {
 		pr_warn("bootloader framebuffer start address not set\n");
 	}
+
+	exynos_cma_region_reserve(regions, regions_secure, 0, map);
 }
 
 static void exynos_dwmci0_cfg_gpio(int width)
