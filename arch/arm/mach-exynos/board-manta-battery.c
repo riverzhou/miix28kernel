@@ -634,7 +634,6 @@ static void change_charger_status(void)
 	}
 
 	mutex_unlock(&manta_bat_charger_detect_lock);
-	wake_unlock(&manta_bat_chgdetect_wakelock);
 }
 
 static char *exynos5_manta_supplicant[] = { "manta-board" };
@@ -682,7 +681,6 @@ static void manta_bat_unregister_callbacks(void)
 
 static int manta_bat_poll_charge_source(void)
 {
-	wake_lock(&manta_bat_chgdetect_wakelock);
 	change_charger_status();
 	return manta_source_to_android(
 		manta_bat_charge_source[manta_bat_charge_conn]);
@@ -850,6 +848,7 @@ static irqreturn_t ta_int_intr(int irq, void *arg)
 	wake_lock(&manta_bat_chgdetect_wakelock);
 	msleep(600);
 	change_charger_status();
+	wake_unlock(&manta_bat_chgdetect_wakelock);
 	return IRQ_HANDLED;
 }
 
@@ -1052,7 +1051,6 @@ void __init exynos5_manta_battery_init(void)
 
 static void exynos5_manta_power_changed(struct power_supply *psy)
 {
-	wake_lock(&manta_bat_chgdetect_wakelock);
 	change_charger_status();
 }
 
@@ -1172,7 +1170,6 @@ static int __init exynos5_manta_battery_late_init(void)
 	wakeup_source_init(&manta_bat_vbus_ws, "vbus");
 
 	/* Poll initial charger state */
-	wake_lock(&manta_bat_chgdetect_wakelock);
 	change_charger_status();
 	return 0;
 }
