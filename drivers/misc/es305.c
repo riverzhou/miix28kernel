@@ -72,6 +72,7 @@ struct es305_data {
 	const struct firmware		*fw;
 	struct mutex			lock;
 	u32				passthrough;
+	bool				passthrough_on;
 	bool				asleep;
 	bool				device_ready;
 };
@@ -273,12 +274,7 @@ static int es305_set_passthrough(struct es305_data *es305, u32 path)
 		return ret;
 	}
 
-	/* The passthrough command must be followed immediately by sleep */
-	ret = es305_sleep(es305);
-	if (ret < 0) {
-		dev_err(es305->dev, "unable to sleep\n");
-		return ret;
-	}
+	es305->passthrough_on = !!path;
 
 	return ret;
 }
@@ -429,6 +425,19 @@ static ssize_t es305_voice_processing_store(struct device *dev,
 		return ret;
 	}
 
+	/*
+	 * If voice processing is being switched on and passthrough is
+	 * enabled, disable passthrough first.
+	 */
+	if (val && es305->passthrough_on) {
+		ret = es305_set_passthrough(es305, 0);
+		if (ret < 0) {
+			dev_err(es305->dev, "unable to disable passthrough\n");
+			mutex_unlock(&es305->lock);
+			return ret;
+		}
+	}
+
 	ret = es305_send_cmd(es305, ES305_SET_VOICE_PROCESSING | (u32)val,
 									NULL);
 	if (ret < 0) {
@@ -467,11 +476,14 @@ static ssize_t es305_sleep_store(struct device *dev,
 		/* requested sleep state is different to current state */
 		mutex_lock(&es305->lock);
 		if (state) {
-			if (es305->passthrough != 0)
+			if (es305->passthrough != 0) {
 				ret = es305_set_passthrough(es305,
 							es305->passthrough);
-			else
-				ret = es305_sleep(es305);
+				if (ret < 0)
+					dev_err(es305->dev,
+						"unable to set passthrough\n");
+			}
+			ret = es305_sleep(es305);
 		} else {
 			ret = es305_wake(es305);
 		}
@@ -661,6 +673,12 @@ static void es305_firmware_ready(const struct firmware *fw, void *context)
 				"unable to enable digital passthrough\n");
 			goto err;
 		}
+	}
+
+	ret = es305_sleep(es305);
+	if (ret < 0) {
+		dev_err(es305->dev, "unable to sleep\n");
+		goto err;
 	}
 
 	es305->device_ready = true;
