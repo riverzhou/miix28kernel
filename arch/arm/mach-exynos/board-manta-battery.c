@@ -62,6 +62,8 @@ enum charge_connector {
 static int manta_bat_battery_status;
 static enum manta_charge_source manta_bat_charge_source[CHARGE_CONNECTOR_MAX];
 static enum charge_connector manta_bat_charge_conn;
+static union power_supply_propval manta_bat_apsd_results;
+static int manta_bat_ta_adc;
 static bool manta_bat_dock;
 static bool manta_bat_usb_online;
 static bool manta_bat_pogo_online;
@@ -312,43 +314,62 @@ int manta_bat_otg_enable(bool enable)
 static enum manta_charge_source check_samsung_charger(
 	enum charge_connector conn)
 {
-	int ta_adc;
 	int ret;
-	bool ac_detect = false;
+	bool samsung_ac_detect;
+	bool usb_ac_detected;
 	enum manta_charge_source charge_source;
-	union power_supply_propval prop;
 
 	if (conn == CHARGE_CONNECTOR_POGO) {
-		ta_adc = read_ta_adc(conn, 0);
+		manta_bat_ta_adc = read_ta_adc(conn, 0);
 		pr_debug("%s: ta_adc conn=%d ta_check=0 val=%d\n", __func__,
-			 conn, ta_adc);
-		ac_detect = ta_adc > TA_ADC_LOW && ta_adc < TA_ADC_HIGH;
+			 conn, manta_bat_ta_adc);
+		samsung_ac_detect = manta_bat_ta_adc > TA_ADC_LOW &&
+			manta_bat_ta_adc < TA_ADC_HIGH;
+		usb_ac_detected = false;
 	} else {
 		if (manta_bat_get_smb347_usb())
 			return CHARGE_SOURCE_USB;
 		ret = manta_bat_smb347_usb->get_property(
 			manta_bat_smb347_usb,
-			POWER_SUPPLY_PROP_REMOTE_TYPE, &prop);
-		pr_debug("%s: type=%d ret=%d\n", __func__, prop.intval, ret);
+			POWER_SUPPLY_PROP_REMOTE_TYPE, &manta_bat_apsd_results);
+		pr_debug("%s: type=%d ret=%d\n", __func__,
+			 manta_bat_apsd_results.intval, ret);
 
-		switch (prop.intval) {
+		switch (manta_bat_apsd_results.intval) {
 		case POWER_SUPPLY_TYPE_USB:
 		case POWER_SUPPLY_TYPE_UNKNOWN:
-			ac_detect = false;
+			usb_ac_detected = false;
 			break;
 		default:
-			ac_detect = true;
+			usb_ac_detected = true;
 			break;
 		}
+
+		samsung_ac_detect = true;
 	}
 
-	if (ac_detect) {
-		ta_adc = read_ta_adc(conn, 1);
-		pr_debug("%s: ta_adc conn=%d ta_check=1 val=%d\n",
-			 __func__, conn, ta_adc);
-		charge_source = ta_adc > TA_ADC_LOW && ta_adc < TA_ADC_HIGH ?
-			MANTA_CHARGE_SOURCE_AC_SAMSUNG :
-			MANTA_CHARGE_SOURCE_AC_OTHER;
+	if (samsung_ac_detect) {
+		bool samsung_ta_detected = false;
+		int i;
+
+		for (i = 0; i < 10; i++) {
+			manta_bat_ta_adc = read_ta_adc(conn, 1);
+			pr_debug("%s: ta_adc conn=%d ta_check=1 val=%d\n",
+				 __func__, conn, manta_bat_ta_adc);
+			samsung_ta_detected =
+				manta_bat_ta_adc > TA_ADC_LOW &&
+				manta_bat_ta_adc < TA_ADC_HIGH;
+			if (samsung_ta_detected)
+				break;
+			msleep(100);
+		}
+
+		if (samsung_ta_detected)
+			charge_source = MANTA_CHARGE_SOURCE_AC_SAMSUNG;
+		else
+			charge_source = usb_ac_detected ?
+				MANTA_CHARGE_SOURCE_AC_OTHER :
+				MANTA_CHARGE_SOURCE_USB;
 	} else {
 		charge_source = MANTA_CHARGE_SOURCE_USB;
 	}
@@ -932,17 +953,16 @@ static int manta_power_debug_dump(struct seq_file *s, void *unused)
 			gpio_get_value(GPIO_TA_INT));
 	}
 
-	seq_printf(s, "%susb: type=%s; %spogo: type=%s%s adc=%d,%d\n",
+	seq_printf(s, "%susb: type=%s (apsd=%d); %spogo: type=%s%s; ta_adc=%d\n",
 		   manta_bat_charge_conn == CHARGE_CONNECTOR_USB ? "*" : "",
 		   manta_bat_otg_enabled ? "otg" :
 		   manta_charge_source_str(
 			   manta_bat_charge_source[CHARGE_CONNECTOR_USB]),
+		   manta_bat_apsd_results.intval,
 		   manta_bat_charge_conn == CHARGE_CONNECTOR_POGO ? "*" : "",
 		   manta_charge_source_str(
 			   manta_bat_charge_source[CHARGE_CONNECTOR_POGO]),
-		   manta_bat_dock ? "(d)" : "",
-		   read_ta_adc(CHARGE_CONNECTOR_POGO, 0),
-		   read_ta_adc(CHARGE_CONNECTOR_POGO, 1));
+		   manta_bat_dock ? "(d)" : "", manta_bat_ta_adc);
 	return 0;
 }
 
