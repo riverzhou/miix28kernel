@@ -34,11 +34,14 @@ static int gsc_ctx_stop_req(struct gsc_ctx *ctx)
 	struct gsc_ctx *curr_ctx;
 	struct gsc_dev *gsc = ctx->gsc_dev;
 	int ret = 0;
+	unsigned long flags;
 
 	curr_ctx = v4l2_m2m_get_curr_priv(gsc->m2m.m2m_dev);
 	if (!gsc_m2m_run(gsc) || (curr_ctx != ctx))
 		return 0;
+	spin_lock_irqsave(&ctx->slock, flags);
 	ctx->state |= GSC_CTX_STOP_REQ;
+	spin_unlock_irqrestore(&ctx->slock, flags);
 	ret = wait_event_timeout(gsc->irq_queue,
 			!gsc_ctx_state_is_set(GSC_CTX_STOP_REQ, ctx),
 			GSC_SHUTDOWN_TIMEOUT);
@@ -54,6 +57,7 @@ static int gsc_m2m_stop_streaming(struct vb2_queue *q)
 	struct gsc_dev *gsc = ctx->gsc_dev;
 	int ret;
 
+	vb2_wait_for_all_buffers(q);
 	ret = gsc_ctx_stop_req(ctx);
 	/* FIXME: need to add v4l2_m2m_job_finish(fail) if ret is timeout */
 	if (ret < 0)
@@ -70,6 +74,8 @@ static void gsc_m2m_job_abort(void *priv)
 	struct gsc_dev *gsc = ctx->gsc_dev;
 	int ret;
 
+	vb2_wait_for_all_buffers(v4l2_m2m_get_src_vq(ctx->m2m_ctx));
+	vb2_wait_for_all_buffers(v4l2_m2m_get_dst_vq(ctx->m2m_ctx));
 	ret = gsc_ctx_stop_req(ctx);
 	/* FIXME: need to add v4l2_m2m_job_finish(fail) if ret is timeout */
 	if (ret < 0)
@@ -88,11 +94,23 @@ int gsc_fill_addr(struct gsc_ctx *ctx)
 	d_frame = &ctx->d_frame;
 
 	vb = v4l2_m2m_next_src_buf(ctx->m2m_ctx);
+	if (vb->num_planes != s_frame->fmt->num_planes) {
+		gsc_err("gsc(%s): vb(%p) planes=%d s_frame(%p) planes=%d\n",
+			v4l2_m2m_get_src_vq(ctx->m2m_ctx)->name,
+			vb, vb->num_planes, s_frame, s_frame->fmt->num_planes);
+		return -EINVAL;
+	}
 	ret = gsc_prepare_addr(ctx, vb, s_frame, &s_frame->addr);
 	if (ret)
 		return ret;
 
 	vb = v4l2_m2m_next_dst_buf(ctx->m2m_ctx);
+	if (vb->num_planes != d_frame->fmt->num_planes) {
+		gsc_err("gsc(%s): vb(%p) planes=%d d_frame(%p) planes=%d\n",
+			v4l2_m2m_get_dst_vq(ctx->m2m_ctx)->name,
+			vb, vb->num_planes, d_frame, d_frame->fmt->num_planes);
+		return -EINVAL;
+	}
 	ret = gsc_prepare_addr(ctx, vb, d_frame, &d_frame->addr);
 
 	return ret;
