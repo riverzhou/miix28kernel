@@ -47,6 +47,7 @@
 #define CFG_FLOAT_VOLTAGE_MASK			0x3F
 #define CFG_FLOAT_VOLTAGE_THRESHOLD_SHIFT	6
 #define CFG_CHARGE_CONTROL			0x04
+#define CFG_AUTOMATIC_POWER_SOURCE_DETECTION	BIT(2)
 #define CFG_AUTOMATIC_RECHARGE_DISABLE		BIT(7)
 #define CFG_STAT				0x05
 #define CFG_STAT_DISABLED			BIT(5)
@@ -1118,15 +1119,36 @@ static int apsd_detect(struct smb347_charger *smb)
 	if (!smb->usb_online)
 		return POWER_SUPPLY_TYPE_UNKNOWN;
 
+	mutex_lock(&smb->lock);
+	smb347_set_writable(smb, true);
+	ret = smb347_read(smb, CFG_CHARGE_CONTROL);
+	if (ret < 0)
+		goto apsd_fail;
+
+	ret &= ~CFG_AUTOMATIC_POWER_SOURCE_DETECTION;
+	ret = smb347_write(smb, CFG_CHARGE_CONTROL, ret);
+	if (ret < 0)
+		goto apsd_fail;
+
+	msleep(100);
+	ret = smb347_read(smb, CFG_CHARGE_CONTROL);
+	if (ret < 0)
+		goto apsd_fail;
+
+	ret |= CFG_AUTOMATIC_POWER_SOURCE_DETECTION;
+	ret = smb347_write(smb, CFG_CHARGE_CONTROL, ret);
+	if (ret < 0)
+		goto apsd_fail;
+
+	msleep(800);
 	ret = smb347_read(smb, STAT_D);
+	if (ret < 0)
+		goto apsd_fail;
 
 	if (!(ret & STAT_D_APSD_COMPLETE)) {
-		msleep(800);
-		ret = smb347_read(smb, STAT_D);
+		ret = POWER_SUPPLY_TYPE_UNKNOWN;
+		goto apsd_fail;
 	}
-
-	if (!(ret & STAT_D_APSD_COMPLETE))
-		return POWER_SUPPLY_TYPE_UNKNOWN;
 
 	switch (ret & STAT_D_APSD_RESULT_MASK) {
 	case APSD_RESULT_CDP:
@@ -1142,12 +1164,17 @@ static int apsd_detect(struct smb347_charger *smb)
 		ret = POWER_SUPPLY_TYPE_USB_ACA;
 		break;
 	case APSD_RESULT_OTHER_CHARGER:
+		ret = POWER_SUPPLY_TYPE_MAINS;
+		break;
 	case APSD_RESULT_NOT_RUN:
 	default:
 		ret = POWER_SUPPLY_TYPE_UNKNOWN;
 		break;
 	}
 
+apsd_fail:
+	smb347_set_writable(smb, false);
+	mutex_unlock(&smb->lock);
 	return ret;
 }
 
