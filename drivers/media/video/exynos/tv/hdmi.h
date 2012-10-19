@@ -374,6 +374,7 @@ void hdmi_sw_reset(struct hdmi_device *hdev);
 void hdmi_dumpregs(struct hdmi_device *hdev, char *prefix);
 void hdmi_set_3d_info(struct hdmi_device *hdev);
 void hdmi_set_dvi_mode(struct hdmi_device *hdev);
+void hdmi_debugfs_init(struct hdmi_device *hdev);
 
 /** HDCP functions */
 irqreturn_t hdcp_irq_handler(struct hdmi_device *hdev);

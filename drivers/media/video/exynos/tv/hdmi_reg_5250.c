@@ -12,8 +12,10 @@
  */
 
 #include "hdmi.h"
+#include <linux/debugfs.h>
 #include <linux/delay.h>
 #include <linux/pm_runtime.h>
+#include <linux/seq_file.h>
 #include <plat/devs.h>
 #include <plat/tv-core.h>
 
@@ -2881,6 +2883,89 @@ void hdmi_sw_reset(struct hdmi_device *hdev)
 	hdmi_write_mask(hdev, HDMI_CORE_RSTOUT, 0, HDMI_CORE_SW_RSTOUT);
 	mdelay(10);
 	hdmi_write_mask(hdev, HDMI_CORE_RSTOUT, ~0, HDMI_CORE_SW_RSTOUT);
+}
+
+static int hdmi_debugfs_show(struct seq_file *s, void *unused)
+{
+	struct hdmi_device *hdev = s->private;
+	int i;
+
+	mutex_lock(&hdev->mutex);
+
+	if (!hdev->streaming) {
+		mutex_unlock(&hdev->mutex);
+		seq_printf(s, "Not streaming\n");
+		return 0;
+	}
+
+#define DUMPREG(reg_id) \
+		seq_printf(s, "%-20s %08x\n", #reg_id, \
+			   readl(hdev->regs + reg_id))
+
+	DUMPREG(HDMI_INTC_CON_0);
+	DUMPREG(HDMI_INTC_FLAG_0);
+	DUMPREG(HDMI_HPD_STATUS);
+	DUMPREG(HDMI_INTC_CON_1);
+	DUMPREG(HDMI_INTC_FLAG_1);
+	DUMPREG(HDMI_PHY_STATUS_0);
+	DUMPREG(HDMI_PHY_STATUS_PLL);
+	DUMPREG(HDMI_PHY_CON_0);
+	DUMPREG(HDMI_PHY_RSTOUT);
+	DUMPREG(HDMI_PHY_VPLL);
+	DUMPREG(HDMI_PHY_CMU);
+	DUMPREG(HDMI_CORE_RSTOUT);
+
+	DUMPREG(HDMI_CON_0);
+	DUMPREG(HDMI_CON_1);
+	DUMPREG(HDMI_CON_2);
+	DUMPREG(HDMI_STATUS);
+	DUMPREG(HDMI_PHY_STATUS);
+	DUMPREG(HDMI_STATUS_EN);
+	DUMPREG(HDMI_HPD);
+	DUMPREG(HDMI_MODE_SEL);
+	DUMPREG(HDMI_ENC_EN);
+	DUMPREG(HDMI_DC_CONTROL);
+	DUMPREG(HDMI_VIDEO_PATTERN_GEN);
+
+	DUMPREG(HDMI_AVI_CON);
+	DUMPREG(HDMI_AVI_HEADER0);
+	DUMPREG(HDMI_AVI_HEADER1);
+	DUMPREG(HDMI_AVI_HEADER2);
+	DUMPREG(HDMI_AVI_CHECK_SUM);
+	for (i = 1; i < 6; ++i)
+		DUMPREG(HDMI_AVI_BYTE(i));
+
+	DUMPREG(HDMI_VSI_CON);
+	DUMPREG(HDMI_VSI_HEADER0);
+	DUMPREG(HDMI_VSI_HEADER1);
+	DUMPREG(HDMI_VSI_HEADER2);
+	for (i = 0; i < 7; ++i)
+		DUMPREG(HDMI_VSI_DATA(i));
+	DUMPREG(HDMI_AUI_CON);
+	DUMPREG(HDMI_ACR_CON);
+
+#undef DUMPREG
+
+	mutex_unlock(&hdev->mutex);
+	return 0;
+}
+
+static int hdmi_debugfs_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, hdmi_debugfs_show, inode->i_private);
+}
+
+static const struct file_operations hdmi_debugfs_fops = {
+	.open           = hdmi_debugfs_open,
+	.read           = seq_read,
+	.llseek         = seq_lseek,
+	.release        = single_release,
+};
+
+void hdmi_debugfs_init(struct hdmi_device *hdev)
+{
+	debugfs_create_file(dev_name(hdev->dev), S_IRUGO, NULL,
+			    hdev, &hdmi_debugfs_fops);
 }
 
 void hdmi_dumpregs(struct hdmi_device *hdev, char *prefix)

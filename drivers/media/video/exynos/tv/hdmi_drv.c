@@ -944,6 +944,8 @@ static int __devinit hdmi_probe(struct platform_device *pdev)
 
 	dev_info(dev, "probe sucessful\n");
 
+	hdmi_debugfs_init(hdmi_dev);
+
 	return 0;
 
 fail_irq:
