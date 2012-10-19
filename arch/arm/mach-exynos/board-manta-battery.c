@@ -20,6 +20,8 @@
 #include <linux/suspend.h>
 #include <linux/pm_wakeup.h>
 #include <linux/wakelock.h>
+#include <linux/notifier.h>
+#include <linux/usb/otg.h>
 
 #include <plat/adc.h>
 #include <plat/gpio-cfg.h>
@@ -83,6 +85,9 @@ static struct s3c_adc_client *ta_adc_client;
 
 static struct wakeup_source manta_bat_vbus_ws;
 static struct wake_lock manta_bat_chgdetect_wakelock;
+
+static struct delayed_work redetect_work;
+static struct wake_lock manta_bat_redetect_wl;
 
 static DEFINE_MUTEX(manta_bat_charger_detect_lock);
 static DEFINE_MUTEX(manta_bat_adc_lock);
@@ -405,20 +410,48 @@ detect_charge_source(enum charge_connector conn, bool online,
 }
 
 static int update_charging_status(bool usb_connected, bool pogo_connected,
-	bool force_dock_redetect)
+				  bool force_dock_redetect,
+				  bool usbin_redetect)
 {
 	enum charge_connector old_charge_conn;
 	int ret = 0;
 
-	if (manta_bat_usb_online != usb_connected) {
+	if (manta_bat_usb_online != usb_connected || usbin_redetect) {
+		bool usb_conn_src_usb;
+
 		manta_bat_usb_online = usb_connected;
+
+		if (usbin_redetect)
+			manta_otg_set_usb_state(false);
+
 		manta_bat_charge_source[CHARGE_CONNECTOR_USB] =
 			detect_charge_source(CHARGE_CONNECTOR_USB,
 					     usb_connected,
 					     false);
-		manta_otg_set_usb_state(
+		usb_conn_src_usb =
 			manta_bat_charge_source[CHARGE_CONNECTOR_USB] ==
-			MANTA_CHARGE_SOURCE_USB);
+			MANTA_CHARGE_SOURCE_USB;
+
+		/*
+		 * If USB disconnected, cancel any pending USB charger
+		 * redetect.
+		 */
+
+		if (!usb_conn_src_usb) {
+			ret = cancel_delayed_work(&redetect_work);
+			if (ret)
+				wake_unlock(&manta_bat_redetect_wl);
+		}
+
+		manta_otg_set_usb_state(usb_conn_src_usb);
+
+		if (!usbin_redetect && usb_conn_src_usb) {
+			cancel_delayed_work(&redetect_work);
+			wake_lock(&manta_bat_redetect_wl);
+			schedule_delayed_work(&redetect_work,
+					      msecs_to_jiffies(5000));
+		}
+
 		ret = 1;
 	}
 
@@ -535,7 +568,8 @@ static void exynos5_manta_set_priority(void)
 		       __func__, ret);
 }
 
-static void change_charger_status(bool force_dock_redetect)
+static void change_charger_status(bool force_dock_redetect,
+				  bool usbin_redetect)
 {
 	int ta_int;
 	union power_supply_propval pogo_connected = {0,};
@@ -629,13 +663,16 @@ static void change_charger_status(bool force_dock_redetect)
 			status_change =
 				update_charging_status(usb_connected.intval,
 						       pogo_connected.intval,
-						       force_dock_redetect);
+						       force_dock_redetect,
+						       usbin_redetect);
 			manta_bat_sync_charge_enable();
 		} else {
-			status_change = update_charging_status(true, false, false);
+			status_change = update_charging_status(true, false,
+							       false, false);
 		}
 	} else {
-		status_change = update_charging_status(false, false, false);
+		status_change = update_charging_status(false, false, false,
+						       false);
 	}
 
 	pr_debug("%s: ta_int(%d), charge_conn(%d), charge_source(%d)\n",
@@ -665,7 +702,7 @@ static void change_charger_status(bool force_dock_redetect)
 
 void manta_force_update_pogo_charger(void)
 {
-	change_charger_status(true);
+	change_charger_status(true, false);
 }
 
 static char *exynos5_manta_supplicant[] = { "manta-board" };
@@ -713,7 +750,7 @@ static void manta_bat_unregister_callbacks(void)
 
 static int manta_bat_poll_charge_source(void)
 {
-	change_charger_status(false);
+	change_charger_status(false, false);
 	return manta_source_to_android(
 		manta_bat_charge_source[manta_bat_charge_conn]);
 }
@@ -879,7 +916,7 @@ static irqreturn_t ta_int_intr(int irq, void *arg)
 {
 	wake_lock(&manta_bat_chgdetect_wakelock);
 	msleep(600);
-	change_charger_status(false);
+	change_charger_status(false, false);
 	wake_unlock(&manta_bat_chgdetect_wakelock);
 	return IRQ_HANDLED;
 }
@@ -1032,13 +1069,22 @@ static struct i2c_board_info i2c_devs2_prealpha[] __initdata = {
 	},
 };
 
+static void redetect_work_proc(struct work_struct *work)
+{
+	change_charger_status(false, true);
+	wake_unlock(&manta_bat_redetect_wl);
+}
+
 void __init exynos5_manta_battery_init(void)
 {
 	int hw_rev = exynos5_manta_get_revision();
 
 	charger_gpio_init();
+	INIT_DELAYED_WORK(&redetect_work, redetect_work_proc);
 	wake_lock_init(&manta_bat_chgdetect_wakelock, WAKE_LOCK_SUSPEND,
 		       "manta-chgdetect");
+	wake_lock_init(&manta_bat_redetect_wl, WAKE_LOCK_SUSPEND,
+		       "manta-chgredetect");
 
 	platform_add_devices(manta_battery_devices,
 		ARRAY_SIZE(manta_battery_devices));
@@ -1082,7 +1128,7 @@ void __init exynos5_manta_battery_init(void)
 
 static void exynos5_manta_power_changed(struct power_supply *psy)
 {
-	change_charger_status(false);
+	change_charger_status(false, false);
 }
 
 static int exynos5_manta_power_get_property(struct power_supply *psy,
@@ -1136,13 +1182,32 @@ static int exynos5_manta_battery_pm_event(struct notifier_block *notifier,
 	return NOTIFY_DONE;
 }
 
+static int manta_bat_usb_event(struct notifier_block *nb,
+			       unsigned long event, void *unused)
+{
+	int ret;
+
+	if (event == USB_EVENT_ENUMERATED) {
+		ret = __cancel_delayed_work(&redetect_work);
+		if (ret)
+			wake_unlock(&manta_bat_redetect_wl);
+	}
+
+	return NOTIFY_OK;
+}
+
 static struct notifier_block exynos5_manta_battery_pm_notifier_block = {
 	.notifier_call = exynos5_manta_battery_pm_event,
+};
+
+static struct notifier_block manta_bat_usb_nb = {
+	.notifier_call = manta_bat_usb_event,
 };
 
 static int __init exynos5_manta_battery_late_init(void)
 {
 	int ret;
+	struct usb_phy *usb_xceiv;
 	int hw_rev = exynos5_manta_get_revision();
 
 	ret = power_supply_register(NULL, &exynos5_manta_power_supply);
@@ -1198,10 +1263,23 @@ static int __init exynos5_manta_battery_late_init(void)
 		pr_warn("%s: failed to register PM notifier; ret=%d\n",
 			__func__, ret);
 
+	usb_xceiv = usb_get_transceiver();
+
+	if (!usb_xceiv) {
+		pr_err("%s: No USB transceiver found\n", __func__);
+	} else {
+		ret = usb_register_notifier(usb_xceiv, &manta_bat_usb_nb);
+
+		if (ret) {
+			pr_err("%s: usb_register_notifier on transceiver %s failed\n",
+			       __func__, dev_name(usb_xceiv->dev));
+		}
+	}
+
 	wakeup_source_init(&manta_bat_vbus_ws, "vbus");
 
 	/* Poll initial charger state */
-	change_charger_status(false);
+	change_charger_status(false, false);
 	return 0;
 }
 
