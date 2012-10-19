@@ -38,6 +38,7 @@
 struct manta_wm1811 {
 	struct clk *clk;
 	unsigned int pll_out;
+	unsigned int prev_pll_out;
 	struct snd_soc_jack jack;
 };
 
@@ -125,18 +126,23 @@ static int manta_start_fll1(struct snd_soc_dai *codec_dai,
 {
 	int ret;
 
-	/*
-	 * Make sure that we have a system clock not derived from the
-	 * FLL, since we cannot change the FLL when the system clock
-	 * is derived from it.
-	 */
-	ret = snd_soc_dai_set_sysclk(codec_dai,
+	if (machine->pll_out != machine->prev_pll_out) {
+		/*
+		 * FLL1's frequency needs to be changed. Make sure that we
+		 * have a system clock not derived from the FLL, since we
+		 * cannot change the FLL when the system clock is derived
+		 * from it.
+		 */
+		ret = snd_soc_dai_set_sysclk(codec_dai,
 					WM8994_SYSCLK_MCLK2,
 					MCLK2_FREQ, SND_SOC_CLOCK_IN);
-	if (ret < 0) {
-		dev_err(codec_dai->dev, "Failed to switch away from FLL: %d\n",
-									ret);
-		return ret;
+		if (ret < 0) {
+			dev_err(codec_dai->dev,
+				"Failed to switch away from FLL: %d\n", ret);
+			return ret;
+		}
+
+		machine->prev_pll_out = machine->pll_out;
 	}
 
 	/* Switch the FLL */
