@@ -325,7 +325,7 @@ static enum manta_charge_source check_samsung_charger(
 			 conn, manta_bat_ta_adc);
 		samsung_ac_detect = manta_bat_ta_adc > TA_ADC_LOW &&
 			manta_bat_ta_adc < TA_ADC_HIGH;
-		usb_ac_detected = false;
+		usb_ac_detected = samsung_ac_detect;
 	} else {
 		if (manta_bat_get_smb347_usb())
 			return CHARGE_SOURCE_USB;
