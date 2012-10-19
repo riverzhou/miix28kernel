@@ -67,6 +67,15 @@ static void manta_phy_shutdown(struct usb_phy *phy)
 		s5p_usb_phy_exit(&motg->pdev, S5P_USB_PHY_HOST);
 }
 
+static int manta_phy_set_power(struct usb_phy *phy, unsigned mA)
+{
+	if (mA)
+		atomic_notifier_call_chain(&phy->notifier, USB_EVENT_ENUMERATED,
+					   phy->otg->gadget);
+
+	return 0;
+}
+
 static int manta_otg_host_enable(struct manta_otg *motg)
 {
 #ifdef CONFIG_USB
@@ -305,6 +314,7 @@ void exynos5_manta_connector_init(void)
 	motg->phy.otg		= &motg->otg;
 	motg->phy.init		= manta_phy_init;
 	motg->phy.shutdown	= manta_phy_shutdown;
+	motg->phy.set_power	= manta_phy_set_power;
 
 	motg->otg.phy		 = &motg->phy;
 	motg->otg.set_host	 = manta_otg_set_host;
