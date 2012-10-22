@@ -267,6 +267,7 @@ static struct max77686_wtsr_smpl wtsr_smpl_data = {
 	.smpl_en = true,
 	.wtsr_timer_val = 3,	/* 1000ms */
 	.smpl_timer_val = 0,	/* 0.5s */
+	.check_jigon = true,
 };
 
 /* If it's first boot, reset rtc to 1/1/2012 12:00:00(SUN) */
