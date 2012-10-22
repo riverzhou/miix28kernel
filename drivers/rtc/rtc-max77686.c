@@ -49,6 +49,8 @@
 #define ALARM_ENABLE_SHIFT		7
 #define ALARM_ENABLE_MASK		(1 << ALARM_ENABLE_SHIFT)
 
+/* PMIC STATUS1 register */
+#define STATUS1_JIGONB_MASK		BIT(1)
 /* PMIC STATUS2 register */
 #define STATUS2_RTCA1_MASK		BIT(2)
 
@@ -353,12 +355,31 @@ static const struct rtc_class_ops max77686_rtc_ops = {
 	.alarm_irq_enable = max77686_rtc_alarm_irq_enable,
 };
 
+static bool max77686_is_jigonb_low(struct max77686_rtc_info *info)
+{
+	int ret;
+	u8 val;
+
+	ret = max77686_read_reg(info->max77686->i2c, MAX77686_REG_STATUS1,
+			&val);
+	if (ret < 0) {
+		dev_err(info->dev, "%s: fail to read status1 reg(%d)\n",
+			__func__, ret);
+		return false;
+	}
+
+	return !(val & STATUS1_JIGONB_MASK);
+}
+
 static void __devinit
 max77686_rtc_enable_wtsr_smpl(struct max77686_rtc_info *info,
 			      struct max77686_platform_data *pdata)
 {
 	u8 val;
 	int ret;
+
+	if (pdata->wtsr_smpl->check_jigon && max77686_is_jigonb_low(info))
+		pdata->wtsr_smpl->smpl_en = false;
 
 	val = (pdata->wtsr_smpl->wtsr_en << WTSR_EN_SHIFT)
 		| (pdata->wtsr_smpl->smpl_en << SMPL_EN_SHIFT)

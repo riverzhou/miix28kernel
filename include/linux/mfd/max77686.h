@@ -106,12 +106,15 @@ struct max77686_opmode_data {
  *			0(250ms), 1(500ms), 2(750ms), 3(1000ms)
  * @smpl_timer_val:	Set the SMPL timer Threshold
  *			0(0.5s), 1(1.0s), 2(1.5s), 3(2.0s)
+ * @check_jigon:	if this value is true, do not enable SMPL function when
+ *			JIGONB is low(JIG cable is attached)
  */
 struct max77686_wtsr_smpl {
 	bool wtsr_en;
 	bool smpl_en;
 	int wtsr_timer_val;
 	int smpl_timer_val;
+	bool check_jigon;
 };
 
 struct max77686_platform_data {
