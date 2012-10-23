@@ -289,7 +289,10 @@ void manta_otg_set_usb_state(bool connected)
 {
 	struct manta_otg *motg = &manta_otg;
 	motg->usb_connected = connected;
-	queue_delayed_work(system_nrt_wq, &motg->work, msecs_to_jiffies(20));
+	queue_delayed_work(system_nrt_wq, &motg->work,
+			   connected ? msecs_to_jiffies(20) : 0);
+	if (!connected)
+		flush_delayed_work(&motg->work);
 }
 
 void exynos5_manta_connector_init(void)
