@@ -22,6 +22,7 @@
 #include <linux/ioport.h>
 #include <linux/module.h>
 #include <linux/platform_device.h>
+#include <linux/ratelimit.h>
 #include <linux/seq_file.h>
 #include <linux/slab.h>
 #include <linux/stat.h>
@@ -375,6 +376,26 @@ static void dw_mci_stop_dma(struct dw_mci *host)
 	}
 }
 
+static void mci_send_cmd(struct dw_mci_slot *slot, u32 cmd, u32 arg)
+{
+	struct dw_mci *host = slot->host;
+	unsigned long timeout = jiffies + msecs_to_jiffies(500);
+	unsigned int cmd_status = 0;
+
+	mci_writel(host, CMDARG, arg);
+	wmb();
+	mci_writel(host, CMD, SDMMC_CMD_START | cmd);
+
+	while (time_before(jiffies, timeout)) {
+		cmd_status = mci_readl(host, CMD);
+		if (!(cmd_status & SDMMC_CMD_START))
+			return;
+	}
+	dev_err(&slot->mmc->class_dev,
+		"Timeout sending command (cmd %#x arg %#x status %#x)\n",
+		cmd, arg, cmd_status);
+}
+
 static bool dw_mci_wait_reset(struct device *dev, struct dw_mci *host,
 		unsigned int reset_val)
 {
@@ -387,8 +408,13 @@ static bool dw_mci_wait_reset(struct device *dev, struct dw_mci *host,
 
 	/* wait till resets clear */
 	do {
-		if (!(mci_readl(host, CTRL) & reset_val))
+		if (!(mci_readl(host, CTRL) & reset_val)) {
+			if (reset_val & SDMMC_CTRL_RESET)
+				/* After CTRL Reset, Should be needed clk val to CIU */
+				mci_send_cmd(host->cur_slot,
+				SDMMC_CMD_UPD_CLK | SDMMC_CMD_PRV_DAT_WAIT, 0);
 			return true;
+		}
 	} while (time_before(jiffies, timeout));
 
 	dev_err(dev, "%s: Timeout resetting block (ctrl %#x)\n",
@@ -403,7 +429,8 @@ static bool dw_mci_wait_fifo_reset(struct device *dev, struct dw_mci *host)
 	unsigned int ctrl;
 	bool result;
 
-	result = dw_mci_wait_reset(&host->dev, host, SDMMC_CTRL_FIFO_RESET);
+	result = dw_mci_wait_reset(&host->dev, host,
+				SDMMC_CTRL_RESET | SDMMC_CTRL_FIFO_RESET);
 	if (result) {
 		do {
 			ctrl = mci_readl(host, STATUS);
@@ -802,26 +829,6 @@ static void dw_mci_submit_data(struct dw_mci *host, struct mmc_data *data)
 		temp &= ~SDMMC_CTRL_DMA_ENABLE;
 		mci_writel(host, CTRL, temp);
 	}
-}
-
-static void mci_send_cmd(struct dw_mci_slot *slot, u32 cmd, u32 arg)
-{
-	struct dw_mci *host = slot->host;
-	unsigned long timeout = jiffies + msecs_to_jiffies(500);
-	unsigned int cmd_status = 0;
-
-	mci_writel(host, CMDARG, arg);
-	wmb();
-	mci_writel(host, CMD, SDMMC_CMD_START | cmd);
-
-	while (time_before(jiffies, timeout)) {
-		cmd_status = mci_readl(host, CMD);
-		if (!(cmd_status & SDMMC_CMD_START))
-			return;
-	}
-	dev_err(&slot->mmc->class_dev,
-		"Timeout sending command (cmd %#x arg %#x status %#x)\n",
-		cmd, arg, cmd_status);
 }
 
 static void dw_mci_setup_bus(struct dw_mci_slot *slot, int force)
@@ -2011,6 +2018,7 @@ static irqreturn_t dw_mci_interrupt(int irq, void *dev_id)
 	u32 status, pending;
 	unsigned int pass_count = 0;
 	int i;
+	int ret = IRQ_NONE;
 
 	do {
 		status = mci_readl(host, RINTSTS);
@@ -2034,6 +2042,7 @@ static irqreturn_t dw_mci_interrupt(int irq, void *dev_id)
 			host->cmd_status = pending;
 			smp_wmb();
 			set_bit(EVENT_CMD_COMPLETE, &host->pending_events);
+			ret = IRQ_HANDLED;
 		}
 
 		if (pending & DW_MCI_DATA_ERROR_FLAGS) {
@@ -2046,6 +2055,7 @@ static irqreturn_t dw_mci_interrupt(int irq, void *dev_id)
 				set_bit(EVENT_DATA_COMPLETE,
 					&host->pending_events);
 			tasklet_schedule(&host->tasklet);
+			ret = IRQ_HANDLED;
 		}
 
 		if (pending & SDMMC_INT_DATA_OVER) {
@@ -2059,28 +2069,33 @@ static irqreturn_t dw_mci_interrupt(int irq, void *dev_id)
 			}
 			set_bit(EVENT_DATA_COMPLETE, &host->pending_events);
 			tasklet_schedule(&host->tasklet);
+			ret = IRQ_HANDLED;
 		}
 
 		if (pending & SDMMC_INT_RXDR) {
 			mci_writel(host, RINTSTS, SDMMC_INT_RXDR);
 			if (host->dir_status == DW_MCI_RECV_STATUS && host->sg)
 				dw_mci_read_data_pio(host);
+			ret = IRQ_HANDLED;
 		}
 
 		if (pending & SDMMC_INT_TXDR) {
 			mci_writel(host, RINTSTS, SDMMC_INT_TXDR);
 			if (host->dir_status == DW_MCI_SEND_STATUS && host->sg)
 				dw_mci_write_data_pio(host);
+			ret = IRQ_HANDLED;
 		}
 
 		if (pending & SDMMC_INT_CMD_DONE) {
 			mci_writel(host, RINTSTS, SDMMC_INT_CMD_DONE);
 			dw_mci_cmd_interrupt(host, pending);
+			ret = IRQ_HANDLED;
 		}
 
 		if (pending & SDMMC_INT_CD) {
 			mci_writel(host, RINTSTS, SDMMC_INT_CD);
 			queue_work(dw_mci_card_workqueue, &host->card_work);
+			ret = IRQ_HANDLED;
 		}
 
 		/* Handle SDIO Interrupts */
@@ -2089,6 +2104,7 @@ static irqreturn_t dw_mci_interrupt(int irq, void *dev_id)
 			if (pending & SDMMC_INT_SDIO(i)) {
 				mci_writel(host, RINTSTS, SDMMC_INT_SDIO(i));
 				mmc_signal_sdio_irq(slot->mmc);
+				ret = IRQ_HANDLED;
 			}
 		}
 
@@ -2101,10 +2117,17 @@ static irqreturn_t dw_mci_interrupt(int irq, void *dev_id)
 		mci_writel(host, IDSTS, SDMMC_IDMAC_INT_TI | SDMMC_IDMAC_INT_RI);
 		mci_writel(host, IDSTS, SDMMC_IDMAC_INT_NI);
 		host->dma_ops->complete(host);
+		ret = IRQ_HANDLED;
 	}
 #endif
 
-	return IRQ_HANDLED;
+	if (ret == IRQ_NONE)
+		pr_warn_ratelimited("%s: no interrupts handled, pending %08x %08x\n",
+				dev_name(&host->dev),
+				mci_readl(host, MINTSTS),
+				mci_readl(host, IDSTS));
+
+	return ret;
 }
 
 static void dw_mci_work_routine_card(struct work_struct *work)
@@ -2456,7 +2479,10 @@ static void dw_mci_timeout_timer(unsigned long data)
 		mrq = host->mrq;
 
 		dev_err(&host->dev,
-			"Timeout waiting for hardware interrupt.\n");
+			"Timeout waiting for hardware interrupt\n"
+			"cmd%d, state: %d, status: %08X, rintsts: %08X\n",
+			mrq->cmd->opcode, host->state,
+			mci_readl(host, STATUS), mci_readl(host, RINTSTS));
 
 		spin_lock(&host->lock);
 		host->data = NULL;
@@ -2487,7 +2513,7 @@ static void dw_mci_timeout_timer(unsigned long data)
 		}
 
 		spin_unlock(&host->lock);
-		dw_mci_wait_reset(&host->dev, host, SDMMC_CTRL_FIFO_RESET);
+		dw_mci_wait_fifo_reset(&host->dev, host);
 		spin_lock(&host->lock);
 
 		dw_mci_request_end(host, mrq);
