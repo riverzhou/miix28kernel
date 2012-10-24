@@ -83,7 +83,6 @@ static struct android_bat_callbacks *bat_callbacks;
 
 static struct s3c_adc_client *ta_adc_client;
 
-static struct wakeup_source manta_bat_vbus_ws;
 static struct wake_lock manta_bat_chgdetect_wakelock;
 
 static struct delayed_work redetect_work;
@@ -682,15 +681,6 @@ static void change_charger_status(bool force_dock_redetect,
 			bat_callbacks,
 			manta_source_to_android(
 				manta_bat_charge_source[manta_bat_charge_conn]));
-
-	if (status_change) {
-		if (manta_bat_charge_source[CHARGE_CONNECTOR_USB] ==
-		    MANTA_CHARGE_SOURCE_USB)
-			__pm_stay_awake(&manta_bat_vbus_ws);
-		else
-			__pm_wakeup_event(&manta_bat_vbus_ws, 500);
-	}
-
 	mutex_unlock(&manta_bat_charger_detect_lock);
 }
 
@@ -1269,8 +1259,6 @@ static int __init exynos5_manta_battery_late_init(void)
 			       __func__, dev_name(usb_xceiv->dev));
 		}
 	}
-
-	wakeup_source_init(&manta_bat_vbus_ws, "vbus");
 
 	/* Poll initial charger state */
 	change_charger_status(false, false);
