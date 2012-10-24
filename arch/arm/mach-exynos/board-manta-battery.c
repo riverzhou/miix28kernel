@@ -354,20 +354,14 @@ static enum manta_charge_source check_samsung_charger(
 	}
 
 	if (samsung_ac_detect) {
-		bool samsung_ta_detected = false;
-		int i;
+		bool samsung_ta_detected;
 
-		for (i = 0; i < 10; i++) {
-			manta_bat_ta_adc = read_ta_adc(conn, 1);
-			pr_debug("%s: ta_adc conn=%d ta_check=1 val=%d\n",
-				 __func__, conn, manta_bat_ta_adc);
-			samsung_ta_detected =
-				manta_bat_ta_adc > TA_ADC_LOW &&
-				manta_bat_ta_adc < TA_ADC_HIGH;
-			if (samsung_ta_detected)
-				break;
-			msleep(100);
-		}
+		manta_bat_ta_adc = read_ta_adc(conn, 1);
+		pr_debug("%s: ta_adc conn=%d ta_check=1 val=%d\n",
+			 __func__, conn, manta_bat_ta_adc);
+		samsung_ta_detected =
+			manta_bat_ta_adc > TA_ADC_LOW &&
+			manta_bat_ta_adc < TA_ADC_HIGH;
 
 		if (samsung_ta_detected)
 			charge_source = MANTA_CHARGE_SOURCE_AC_SAMSUNG;
