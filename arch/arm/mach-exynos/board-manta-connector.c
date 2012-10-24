@@ -69,7 +69,7 @@ static void manta_phy_shutdown(struct usb_phy *phy)
 
 static int manta_phy_set_power(struct usb_phy *phy, unsigned mA)
 {
-	if (mA)
+	if (mA > 3)
 		atomic_notifier_call_chain(&phy->notifier, USB_EVENT_ENUMERATED,
 					   phy->otg->gadget);
 
