@@ -26,8 +26,6 @@
 #include <plat/adc.h>
 #include <plat/gpio-cfg.h>
 
-#include <linux/platform_data/max17047_fuelgauge.h>
-#include <linux/platform_data/bq24191_charger.h>
 #include <linux/power/smb347-charger.h>
 #include <linux/platform_data/android_battery.h>
 #include <linux/platform_data/ds2482.h>
@@ -45,14 +43,11 @@
 #define	GPIO_USB_SEL1		EXYNOS5_GPH0(1)
 #define	GPIO_TA_EN		EXYNOS5_GPG1(5)
 #define	GPIO_TA_INT		EXYNOS5_GPX0(0)
-#define	GPIO_TA_nCHG_LUNCHBOX	EXYNOS5_GPG1(4)
-#define	GPIO_TA_nCHG_ALPHA	EXYNOS5_GPX0(4)
+#define	GPIO_TA_NCHG		EXYNOS5_GPX0(4)
 #define GPIO_OTG_VBUS_SENSE	EXYNOS5_GPX1(0)
 #define GPIO_VBUS_POGO_5V	EXYNOS5_GPX1(2)
 #define GPIO_OTG_VBUS_SENSE_FAC	EXYNOS5_GPB0(1)
 #define GPIO_1WIRE_SLEEP	EXYNOS5_GPG0(0)
-
-static int gpio_TA_nCHG = GPIO_TA_nCHG_ALPHA;
 
 enum charge_connector {
 	CHARGE_CONNECTOR_NONE,
@@ -77,8 +72,6 @@ static struct power_supply *manta_bat_smb347_usb;
 static struct power_supply *manta_bat_smb347_battery;
 static struct power_supply *manta_bat_ds2784_battery;
 
-static struct max17047_fg_callbacks *fg_callbacks;
-static struct bq24191_chg_callbacks *chg_callbacks;
 static struct android_bat_callbacks *bat_callbacks;
 
 static struct s3c_adc_client *ta_adc_client;
@@ -140,62 +133,27 @@ static inline int manta_bat_get_smb347_usb(void)
 	return 0;
 }
 
-static void max17047_fg_register_callbacks(struct max17047_fg_callbacks *ptr)
-{
-	fg_callbacks = ptr;
-	if (exynos5_manta_get_revision() >= MANTA_REV_BETA)
-		fg_callbacks->get_temperature = NULL;
-}
-
-static void max17047_fg_unregister_callbacks(void)
-{
-	fg_callbacks = NULL;
-}
-
-static struct max17047_platform_data max17047_fg_pdata = {
-	.register_callbacks = max17047_fg_register_callbacks,
-	.unregister_callbacks = max17047_fg_unregister_callbacks,
-};
-
-static void bq24191_chg_register_callbacks(struct bq24191_chg_callbacks *ptr)
-{
-	chg_callbacks = ptr;
-}
-
-static void bq24191_chg_unregister_callbacks(void)
-{
-	chg_callbacks = NULL;
-}
-
 static void charger_gpio_init(void)
 {
-	int hw_rev = exynos5_manta_get_revision();
 	int ret;
-
-	gpio_TA_nCHG = hw_rev >= MANTA_REV_PRE_ALPHA ? GPIO_TA_nCHG_ALPHA
-		: GPIO_TA_nCHG_LUNCHBOX;
 
 	s3c_gpio_cfgpin(GPIO_TA_INT, S3C_GPIO_INPUT);
 	s3c_gpio_setpull(GPIO_TA_INT, S3C_GPIO_PULL_NONE);
 
-	if (hw_rev > MANTA_REV_ALPHA) {
-		s3c_gpio_cfgpin(GPIO_OTG_VBUS_SENSE, S3C_GPIO_INPUT);
-		s3c_gpio_setpull(GPIO_OTG_VBUS_SENSE, S3C_GPIO_PULL_NONE);
+	s3c_gpio_cfgpin(GPIO_OTG_VBUS_SENSE, S3C_GPIO_INPUT);
+	s3c_gpio_setpull(GPIO_OTG_VBUS_SENSE, S3C_GPIO_PULL_NONE);
 
-		s3c_gpio_cfgpin(GPIO_VBUS_POGO_5V, S3C_GPIO_INPUT);
-		s3c_gpio_setpull(GPIO_VBUS_POGO_5V, S3C_GPIO_PULL_NONE);
+	s3c_gpio_cfgpin(GPIO_VBUS_POGO_5V, S3C_GPIO_INPUT);
+	s3c_gpio_setpull(GPIO_VBUS_POGO_5V, S3C_GPIO_PULL_NONE);
 
-		s3c_gpio_cfgpin(GPIO_OTG_VBUS_SENSE_FAC, S3C_GPIO_INPUT);
-		s3c_gpio_setpull(GPIO_OTG_VBUS_SENSE_FAC, S3C_GPIO_PULL_NONE);
-		s5p_gpio_set_pd_cfg(GPIO_OTG_VBUS_SENSE_FAC,
-					S5P_GPIO_PD_PREV_STATE);
-		s5p_gpio_set_pd_pull(GPIO_OTG_VBUS_SENSE_FAC,
-					S5P_GPIO_PD_UPDOWN_DISABLE);
-	}
+	s3c_gpio_cfgpin(GPIO_OTG_VBUS_SENSE_FAC, S3C_GPIO_INPUT);
+	s3c_gpio_setpull(GPIO_OTG_VBUS_SENSE_FAC, S3C_GPIO_PULL_NONE);
+	s5p_gpio_set_pd_cfg(GPIO_OTG_VBUS_SENSE_FAC, S5P_GPIO_PD_PREV_STATE);
+	s5p_gpio_set_pd_pull(GPIO_OTG_VBUS_SENSE_FAC,
+			     S5P_GPIO_PD_UPDOWN_DISABLE);
 
-	s3c_gpio_cfgpin(gpio_TA_nCHG, S3C_GPIO_INPUT);
-	s3c_gpio_setpull(gpio_TA_nCHG, hw_rev >= MANTA_REV_PRE_ALPHA ?
-			 S3C_GPIO_PULL_NONE : S3C_GPIO_PULL_UP);
+	s3c_gpio_cfgpin(GPIO_TA_NCHG, S3C_GPIO_INPUT);
+	s3c_gpio_setpull(GPIO_TA_NCHG, S3C_GPIO_PULL_NONE);
 
 	s3c_gpio_cfgpin(GPIO_TA_EN, S3C_GPIO_OUTPUT);
 	s3c_gpio_setpull(GPIO_TA_EN, S3C_GPIO_PULL_NONE);
@@ -235,20 +193,12 @@ static int read_ta_adc(enum charge_connector conn, int ta_check_sel)
 	msleep(100);
 
 	for (i = 0; i < ADC_NUM_SAMPLES; i++) {
-		if (exynos5_manta_get_revision() <= MANTA_REV_LUNCHBOX)
-			ret = manta_stmpe811_read_adc_data(6);
-		else
-			ret = s3c_adc_read(ta_adc_client, 0);
+		ret = s3c_adc_read(ta_adc_client, 0);
 
 		if (ret == -ETIMEDOUT) {
 			for (j = 0; j < ADC_LIMIT_ERR_COUNT; j++) {
 				msleep(20);
-				if (exynos5_manta_get_revision() <=
-				    MANTA_REV_LUNCHBOX)
-					ret = manta_stmpe811_read_adc_data(6);
-				else
-					ret = s3c_adc_read(ta_adc_client, 0);
-
+				ret = s3c_adc_read(ta_adc_client, 0);
 				if (ret > 0)
 					break;
 			}
@@ -482,24 +432,18 @@ static void manta_bat_set_charging_enable(int en)
 
 	manta_bat_chg_enabled = en;
 
-	if (exynos5_manta_get_revision() >= MANTA_REV_PRE_ALPHA) {
-		if (!manta_bat_smb347_battery)
-			manta_bat_smb347_battery =
-				power_supply_get_by_name("smb347-battery");
+	if (!manta_bat_smb347_battery)
+		manta_bat_smb347_battery =
+			power_supply_get_by_name("smb347-battery");
 
-		if (!manta_bat_smb347_battery)
-			return;
+	if (!manta_bat_smb347_battery)
+		return;
 
-		value.intval = en ? 1 : 0;
-		manta_bat_smb347_battery->set_property(
-			manta_bat_smb347_battery,
-			POWER_SUPPLY_PROP_CHARGE_ENABLED,
-			&value);
-		manta_bat_chg_enable_synced = true;
-
-	} else if (chg_callbacks && chg_callbacks->set_charging_enable) {
-		chg_callbacks->set_charging_enable(chg_callbacks, en);
-	}
+	value.intval = en ? 1 : 0;
+	manta_bat_smb347_battery->set_property(
+		manta_bat_smb347_battery, POWER_SUPPLY_PROP_CHARGE_ENABLED,
+		&value);
+	manta_bat_chg_enable_synced = true;
 }
 
 static void manta_bat_sync_charge_enable(void)
@@ -569,17 +513,14 @@ static void change_charger_status(bool force_dock_redetect,
 	union power_supply_propval usb_connected = {0,};
 	union power_supply_propval smb347_status = {0,};
 	int status_change = 0;
-	int hw_rev = exynos5_manta_get_revision();
 	int ret;
 
 	mutex_lock(&manta_bat_charger_detect_lock);
-	ta_int = hw_rev <= MANTA_REV_ALPHA ? gpio_get_value(GPIO_TA_INT) :
-			gpio_get_value(GPIO_OTG_VBUS_SENSE) |
-			gpio_get_value(GPIO_VBUS_POGO_5V);
+	ta_int = gpio_get_value(GPIO_OTG_VBUS_SENSE) |
+		gpio_get_value(GPIO_VBUS_POGO_5V);
 
-	if (exynos5_manta_get_revision() >= MANTA_REV_PRE_ALPHA &&
-	    (!manta_bat_smb347_mains || !manta_bat_smb347_usb ||
-	     !manta_bat_smb347_battery)) {
+	if (!manta_bat_smb347_mains || !manta_bat_smb347_usb ||
+	    !manta_bat_smb347_battery) {
 		manta_bat_smb347_mains =
 			power_supply_get_by_name("smb347-mains");
 		manta_bat_get_smb347_usb();
@@ -591,78 +532,51 @@ static void change_charger_status(bool force_dock_redetect,
 			pr_err("%s: failed to get power supplies\n", __func__);
 	}
 
-	if (exynos5_manta_get_revision() > MANTA_REV_ALPHA) {
-		if (!manta_bat_otg_enabled)
-			usb_connected.intval = gpio_get_value(GPIO_OTG_VBUS_SENSE);
-		pogo_connected.intval = gpio_get_value(GPIO_VBUS_POGO_5V);
+	if (!manta_bat_otg_enabled)
+		usb_connected.intval = gpio_get_value(GPIO_OTG_VBUS_SENSE);
 
-		if (manta_bat_smb347_usb &&
-		    usb_connected.intval != manta_bat_usb_online) {
-			ret = manta_bat_smb347_usb->set_property(
-				manta_bat_smb347_usb,
-				POWER_SUPPLY_PROP_ONLINE,
-				&usb_connected);
-			if (ret)
-				pr_err("%s: failed to change smb347-usb online\n",
-				       __func__);
-		}
+	pogo_connected.intval = gpio_get_value(GPIO_VBUS_POGO_5V);
 
-		if (manta_bat_smb347_mains &&
-		    pogo_connected.intval != manta_bat_pogo_online) {
-			ret = manta_bat_smb347_mains->set_property(
-				manta_bat_smb347_mains,
-				POWER_SUPPLY_PROP_ONLINE,
-				&pogo_connected);
-			if (ret)
-				pr_err("%s: failed to change smb347-mains online\n",
-				       __func__);
-		}
+	if (manta_bat_smb347_usb &&
+	    usb_connected.intval != manta_bat_usb_online) {
+		ret = manta_bat_smb347_usb->set_property(
+			manta_bat_smb347_usb, POWER_SUPPLY_PROP_ONLINE,
+			&usb_connected);
+		if (ret)
+			pr_err("%s: failed to change smb347-usb online\n",
+			       __func__);
+	}
 
-		if (manta_bat_smb347_battery) {
-			manta_bat_smb347_battery->get_property(
-					manta_bat_smb347_battery,
-					POWER_SUPPLY_PROP_STATUS,
-					&smb347_status);
+	if (manta_bat_smb347_mains &&
+	    pogo_connected.intval != manta_bat_pogo_online) {
+		ret = manta_bat_smb347_mains->set_property(
+			manta_bat_smb347_mains, POWER_SUPPLY_PROP_ONLINE,
+			&pogo_connected);
+		if (ret)
+			pr_err("%s: failed to change smb347-mains online\n",
+			       __func__);
+	}
 
-			if (smb347_status.intval != manta_bat_battery_status) {
-				if (smb347_status.intval ==
-					POWER_SUPPLY_STATUS_FULL &&
-					bat_callbacks &&
-					bat_callbacks->battery_set_full)
-					bat_callbacks->battery_set_full(
-						bat_callbacks);
+	if (manta_bat_smb347_battery) {
+		manta_bat_smb347_battery->get_property(
+			manta_bat_smb347_battery, POWER_SUPPLY_PROP_STATUS,
+			&smb347_status);
 
-				manta_bat_battery_status = smb347_status.intval;
-			}
+		if (smb347_status.intval != manta_bat_battery_status) {
+			if (smb347_status.intval == POWER_SUPPLY_STATUS_FULL &&
+			    bat_callbacks && bat_callbacks->battery_set_full)
+				bat_callbacks->battery_set_full(
+					bat_callbacks);
+
+			manta_bat_battery_status = smb347_status.intval;
 		}
 	}
 
 	if (ta_int) {
-		if (exynos5_manta_get_revision() <= MANTA_REV_ALPHA) {
-			if (manta_bat_smb347_mains)
-				manta_bat_smb347_mains->get_property(
-					manta_bat_smb347_mains,
-					POWER_SUPPLY_PROP_ONLINE,
-					&pogo_connected);
-
-			if (manta_bat_smb347_usb)
-				manta_bat_smb347_usb->get_property(
-					manta_bat_smb347_usb,
-					POWER_SUPPLY_PROP_ONLINE,
-					&usb_connected);
-		}
-
-		if (exynos5_manta_get_revision() >= MANTA_REV_PRE_ALPHA) {
-			status_change =
-				update_charging_status(usb_connected.intval,
-						       pogo_connected.intval,
-						       force_dock_redetect,
-						       usbin_redetect);
-			manta_bat_sync_charge_enable();
-		} else {
-			status_change = update_charging_status(true, false,
-							       false, false);
-		}
+		status_change = update_charging_status(
+			usb_connected.intval, pogo_connected.intval,
+			force_dock_redetect, usbin_redetect);
+		manta_bat_sync_charge_enable();
 	} else {
 		status_change = update_charging_status(false, false, false,
 						       false);
@@ -704,22 +618,11 @@ static struct smb347_charger_platform_data smb347_chg_pdata = {
 	.pre_to_fast_voltage = 2600000,
 	.mains_current_limit = 2000000,
 	.usb_hc_current_limit = 1800000,
-	.irq_gpio = GPIO_TA_nCHG_ALPHA,
+	.irq_gpio = GPIO_TA_NCHG,
 	.disable_stat_interrupts = true,
 	.en_gpio = GPIO_TA_EN,
 	.supplied_to = exynos5_manta_supplicant,
 	.num_supplicants = ARRAY_SIZE(exynos5_manta_supplicant),
-};
-
-static struct bq24191_platform_data bq24191_chg_pdata = {
-	.register_callbacks = bq24191_chg_register_callbacks,
-	.unregister_callbacks = bq24191_chg_unregister_callbacks,
-	.high_current_charging = 0x06,	/* input current limit 2A */
-	.low_current_charging = 0x32,	/* input current linit 500mA */
-	.chg_enable = 0x1d,
-	.chg_disable = 0x0d,
-	.gpio_ta_nchg = GPIO_TA_nCHG_LUNCHBOX,
-	.gpio_ta_en = GPIO_TA_EN,
 };
 
 static void manta_bat_register_callbacks(struct android_bat_callbacks *ptr)
@@ -788,111 +691,67 @@ static void exynos5_manta_set_usb_hc(void)
 static void manta_bat_set_charging_current(
 	int android_charge_source)
 {
-	if (exynos5_manta_get_revision() >= MANTA_REV_PRE_ALPHA) {
-		exynos5_manta_set_priority();
-		exynos5_manta_set_usb_hc();
-		exynos5_manta_set_mains_current();
-	}
+	exynos5_manta_set_priority();
+	exynos5_manta_set_usb_hc();
+	exynos5_manta_set_mains_current();
 }
 
 static int manta_bat_get_capacity(void)
 {
-	int hw_rev = exynos5_manta_get_revision();
 	union power_supply_propval soc;
 	int ret = -ENXIO;
 
-	if (hw_rev >= MANTA_REV_BETA) {
-		if (manta_bat_get_ds2784())
-			return ret;
-
-		ret = manta_bat_ds2784_battery->get_property(
-			manta_bat_ds2784_battery, POWER_SUPPLY_PROP_CAPACITY,
-			&soc);
-
-		if (ret >= 0)
-			ret = soc.intval;
-	} else {
-		if (fg_callbacks && fg_callbacks->get_capacity)
-			ret = fg_callbacks->get_capacity(fg_callbacks);
-	}
-
+	if (manta_bat_get_ds2784())
+		return ret;
+	ret = manta_bat_ds2784_battery->get_property(
+		manta_bat_ds2784_battery, POWER_SUPPLY_PROP_CAPACITY,
+		&soc);
+	if (ret >= 0)
+		ret = soc.intval;
 	return ret;
 }
 
 static int manta_bat_get_temperature(int *temp_now)
 {
-	int hw_rev = exynos5_manta_get_revision();
 	union power_supply_propval temp;
 	int ret = -ENXIO;
 
-	if (hw_rev >= MANTA_REV_BETA) {
-		if (manta_bat_get_ds2784())
-			return ret;
-
-		ret = manta_bat_ds2784_battery->get_property(
-			manta_bat_ds2784_battery, POWER_SUPPLY_PROP_TEMP,
-			&temp);
-
-		if (ret >= 0)
-			*temp_now = temp.intval;
-	} else {
-		if (fg_callbacks && fg_callbacks->get_temperature)
-			ret = fg_callbacks->get_temperature(fg_callbacks,
-							    temp_now);
-
-		if (ret >= 0)
-			*temp_now /= 1000;
-	}
-
+	if (manta_bat_get_ds2784())
+		return ret;
+	ret = manta_bat_ds2784_battery->get_property(
+		manta_bat_ds2784_battery, POWER_SUPPLY_PROP_TEMP, &temp);
+	if (ret >= 0)
+		*temp_now = temp.intval;
 	return ret;
 }
 
 static int manta_bat_get_voltage_now(void)
 {
-	int hw_rev = exynos5_manta_get_revision();
 	union power_supply_propval vcell;
 	int ret = -ENXIO;
 
-	if (hw_rev >= MANTA_REV_BETA) {
-		if (manta_bat_get_ds2784())
-			return ret;
-
-		ret = manta_bat_ds2784_battery->get_property(
-			manta_bat_ds2784_battery, POWER_SUPPLY_PROP_VOLTAGE_NOW,
-			&vcell);
-
-		if (ret >= 0)
-			ret = vcell.intval;
-	} else {
-		if (fg_callbacks && fg_callbacks->get_voltage_now)
-			ret = fg_callbacks->get_voltage_now(fg_callbacks);
-	}
-
+	if (manta_bat_get_ds2784())
+		return ret;
+	ret = manta_bat_ds2784_battery->get_property(
+		manta_bat_ds2784_battery, POWER_SUPPLY_PROP_VOLTAGE_NOW,
+		&vcell);
+	if (ret >= 0)
+		ret = vcell.intval;
 	return ret;
 }
 
 static int manta_bat_get_current_now(int *i_current)
 {
-	int hw_rev = exynos5_manta_get_revision();
 	union power_supply_propval inow;
 	int ret = -ENXIO;
 
-	if (hw_rev >= MANTA_REV_BETA) {
-		if (manta_bat_get_ds2784())
-			return ret;
-
-		ret = manta_bat_ds2784_battery->get_property(
-			manta_bat_ds2784_battery, POWER_SUPPLY_PROP_CURRENT_NOW,
-			&inow);
-
-		if (ret >= 0)
-			*i_current = inow.intval;
-	} else {
-		if (fg_callbacks && fg_callbacks->get_current_now)
-			ret = fg_callbacks->get_current_now(fg_callbacks,
-							    i_current);
-	}
-
+	if (manta_bat_get_ds2784())
+		return ret;
+	ret = manta_bat_ds2784_battery->get_property(
+		manta_bat_ds2784_battery, POWER_SUPPLY_PROP_CURRENT_NOW,
+		&inow);
+	if (ret >= 0)
+		*i_current = inow.intval;
 	return ret;
 }
 
@@ -959,21 +818,13 @@ static char *manta_charge_source_str(enum manta_charge_source charge_source)
 
 static int manta_power_debug_dump(struct seq_file *s, void *unused)
 {
-	if (exynos5_manta_get_revision() > MANTA_REV_ALPHA) {
-		seq_printf(s, "ta_en=%d ta_nchg=%d ta_int=%d usbin=%d, dcin=%d st=%d\n",
-			   gpio_get_value(GPIO_TA_EN),
-			   gpio_get_value(gpio_TA_nCHG),
-			   gpio_get_value(GPIO_TA_INT),
-			   gpio_get_value(GPIO_OTG_VBUS_SENSE),
-			   gpio_get_value(GPIO_VBUS_POGO_5V),
-			   manta_bat_battery_status);
-	} else {
-		seq_printf(s, "ta_en=%d ta_nchg=%d ta_int=%d\n",
-			gpio_get_value(GPIO_TA_EN),
-			gpio_get_value(gpio_TA_nCHG),
-			gpio_get_value(GPIO_TA_INT));
-	}
-
+	seq_printf(s, "ta_en=%d ta_nchg=%d ta_int=%d usbin=%d, dcin=%d st=%d\n",
+		   gpio_get_value(GPIO_TA_EN),
+		   gpio_get_value(GPIO_TA_NCHG),
+		   gpio_get_value(GPIO_TA_INT),
+		   gpio_get_value(GPIO_OTG_VBUS_SENSE),
+		   gpio_get_value(GPIO_VBUS_POGO_5V),
+		   manta_bat_battery_status);
 	seq_printf(s, "%susb: type=%s (apsd=%d); %spogo: type=%s%s; ta_adc=%d\n",
 		   manta_bat_charge_conn == CHARGE_CONNECTOR_USB ? "*" : "",
 		   manta_bat_otg_enabled ? "otg" :
@@ -1025,28 +876,11 @@ static struct ds2482_platform_data ds2483_pdata = {
 	.slpz_gpio = -1,
 };
 
-static struct i2c_board_info i2c_devs2_prebeta[] __initdata = {
-	{
-		I2C_BOARD_INFO("max17047-fuelgauge", 0x36),
-		.platform_data	= &max17047_fg_pdata,
-	},
-};
-
-static struct i2c_board_info i2c_devs2_beta[] __initdata = {
+static struct i2c_board_info i2c_devs2[] __initdata = {
 	{
 		I2C_BOARD_INFO("ds2482", 0x30 >> 1),
 		.platform_data = &ds2483_pdata,
 	},
-};
-
-static struct i2c_board_info i2c_devs2_lunchbox[] __initdata = {
-	{
-		I2C_BOARD_INFO("bq24191-charger", 0x6a),
-		.platform_data	= &bq24191_chg_pdata,
-	},
-};
-
-static struct i2c_board_info i2c_devs2_prealpha[] __initdata = {
 	{
 		I2C_BOARD_INFO("smb347", 0x0c >> 1),
 		.platform_data  = &smb347_chg_pdata,
@@ -1082,23 +916,10 @@ void __init exynos5_manta_battery_init(void)
 		ds2483_pdata.slpz_gpio = GPIO_1WIRE_SLEEP;
 	}
 
-	if (hw_rev >= MANTA_REV_BETA)
-		i2c_register_board_info(2, i2c_devs2_beta,
-				ARRAY_SIZE(i2c_devs2_beta));
-	else
-		i2c_register_board_info(2, i2c_devs2_prebeta,
-				ARRAY_SIZE(i2c_devs2_prebeta));
+	i2c_register_board_info(2, i2c_devs2, ARRAY_SIZE(i2c_devs2));
 
-	if (hw_rev  >= MANTA_REV_PRE_ALPHA)
-		i2c_register_board_info(2, i2c_devs2_prealpha,
-					ARRAY_SIZE(i2c_devs2_prealpha));
-	else
-		i2c_register_board_info(2, i2c_devs2_lunchbox,
-					ARRAY_SIZE(i2c_devs2_lunchbox));
-
-	if (exynos5_manta_get_revision() >= MANTA_REV_PRE_ALPHA)
-		ta_adc_client = s3c_adc_register(&android_device_battery,
-						 NULL, NULL, 0);
+	ta_adc_client =
+		s3c_adc_register(&android_device_battery, NULL, NULL, 0);
 
 	if (IS_ERR_OR_NULL(debugfs_create_file("manta-power", S_IRUGO, NULL,
 					       NULL, &manta_power_debug_fops)))
@@ -1133,28 +954,17 @@ static int exynos5_manta_battery_pm_event(struct notifier_block *notifier,
 					  unsigned long pm_event,
 					  void *unused)
 {
-	int hw_rev = exynos5_manta_get_revision();
-
 	switch (pm_event) {
 	case PM_SUSPEND_PREPARE:
-		if (hw_rev <= MANTA_REV_ALPHA) {
-			disable_irq(gpio_to_irq(GPIO_TA_INT));
-		} else {
-			disable_irq(gpio_to_irq(GPIO_OTG_VBUS_SENSE));
-			disable_irq(gpio_to_irq(GPIO_VBUS_POGO_5V));
-		}
+		disable_irq(gpio_to_irq(GPIO_OTG_VBUS_SENSE));
+		disable_irq(gpio_to_irq(GPIO_VBUS_POGO_5V));
 		manta_bat_suspended = true;
 		break;
 
 	case PM_POST_SUSPEND:
 		if (manta_bat_suspended) {
-			if (hw_rev <= MANTA_REV_ALPHA) {
-				enable_irq(gpio_to_irq(GPIO_TA_INT));
-			} else {
-				enable_irq(gpio_to_irq(GPIO_OTG_VBUS_SENSE));
-				enable_irq(gpio_to_irq(GPIO_VBUS_POGO_5V));
-			}
-
+			enable_irq(gpio_to_irq(GPIO_OTG_VBUS_SENSE));
+			enable_irq(gpio_to_irq(GPIO_VBUS_POGO_5V));
 			manta_bat_suspended = false;
 		}
 		break;
@@ -1192,54 +1002,37 @@ static int __init exynos5_manta_battery_late_init(void)
 {
 	int ret;
 	struct usb_phy *usb_xceiv;
-	int hw_rev = exynos5_manta_get_revision();
 
 	ret = power_supply_register(NULL, &exynos5_manta_power_supply);
 	if (ret)
 		pr_err("%s: failed to register power supply\n", __func__);
 
-	if (hw_rev <= MANTA_REV_ALPHA) {
-		ret = request_threaded_irq(gpio_to_irq(GPIO_TA_INT), NULL,
-				ta_int_intr,
-				IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING |
-				IRQF_ONESHOT, "ta_int", NULL);
-		if (ret) {
-			pr_err("%s: ta_int register failed, ret=%d\n",
-					__func__, ret);
-		} else {
-			ret = enable_irq_wake(gpio_to_irq(GPIO_TA_INT));
-			if (ret)
-				pr_warn("%s: failed to enable irq_wake for ta_int\n",
-					__func__);
-		}
+	ret = request_threaded_irq(gpio_to_irq(GPIO_OTG_VBUS_SENSE),
+				   NULL, ta_int_intr,
+				   IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING |
+				   IRQF_ONESHOT, "usb_vbus", NULL);
+	if (ret) {
+		pr_err("%s: usb_vbus irq register failed, ret=%d\n",
+		       __func__, ret);
 	} else {
-		ret = request_threaded_irq(gpio_to_irq(GPIO_OTG_VBUS_SENSE),
-				NULL, ta_int_intr,
-				IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING |
-				IRQF_ONESHOT, "usb_vbus", NULL);
-		if (ret) {
-			pr_err("%s: usb_vbus irq register failed, ret=%d\n",
-				__func__, ret);
-		} else {
-			ret = enable_irq_wake(gpio_to_irq(GPIO_OTG_VBUS_SENSE));
-			if (ret)
-				pr_warn("%s: failed to enable irq_wake for usb_vbus\n",
-					__func__);
-		}
+		ret = enable_irq_wake(gpio_to_irq(GPIO_OTG_VBUS_SENSE));
+		if (ret)
+			pr_warn("%s: failed to enable irq_wake for usb_vbus\n",
+				__func__);
+	}
 
-		ret = request_threaded_irq(gpio_to_irq(GPIO_VBUS_POGO_5V), NULL,
-				ta_int_intr,
-				IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING |
-				IRQF_ONESHOT, "pogo_vbus", NULL);
-		if (ret) {
-			pr_err("%s: pogo_vbus irq register failed, ret=%d\n",
-					__func__, ret);
-		} else {
-			ret = enable_irq_wake(gpio_to_irq(GPIO_VBUS_POGO_5V));
-			if (ret)
-				pr_warn("%s: failed to enable irq_wake for pogo_vbus\n",
-						__func__);
-		}
+	ret = request_threaded_irq(gpio_to_irq(GPIO_VBUS_POGO_5V), NULL,
+				   ta_int_intr,
+				   IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING |
+				   IRQF_ONESHOT, "pogo_vbus", NULL);
+	if (ret) {
+		pr_err("%s: pogo_vbus irq register failed, ret=%d\n",
+		       __func__, ret);
+	} else {
+		ret = enable_irq_wake(gpio_to_irq(GPIO_VBUS_POGO_5V));
+		if (ret)
+			pr_warn("%s: failed to enable irq_wake for pogo_vbus\n",
+				__func__);
 	}
 
 	ret = register_pm_notifier(&exynos5_manta_battery_pm_notifier_block);
