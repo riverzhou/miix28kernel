@@ -425,21 +425,6 @@ static int mxr_s_ctrl(struct file *file, void *fh, struct v4l2_control *ctrl)
 	case V4L2_CID_TV_CHROMA_VALUE:
 		layer->chroma_val = (u32)v;
 		break;
-	case V4L2_CID_TV_ENABLE_HDMI_AUDIO:
-		v4l2_subdev_call(to_outsd(mdev), core, s_ctrl, ctrl);
-		break;
-	case V4L2_CID_TV_SET_NUM_CHANNELS:
-		v4l2_subdev_call(to_outsd(mdev), core, s_ctrl, ctrl);
-		break;
-	case V4L2_CID_TV_HPD_STATUS:
-		v4l2_subdev_call(to_outsd(mdev), core, s_ctrl, ctrl);
-		break;
-	case V4L2_CID_TV_SET_DVI_MODE:
-		v4l2_subdev_call(to_outsd(mdev), core, s_ctrl, ctrl);
-		break;
-	case V4L2_CID_TV_SET_ASPECT_RATIO:
-		v4l2_subdev_call(to_outsd(mdev), core, s_ctrl, ctrl);
-		break;
 	case V4L2_CID_TV_LAYER_PRIO:
 		layer->prio = (u8)v;
 		/* This can be turned on/off each layer while streaming */
@@ -452,6 +437,14 @@ static int mxr_s_ctrl(struct file *file, void *fh, struct v4l2_control *ctrl)
 		break;
 	case V4L2_CID_TV_UPDATE:
 		ret = mxr_update(mdev);
+		break;
+	case V4L2_CID_TV_ENABLE_HDMI_AUDIO:
+	case V4L2_CID_TV_SET_NUM_CHANNELS:
+	case V4L2_CID_TV_HPD_STATUS:
+	case V4L2_CID_TV_SET_DVI_MODE:
+	case V4L2_CID_TV_SET_ASPECT_RATIO:
+	case V4L2_CID_TV_HDCP_ENABLE:
+		v4l2_subdev_call(to_outsd(mdev), core, s_ctrl, ctrl);
 		break;
 	default:
 		mxr_err(mdev, "invalid control id\n");

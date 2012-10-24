@@ -344,6 +344,9 @@ int hdmi_s_ctrl(struct v4l2_subdev *sd, struct v4l2_control *ctrl)
 	case V4L2_CID_TV_SET_COLOR_RANGE:
 		hdev->color_range = ctrl->value;
 		break;
+	case V4L2_CID_TV_HDCP_ENABLE:
+		hdev->hdcp_info.hdcp_enable = ctrl->value;
+		break;
 	default:
 		dev_err(dev, "invalid control id\n");
 		ret = -EINVAL;
