@@ -267,11 +267,13 @@ int manta_bat_otg_enable(bool enable)
 }
 
 static enum manta_charge_source check_samsung_charger(
-	enum charge_connector conn)
+	enum charge_connector conn, bool usbin_redetect)
 {
 	int ret;
 	bool samsung_ac_detect;
 	enum manta_charge_source charge_source;
+	union power_supply_propval prop_zero = {0,};
+	union power_supply_propval prop_one = {1,};
 
 	if (conn == CHARGE_CONNECTOR_POGO) {
 		manta_bat_ta_adc = read_ta_adc(conn, 0);
@@ -285,6 +287,13 @@ static enum manta_charge_source check_samsung_charger(
 	} else {
 		if (manta_bat_get_smb347_usb())
 			return MANTA_CHARGE_SOURCE_UNKNOWN;
+		ret = manta_bat_smb347_usb->set_property(
+			manta_bat_smb347_usb,
+			POWER_SUPPLY_PROP_CHARGER_DETECTION,
+			&prop_one);
+		if (ret)
+			pr_err("%s: failed to enable smb347-usb charger detect\n",
+			       __func__);
 		ret = manta_bat_smb347_usb->get_property(
 			manta_bat_smb347_usb,
 			POWER_SUPPLY_PROP_REMOTE_TYPE, &manta_bat_apsd_results);
@@ -306,6 +315,19 @@ static enum manta_charge_source check_samsung_charger(
 			break;
 		}
 
+		/*
+		 * Leave APSD on if unknown power source (possibly timeout)
+		 * and not re-detecting USBIN.  If redetecting USBIN and
+		 * power source is still unknown then disable APSD and assume
+		 * a slow charger.
+		 */
+
+		if (usbin_redetect ||
+		    manta_bat_apsd_results.intval != POWER_SUPPLY_TYPE_UNKNOWN)
+			ret = manta_bat_smb347_usb->set_property(
+				manta_bat_smb347_usb,
+				POWER_SUPPLY_PROP_CHARGER_DETECTION,
+				&prop_zero);
 	}
 
 	if (samsung_ac_detect) {
@@ -327,7 +349,7 @@ static enum manta_charge_source check_samsung_charger(
 
 static enum manta_charge_source
 detect_charge_source(enum charge_connector conn, bool online,
-	bool force_dock_redetect)
+		     bool force_dock_redetect, bool usbin_redetect)
 {
 	enum manta_charge_source charge_source;
 	int ret;
@@ -341,7 +363,8 @@ detect_charge_source(enum charge_connector conn, bool online,
 	}
 
 	charge_source = force_dock_redetect ?
-			MANTA_CHARGE_SOURCE_USB : check_samsung_charger(conn);
+		MANTA_CHARGE_SOURCE_USB :
+		check_samsung_charger(conn, usbin_redetect);
 
 	if (conn == CHARGE_CONNECTOR_POGO &&
 	    charge_source == MANTA_CHARGE_SOURCE_USB) {
@@ -369,8 +392,8 @@ static int update_charging_status(bool usb_connected, bool pogo_connected,
 
 		manta_bat_charge_source[CHARGE_CONNECTOR_USB] =
 			detect_charge_source(CHARGE_CONNECTOR_USB,
-					     usb_connected,
-					     false);
+					     usb_connected, false,
+					     usbin_redetect);
 		usb_conn_src_usb =
 			manta_bat_charge_source[CHARGE_CONNECTOR_USB] ==
 			MANTA_CHARGE_SOURCE_USB;
@@ -406,7 +429,7 @@ static int update_charging_status(bool usb_connected, bool pogo_connected,
 		manta_bat_charge_source[CHARGE_CONNECTOR_POGO] =
 			detect_charge_source(CHARGE_CONNECTOR_POGO,
 					     pogo_connected,
-					     force_dock_redetect);
+					     force_dock_redetect, false);
 		ret = 1;
 	}
 
