@@ -92,6 +92,7 @@ static inline int manta_source_to_android(enum manta_charge_source src)
 	case MANTA_CHARGE_SOURCE_NONE:
 		return CHARGE_SOURCE_NONE;
 	case MANTA_CHARGE_SOURCE_USB:
+	case MANTA_CHARGE_SOURCE_UNKNOWN:
 		return CHARGE_SOURCE_USB;
 	case MANTA_CHARGE_SOURCE_AC_SAMSUNG:
 	case MANTA_CHARGE_SOURCE_AC_OTHER:
@@ -270,7 +271,6 @@ static enum manta_charge_source check_samsung_charger(
 {
 	int ret;
 	bool samsung_ac_detect;
-	bool usb_ac_detected;
 	enum manta_charge_source charge_source;
 
 	if (conn == CHARGE_CONNECTOR_POGO) {
@@ -279,10 +279,12 @@ static enum manta_charge_source check_samsung_charger(
 			 conn, manta_bat_ta_adc);
 		samsung_ac_detect = manta_bat_ta_adc > TA_ADC_LOW &&
 			manta_bat_ta_adc < TA_ADC_HIGH;
-		usb_ac_detected = samsung_ac_detect;
+		charge_source = samsung_ac_detect ?
+			MANTA_CHARGE_SOURCE_AC_OTHER :
+			MANTA_CHARGE_SOURCE_USB;
 	} else {
 		if (manta_bat_get_smb347_usb())
-			return CHARGE_SOURCE_USB;
+			return MANTA_CHARGE_SOURCE_UNKNOWN;
 		ret = manta_bat_smb347_usb->get_property(
 			manta_bat_smb347_usb,
 			POWER_SUPPLY_PROP_REMOTE_TYPE, &manta_bat_apsd_results);
@@ -294,11 +296,13 @@ static enum manta_charge_source check_samsung_charger(
 
 		switch (manta_bat_apsd_results.intval) {
 		case POWER_SUPPLY_TYPE_USB:
+			charge_source = MANTA_CHARGE_SOURCE_USB;
+			break;
 		case POWER_SUPPLY_TYPE_UNKNOWN:
-			usb_ac_detected = false;
+			charge_source = MANTA_CHARGE_SOURCE_UNKNOWN;
 			break;
 		default:
-			usb_ac_detected = true;
+			charge_source = MANTA_CHARGE_SOURCE_AC_OTHER;
 			break;
 		}
 
@@ -316,12 +320,6 @@ static enum manta_charge_source check_samsung_charger(
 
 		if (samsung_ta_detected)
 			charge_source = MANTA_CHARGE_SOURCE_AC_SAMSUNG;
-		else
-			charge_source = usb_ac_detected ?
-				MANTA_CHARGE_SOURCE_AC_OTHER :
-				MANTA_CHARGE_SOURCE_USB;
-	} else {
-		charge_source = MANTA_CHARGE_SOURCE_USB;
 	}
 
 	return charge_source;
@@ -390,7 +388,10 @@ static int update_charging_status(bool usb_connected, bool pogo_connected,
 
 		manta_otg_set_usb_state(usb_conn_src_usb);
 
-		if (!usbin_redetect && usb_conn_src_usb) {
+		if (!usbin_redetect &&
+		    (usb_conn_src_usb ||
+		     manta_bat_charge_source[CHARGE_CONNECTOR_USB] ==
+		     MANTA_CHARGE_SOURCE_UNKNOWN)) {
 			cancel_delayed_work(&redetect_work);
 			wake_lock(&manta_bat_redetect_wl);
 			schedule_delayed_work(&redetect_work,
@@ -810,6 +811,8 @@ static char *manta_charge_source_str(enum manta_charge_source charge_source)
 		return "ac-other";
 	case MANTA_CHARGE_SOURCE_USB:
 		return "usb";
+	case MANTA_CHARGE_SOURCE_UNKNOWN:
+		return "unknown";
 	default:
 		break;
 	}
