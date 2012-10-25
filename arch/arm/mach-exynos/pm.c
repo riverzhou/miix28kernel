@@ -48,6 +48,7 @@
 #define REG_INFORM1            (EXYNOS_INFORM1)
 #endif
 
+#define EXYNOS_USB20PHY_CFG	(S3C_VA_SYS + 0x230)
 #define EXYNOS_I2C_CFG		(S3C_VA_SYS + 0x234)
 
 #define EXYNOS_WAKEUP_STAT_EINT		(1 << 0)
@@ -98,6 +99,8 @@ static struct sleep_save exynos_core_save[] = {
 	SAVE_ITEM(S5P_SROM_BC2),
 	SAVE_ITEM(S5P_SROM_BC3),
 
+	/* USB 2.0 PHY CFG */
+	SAVE_ITEM(EXYNOS_USB20PHY_CFG),
 	/* I2C CFG */
 	SAVE_ITEM(EXYNOS_I2C_CFG),
 };

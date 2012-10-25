@@ -292,8 +292,6 @@ static int exynos5_usb_phy20_init(struct platform_device *pdev)
 		return 0;
 	}
 
-	exynos_usb_mux_change(pdev, 1);
-
 	exynos_usb_phy_control(USB_PHY1, PHY_ENABLE);
 
 	/* Host and Device should be set at the same time */
@@ -486,6 +484,9 @@ static int exynos5_usb_host_phy20_init(struct platform_device *pdev)
 	if (exynos_usb_phy_clock_enable(pdev))
 		return -EINVAL;
 
+	/* usb mode change from device to host */
+	exynos_usb_mux_change(pdev, 1);
+
 	exynos5_usb_phy20_init(pdev);
 
 	/* usb host phy tune */
@@ -497,6 +498,9 @@ static int exynos5_usb_host_phy20_init(struct platform_device *pdev)
 static int exynos5_usb_host_phy20_exit(struct platform_device *pdev)
 {
 	exynos5_usb_phy20_exit(pdev);
+
+	/* usb mode change from host to device */
+	exynos_usb_mux_change(pdev, 0);
 
 	exynos_usb_phy_clock_disable(pdev);
 
@@ -510,10 +514,10 @@ static int exynos_usb_dev_phy20_init(struct platform_device *pdev)
 	if (exynos_usb_phy_clock_enable(pdev))
 		return -EINVAL;
 
-	exynos5_usb_phy20_init(pdev);
-
 	/* usb mode change from host to device */
 	exynos_usb_mux_change(pdev, 0);
+
+	exynos5_usb_phy20_init(pdev);
 
 	/* usb device phy tune */
 	set_exynos5_usb_device_phy_tune();
@@ -538,9 +542,6 @@ static int exynos_usb_dev_phy20_exit(struct platform_device *pdev)
 		ret = s5p_usb_otg_phy_tune(pdev->dev.platform_data, 1);
 
 	exynos5_usb_phy20_exit(pdev);
-
-	/* usb mode change from device to host */
-	exynos_usb_mux_change(pdev, 1);
 
 	exynos_usb_phy_clock_disable(pdev);
 
