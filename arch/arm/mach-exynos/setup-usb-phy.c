@@ -381,6 +381,12 @@ static int exynos5_usb_phy20_exit(struct platform_device *pdev)
 	writel(hostphy_ctrl0, EXYNOS5_PHY_HOST_CTRL0);
 
 	otgphy_sys = readl(EXYNOS5_PHY_OTG_SYS);
+
+	/* Issue a OTG_SYS_PHYLINK_SW_RESET to release pulldowns on D+/D- */
+	writel(otgphy_sys | OTG_SYS_PHYLINK_SW_RESET, EXYNOS5_PHY_OTG_SYS);
+	udelay(10);
+	writel(otgphy_sys, EXYNOS5_PHY_OTG_SYS);
+
 	otgphy_sys |= (OTG_SYS_FORCE_SUSPEND |
 			OTG_SYS_SIDDQ_UOTG |
 			OTG_SYS_FORCE_SLEEP);
