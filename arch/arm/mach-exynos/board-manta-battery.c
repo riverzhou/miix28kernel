@@ -288,6 +288,9 @@ static enum manta_charge_source check_samsung_charger(
 			POWER_SUPPLY_PROP_REMOTE_TYPE, &manta_bat_apsd_results);
 		pr_debug("%s: type=%d ret=%d\n", __func__,
 			 manta_bat_apsd_results.intval, ret);
+		samsung_ac_detect =
+			manta_bat_apsd_results.intval ==
+			POWER_SUPPLY_TYPE_USB_DCP;
 
 		switch (manta_bat_apsd_results.intval) {
 		case POWER_SUPPLY_TYPE_USB:
@@ -299,7 +302,6 @@ static enum manta_charge_source check_samsung_charger(
 			break;
 		}
 
-		samsung_ac_detect = true;
 	}
 
 	if (samsung_ac_detect) {
