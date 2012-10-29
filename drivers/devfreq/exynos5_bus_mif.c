@@ -100,15 +100,13 @@ static unsigned int used_dev_cnt = 0;
 
 static void exynos5_mif_check_upper_freq(void)
 {
-	if (multiple_windows && used_dev_cnt) {
+	if (multiple_windows) {
 		if (!mif_min_hd) {
 			mif_min_hd = exynos5_bus_mif_min(MIF_UPPER_FREQUENCY);
 			if (!mif_min_hd)
 				pr_err("%s: Failed to request min_freq\n", __func__);
 		}
-	}
-
-	if (!multiple_windows || !used_dev_cnt) {
+	} else {
 		if (mif_min_hd) {
 			exynos5_bus_mif_put(mif_min_hd);
 			mif_min_hd = NULL;
@@ -285,6 +283,11 @@ static int exynos5_busfreq_mif_target(struct device *dev, unsigned long *_freq,
 	mutex_unlock(&exynos5_bus_mif_requests_lock);
 
 	mutex_lock(&data->lock);
+
+	if (data->devfreq->max_freq && *_freq > data->devfreq->max_freq) {
+		*_freq = data->devfreq->max_freq;
+		flags |= DEVFREQ_FLAG_LEAST_UPPER_BOUND;
+	}
 
 	rcu_read_lock();
 	opp = devfreq_recommended_opp(dev, _freq, flags);
