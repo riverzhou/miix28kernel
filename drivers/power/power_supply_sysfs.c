@@ -182,6 +182,7 @@ static struct device_attribute power_supply_attrs[] = {
 	POWER_SUPPLY_ATTR(usb_inpriority),
 	POWER_SUPPLY_ATTR(auto_current_limit),
 	POWER_SUPPLY_ATTR(remote_type),
+	POWER_SUPPLY_ATTR(charger_detection),
 	/* Properties of type `const char *' */
 	POWER_SUPPLY_ATTR(model_name),
 	POWER_SUPPLY_ATTR(manufacturer),
