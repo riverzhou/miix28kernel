@@ -3055,7 +3055,7 @@ pl330_probe(struct amba_device *adev, const struct amba_id *id)
 	if (!pdmac->peripherals) {
 		ret = -ENOMEM;
 		dev_err(&adev->dev, "unable to allocate pdmac->peripherals\n");
-		goto probe_err5;
+		goto probe_err4;
 	}
 
 	for (i = 0; i < num_chan; i++) {
