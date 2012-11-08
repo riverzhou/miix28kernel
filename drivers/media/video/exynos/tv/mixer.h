@@ -411,6 +411,7 @@ struct mxr_device {
 	int frame_packing;
 
 	struct exynos5_bus_mif_handle *mif_handle;
+	struct exynos5_bus_int_handle *int_handle;
 
 	int color_range;
 };
