@@ -15,6 +15,7 @@
 #include <linux/gpio_event.h>
 #include <linux/init.h>
 #include <linux/input.h>
+#include <linux/ion.h>
 #include <linux/i2c.h>
 #include <linux/keyreset.h>
 #include <linux/mmc/host.h>
@@ -499,6 +500,7 @@ static void __init exynos_reserve_mem(void)
 
 	exynos_cma_region_reserve(regions, regions_secure, 0, map);
 	kbase_carveout_mem_reserve(384 * SZ_1M);
+	ion_reserve(&exynos_ion_pdata);
 }
 
 static void exynos_dwmci0_cfg_gpio(int width)
@@ -784,7 +786,6 @@ static void __init manta_machine_init(void)
 	platform_device_register(&manta_event_device);
 
 	manta_sysmmu_init();
-	exynos_ion_set_platdata();
 	manta_dwmci_init();
 
 	if (manta_charger_mode)
