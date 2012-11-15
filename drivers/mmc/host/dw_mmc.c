@@ -995,7 +995,7 @@ static void dw_mci_request(struct mmc_host *mmc, struct mmc_request *mrq)
 {
 	struct dw_mci_slot *slot = mmc_priv(mmc);
 	struct dw_mci *host = slot->host;
-	unsigned long timeout = jiffies + msecs_to_jiffies(1000);
+	int timeout = 100000; /* ~ 1 - 2 sec */
 	u32 status;
 
 	WARN_ON(slot->mrq);
@@ -1008,13 +1008,9 @@ static void dw_mci_request(struct mmc_host *mmc, struct mmc_request *mrq)
 		if (!(status & BIT(9)))
 			break;
 
-		if (time_after(jiffies, timeout)) {
-			/* card is checked every 1s by CMD13 at least */
-			if (mrq->cmd->opcode == MMC_SEND_STATUS)
-				break;
-			dev_err(&host->dev,
-				"Data0: Never released by cmd%d\n",
-				mrq->cmd->opcode);
+		if (!timeout--) {
+			printk(KERN_ERR "%s: Data0: Never released\n",
+					mmc_hostname(mmc));
 			mrq->cmd->error = -ENOTRECOVERABLE;
 			host->prv_err = true;
 			mmc_request_done(mmc, mrq);
@@ -1022,7 +1018,7 @@ static void dw_mci_request(struct mmc_host *mmc, struct mmc_request *mrq)
 		}
 
 		usleep_range(10, 20);
-	} while (1);
+	} while(1);
 
 	/*
 	 * The check for card presence and queueing of the request must be
