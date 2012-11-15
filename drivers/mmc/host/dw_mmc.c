@@ -412,7 +412,7 @@ static bool dw_mci_wait_reset(struct device *dev, struct dw_mci *host,
 			if (reset_val & SDMMC_CTRL_RESET)
 				/* After CTRL Reset, Should be needed clk val to CIU */
 				mci_send_cmd(host->cur_slot,
-				SDMMC_CMD_UPD_CLK | SDMMC_CMD_PRV_DAT_WAIT, 0);
+				SDMMC_CMD_UPD_CLK, 0);
 			return true;
 		}
 	} while (time_before(jiffies, timeout));
@@ -995,7 +995,7 @@ static void dw_mci_request(struct mmc_host *mmc, struct mmc_request *mrq)
 {
 	struct dw_mci_slot *slot = mmc_priv(mmc);
 	struct dw_mci *host = slot->host;
-	int timeout = 100000; /* ~ 1 - 2 sec */
+	unsigned long timeout = jiffies + msecs_to_jiffies(1000);
 	u32 status;
 
 	WARN_ON(slot->mrq);
@@ -1008,9 +1008,13 @@ static void dw_mci_request(struct mmc_host *mmc, struct mmc_request *mrq)
 		if (!(status & BIT(9)))
 			break;
 
-		if (!timeout--) {
-			printk(KERN_ERR "%s: Data0: Never released\n",
-					mmc_hostname(mmc));
+		if (time_after(jiffies, timeout)) {
+			/* card is checked every 1s by CMD13 at least */
+			if (mrq->cmd->opcode == MMC_SEND_STATUS)
+				break;
+			dev_err(&host->dev,
+				"Data0: Never released by cmd%d\n",
+				mrq->cmd->opcode);
 			mrq->cmd->error = -ENOTRECOVERABLE;
 			host->prv_err = true;
 			mmc_request_done(mmc, mrq);
@@ -1018,7 +1022,7 @@ static void dw_mci_request(struct mmc_host *mmc, struct mmc_request *mrq)
 		}
 
 		usleep_range(10, 20);
-	} while(1);
+	} while (1);
 
 	/*
 	 * The check for card presence and queueing of the request must be
@@ -1094,6 +1098,14 @@ static void dw_mci_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 	switch (ios->power_mode) {
 	case MMC_POWER_UP:
 		set_bit(DW_MMC_CARD_NEED_INIT, &slot->flags);
+		break;
+	case MMC_POWER_ON:
+		/* To cheat supporting hardware reset using power off/on
+		 * as reset function to modify reset function value of ext_csd reg
+		 */
+		if (mmc->caps & MMC_CAP_HW_RESET && mmc->card &&
+			slot->host->quirks & DW_MMC_QUIRK_HW_RESET_PW)
+			mmc->card->ext_csd.rst_n_function |= EXT_CSD_RST_N_ENABLED;
 		break;
 	default:
 		break;
@@ -1323,6 +1335,18 @@ static int dw_mci_execute_tuning(struct mmc_host *mmc, u32 opcode)
 	return 0;
 }
 
+static void dw_mci_hw_reset(struct mmc_host *host)
+{
+	struct dw_mci_slot *slot = mmc_priv(host);
+	struct dw_mci_board *brd = slot->host->pdata;
+
+	dev_dbg(&host->class_dev, "card is going to h/w reset\n");
+
+	/* Use platform hw_reset function */
+	if (brd->hw_reset)
+		brd->hw_reset(slot->id);
+}
+
 static const struct mmc_host_ops dw_mci_ops = {
 	.request		= dw_mci_request,
 	.pre_req		= dw_mci_pre_req,
@@ -1332,6 +1356,7 @@ static const struct mmc_host_ops dw_mci_ops = {
 	.get_cd			= dw_mci_get_cd,
 	.enable_sdio_irq	= dw_mci_enable_sdio_irq,
 	.execute_tuning		= dw_mci_execute_tuning,
+	.hw_reset		= dw_mci_hw_reset,
 };
 
 static void dw_mci_request_end(struct dw_mci *host, struct mmc_request *mrq)
