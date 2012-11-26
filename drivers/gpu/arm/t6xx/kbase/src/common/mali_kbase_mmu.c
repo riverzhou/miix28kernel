@@ -126,7 +126,7 @@ static void page_fault_worker(struct work_struct *data)
 	if (NULL == region || (GROWABLE_FLAGS_REQUIRED != (region->flags & GROWABLE_FLAGS_MASK)))
 	{
 		kbase_gpu_vm_unlock(kctx);
-		/* failed to find the region or mismatch of the flags */
+		OSK_PRINT_ERROR(OSK_BASE_MMU, "failed to find the region or mismatch of the flags");
 		kbase_mmu_report_fault_and_kill(kctx, faulting_as, faulting_as->fault_addr);
 		goto fault_done;
 	}
@@ -138,7 +138,7 @@ static void page_fault_worker(struct work_struct *data)
 	    (((fault_status & ASn_FAULTSTATUS_ACCESS_TYPE_MASK) == ASn_FAULTSTATUS_ACCESS_TYPE_EX) &&
 	        (region->flags & KBASE_REG_GPU_NX)))
 	{
-		OSK_PRINT_WARN(OSK_BASE_MMU, "Access permissions don't match: region->flags=0x%x", region->flags);
+		OSK_PRINT_ERROR(OSK_BASE_MMU, "Access permissions don't match: region->flags=0x%x", region->flags);
 		kbase_gpu_vm_unlock(kctx);
 		kbase_mmu_report_fault_and_kill(kctx, faulting_as, faulting_as->fault_addr);
 		goto fault_done;
@@ -199,6 +199,8 @@ static void page_fault_worker(struct work_struct *data)
 			mutex_unlock(&faulting_as->transaction_mutex);
 			kbase_gpu_vm_unlock(kctx);
 			/* The locked VA region will be unlocked and the cache invalidated in here */
+			kbase_free_phy_pages_helper(region, new_pages);
+			OSK_PRINT_ERROR(OSK_BASE_MMU, "failed to insert page fault recovery pages into the GPU MMU");
 			kbase_mmu_report_fault_and_kill(kctx, faulting_as, faulting_as->fault_addr);
 			goto fault_done;
 		}
@@ -248,6 +250,7 @@ static void page_fault_worker(struct work_struct *data)
 	{
 		/* failed to extend, handle as a normal PF */
 		kbase_gpu_vm_unlock(kctx);
+		OSK_PRINT_ERROR(OSK_BASE_MMU, "failed to allocate page fault recovery pages");
 		kbase_mmu_report_fault_and_kill(kctx, faulting_as, faulting_as->fault_addr);
 	}
 
@@ -984,7 +987,7 @@ static void bus_fault_worker(struct work_struct *data)
 		 * We start the reset before switching to UNMAPPED to ensure that unrelated jobs
 		 * are evicted from the GPU before the switch.
 		 */
-		OSK_PRINT_WARN(OSK_BASE_MMU, "NOTE: GPU will now be reset as a workaround for a hardware issue*");
+		OSK_PRINT_ERROR(OSK_BASE_MMU, "bus_fault_worker: GPU will now be reset as a workaround for a hardware issue*");
 		reset_status = kbase_prepare_to_reset_gpu(kbdev);
 	}
 
@@ -1215,9 +1218,9 @@ static void kbase_mmu_report_fault_and_kill(kbase_context *kctx, kbase_as * as, 
 	kbase_device * kbdev;
 	kbasep_js_device_data *js_devdata;
 	mali_bool reset_status = MALI_FALSE;
-#ifdef CONFIG_MALI_DEBUG
+/*#ifdef CONFIG_MALI_DEBUG*/
 	static const char *access_type_names[] = { "RESERVED", "EXECUTE", "READ", "WRITE" };
-#endif /* CONFIG_MALI_DEBUG */
+/*#endif*/ /* CONFIG_MALI_DEBUG */
 
 	OSK_ASSERT(as);
 	OSK_ASSERT(kctx);
@@ -1238,12 +1241,12 @@ static void kbase_mmu_report_fault_and_kill(kbase_context *kctx, kbase_as * as, 
 	source_id =     (fault_status >> 16);
 
 	/* terminal fault, print info about the fault */
-	OSK_PRINT_WARN(OSK_BASE_MMU, "Fault in AS%d at VA 0x%016llX", as_no, fault_addr);
-	OSK_PRINT_WARN(OSK_BASE_MMU, "raw fault status 0x%X", fault_status);
-	OSK_PRINT_WARN(OSK_BASE_MMU, "decoded fault status (%s):", (fault_status & (1 << 10) ? "DECODER FAULT" : "SLAVE FAULT"));
-	OSK_PRINT_WARN(OSK_BASE_MMU, "exception type 0x%X: %s", exception_type, kbase_exception_name(exception_type));
-	OSK_PRINT_WARN(OSK_BASE_MMU, "access type 0x%X: %s", access_type,  access_type_names[access_type]);
-	OSK_PRINT_WARN(OSK_BASE_MMU, "source id 0x%X", source_id);
+	OSK_PRINT_ERROR(OSK_BASE_MMU, "Fault in AS%d at VA 0x%016llX", as_no, fault_addr);
+	OSK_PRINT_ERROR(OSK_BASE_MMU, "raw fault status 0x%X", fault_status);
+	OSK_PRINT_ERROR(OSK_BASE_MMU, "decoded fault status (%s):", (fault_status & (1 << 10) ? "DECODER FAULT" : "SLAVE FAULT"));
+	OSK_PRINT_ERROR(OSK_BASE_MMU, "exception type 0x%X: %s", exception_type, kbase_exception_name(exception_type));
+	OSK_PRINT_ERROR(OSK_BASE_MMU, "access type 0x%X: %s", access_type,  access_type_names[access_type]);
+	OSK_PRINT_ERROR(OSK_BASE_MMU, "source id 0x%X", source_id);
 
 	/* hardware counters dump fault handling */
 	if ((kbdev->hwcnt.kctx) &&
