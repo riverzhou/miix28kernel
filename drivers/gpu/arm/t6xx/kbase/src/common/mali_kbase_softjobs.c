@@ -130,7 +130,7 @@ static void complete_soft_job(kbase_jd_atom *katom)
 
 	kbasep_list_trace_add(15, kctx->kbdev, katom, &kctx->waiting_soft_jobs, KBASE_TRACE_LIST_DEL, KBASE_TRACE_LIST_WAITING_SOFT_JOBS);
 	mutex_lock(&kctx->jctx.lock);
-	OSK_DLIST_REMOVE(&kctx->waiting_soft_jobs, katom, dep_item[0], err);
+	OSK_DLIST_REMOVE(&kctx->waiting_soft_jobs, katom, waiting_soft_jobs_item, err);
 	if (err) {
 		kbasep_list_trace_dump(kctx->kbdev);
 		BUG();

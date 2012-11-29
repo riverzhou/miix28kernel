@@ -218,6 +218,11 @@ struct kbase_jd_atom {
 	osk_dlist_item      dep_item[2];
 	kbase_jd_atom       *dep_atom[2];
 
+	osk_dlist_item      event_item;
+	osk_dlist_item      completed_jobs_item;
+	osk_dlist_item      runnable_jobs_item;
+	osk_dlist_item      waiting_soft_jobs_item;
+
 	u16                 nr_extres;
 	base_external_resource *extres;
 
