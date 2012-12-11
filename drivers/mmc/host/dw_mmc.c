@@ -408,13 +408,8 @@ static bool dw_mci_wait_reset(struct device *dev, struct dw_mci *host,
 
 	/* wait till resets clear */
 	do {
-		if (!(mci_readl(host, CTRL) & reset_val)) {
-			if (reset_val & SDMMC_CTRL_RESET)
-				/* After CTRL Reset, Should be needed clk val to CIU */
-				mci_send_cmd(host->cur_slot,
-				SDMMC_CMD_UPD_CLK, 0);
+		if (!(mci_readl(host, CTRL) & reset_val))
 			return true;
-		}
 	} while (time_before(jiffies, timeout));
 
 	dev_err(dev, "%s: Timeout resetting block (ctrl %#x)\n",
@@ -444,6 +439,10 @@ static bool dw_mci_wait_fifo_reset(struct device *dev, struct dw_mci *host)
 					ctrl = ctrl & ~(mci_readl(host, MINTSTS));
 					if (ctrl)
 						mci_writel(host, RINTSTS, ctrl);
+
+					/* After CTRL Reset, Should be needed clk val to CIU */
+					mci_send_cmd(host->cur_slot,
+							SDMMC_CMD_UPD_CLK, 0);
 					return true;
 				}
 			}
@@ -1340,7 +1339,7 @@ static void dw_mci_hw_reset(struct mmc_host *host)
 	struct dw_mci_slot *slot = mmc_priv(host);
 	struct dw_mci_board *brd = slot->host->pdata;
 
-	dev_dbg(&host->class_dev, "card is going to h/w reset\n");
+	dev_warn(&host->class_dev, "device is being hw reset\n");
 
 	/* Use platform hw_reset function */
 	if (brd->hw_reset)
@@ -2116,6 +2115,12 @@ static irqreturn_t dw_mci_interrupt(int irq, void *dev_id)
 		if (pending & SDMMC_INT_CD) {
 			mci_writel(host, RINTSTS, SDMMC_INT_CD);
 			queue_work(dw_mci_card_workqueue, &host->card_work);
+			ret = IRQ_HANDLED;
+		}
+
+		if (pending & SDMMC_INT_HLE) {
+			mci_writel(host, RINTSTS, SDMMC_INT_HLE);
+			dev_err(&host->dev, "Hardware locked write error\n");
 			ret = IRQ_HANDLED;
 		}
 
