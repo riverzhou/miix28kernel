@@ -202,7 +202,7 @@ struct cntry_locales_custom {
 
 static struct cntry_locales_custom manta_wifi_translate_custom_table[] = {
 /* Table should be filled out based on custom platform regulatory requirement */
-	{"",   "XY", 7},  /* universal */
+	{"",   "XY", 9},  /* universal */
 	{"US", "US", 69}, /* input ISO "US" to : US regrev 69 */
 	{"CA", "US", 69}, /* input ISO "CA" to : US regrev 69 */
 	{"EU", "EU", 5},  /* European union countries */
@@ -239,11 +239,11 @@ static struct cntry_locales_custom manta_wifi_translate_custom_table[] = {
 	{"TR", "TR", 0},
 	{"NO", "NO", 0},
 	{"KR", "KR", 25},
-	{"AU", "XY", 3},
+	{"AU", "XY", 9},
 	{"CN", "CN", 0},
-	{"TW", "XY", 3},
-	{"AR", "XY", 3},
-	{"MX", "XY", 3},
+	{"TW", "XY", 9},
+	{"AR", "XY", 9},
+	{"MX", "XY", 9},
 	{"JP", "EU", 0},
 	{"BR", "KR", 25}
 };
