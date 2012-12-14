@@ -63,10 +63,16 @@
 #include "common.h"
 #include "resetreason.h"
 
+#define MANTA_CPU0_DEBUG_PA		0x10890000
+#define MANTA_CPU1_DEBUG_PA		0x10892000
+#define MANTA_CPU_DBGPCSR		0xa0
+
 static int manta_hw_rev;
 phys_addr_t manta_bootloader_fb_start;
 phys_addr_t manta_bootloader_fb_size = 2560 * 1600 * 4;
 static bool manta_charger_mode;
+static void __iomem *manta_cpu0_debug;
+static void __iomem *manta_cpu1_debug;
 
 static int __init s3cfb_bootloaderfb_arg(char *options)
 {
@@ -773,6 +779,46 @@ static void __init exynos5_manta_ohci_init(void)
 	exynos4_ohci_set_platdata(pdata);
 }
 
+void manta_panic_dump_cpu_pc(int cpu, unsigned long dbgpcsr)
+{
+	void *pc = NULL;
+
+	pr_err("CPU%d DBGPCSR: %08lx\n", cpu, dbgpcsr);
+	if ((dbgpcsr & 3) == 0)
+		pc = (void *)(dbgpcsr - 8);
+	else if ((dbgpcsr & 1) == 1)
+		pc = (void *)((dbgpcsr & ~1) - 4);
+
+	pr_err("CPU%d PC: <%p> %pF\n", cpu, pc, pc);
+}
+
+int manta_panic_notify(struct notifier_block *nb, unsigned long event, void *p)
+{
+	unsigned long dbgpcsr;
+
+	if (manta_cpu0_debug && cpu_online(0)) {
+		dbgpcsr = __raw_readl(manta_cpu0_debug + MANTA_CPU_DBGPCSR);
+		manta_panic_dump_cpu_pc(0, dbgpcsr);
+	}
+	if (manta_cpu1_debug && cpu_online(1)) {
+		dbgpcsr = __raw_readl(manta_cpu1_debug + MANTA_CPU_DBGPCSR);
+		manta_panic_dump_cpu_pc(1, dbgpcsr);
+	}
+	return NOTIFY_OK;
+}
+
+struct notifier_block manta_panic_nb = {
+	.notifier_call = manta_panic_notify,
+};
+
+static void __init manta_panic_init(void)
+{
+	manta_cpu0_debug = ioremap(MANTA_CPU0_DEBUG_PA, SZ_4K);
+	manta_cpu1_debug = ioremap(MANTA_CPU1_DEBUG_PA, SZ_4K);
+
+	atomic_notifier_chain_register(&panic_notifier_list, &manta_panic_nb);
+}
+
 static void __init manta_machine_init(void)
 {
 	manta_init_hw_rev();
@@ -781,6 +827,7 @@ static void __init manta_machine_init(void)
 		manta_bus_mif_platform_data.max_freq = 667000;
 
 	exynos_serial_debug_init(2, 0);
+	manta_panic_init();
 
 	manta_gpio_power_init();
 	platform_device_register(&manta_event_device);
