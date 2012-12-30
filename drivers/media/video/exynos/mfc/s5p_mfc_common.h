@@ -327,6 +327,8 @@ struct s5p_mfc_h264_enc_params {
 	u32 fmo_sg_rate;
 	u32 aso_enable;
 	u32 aso_slice_order[8];
+
+	u32 prepend_sps_pps_to_idr;
 };
 
 /**
@@ -648,6 +650,8 @@ struct s5p_mfc_ctx {
 #define FW_HAS_VER_INFO(dev)			((dev)->fw.date >= 0x120328)
 #define FW_HAS_INITBUF_TILE_MODE(dev)		((dev)->fw.date >= 0x120629)
 #define FW_HAS_INITBUF_LOOP_FILTER(dev)		((dev)->fw.date >= 0x120831)
+#define FW_HAS_ENC_SPSPPS_CTRL(dev)		((IS_MFCV6(dev) &&	\
+						((dev)->fw.date >= 0x121005)))
 
 struct s5p_mfc_fmt {
 	char *name;

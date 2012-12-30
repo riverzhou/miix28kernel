@@ -1017,6 +1017,12 @@ static int s5p_mfc_set_enc_params_h264(struct s5p_mfc_ctx *ctx)
 		WRITEL(reg, S5P_FIMV_E_FIXED_PICTURE_QP);
 	}
 
+	/* sps pps control */
+	reg = READL(S5P_FIMV_E_H264_OPTIONS);
+	reg &= ~(0x1 << 29);
+	reg |= (p_264->prepend_sps_pps_to_idr << 29);
+	WRITEL(reg, S5P_FIMV_E_H264_OPTIONS);
+
 	/* extended encoder ctrl */
 	reg = READL(S5P_FIMV_E_H264_OPTIONS);
 	reg &= ~(0x1 << 5);
