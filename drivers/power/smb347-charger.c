@@ -1167,6 +1167,7 @@ static int apsd_detect(struct smb347_charger *smb, bool wait)
 
 apsd_done:
 	smb->usb_apsd_result = apsd_to_pst[ret & STAT_D_APSD_RESULT_MASK];
+	smb->usb.type = smb->usb_apsd_result;
 	ret = 0;
 
 unlock:
