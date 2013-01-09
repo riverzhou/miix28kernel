@@ -1682,7 +1682,7 @@ static int smb347_probe(struct i2c_client *client,
 	__apsd_enable(smb, false);
 
 	smb->mains.name = "smb347-mains";
-	smb->mains.type = POWER_SUPPLY_TYPE_UNKNOWN;
+	smb->mains.type = POWER_SUPPLY_TYPE_MAINS;
 	smb->mains.get_property = smb347_mains_get_property;
 	smb->mains.set_property = smb347_mains_set_property;
 	smb->mains.property_is_writeable = smb347_mains_property_is_writeable;
@@ -1692,7 +1692,7 @@ static int smb347_probe(struct i2c_client *client,
 	smb->mains.num_supplicants = ARRAY_SIZE(battery);
 
 	smb->usb.name = "smb347-usb";
-	smb->usb.type = POWER_SUPPLY_TYPE_UNKNOWN;
+	smb->usb.type = POWER_SUPPLY_TYPE_USB;
 	smb->usb.get_property = smb347_usb_get_property;
 	smb->usb.set_property = smb347_usb_set_property;
 	smb->usb.property_is_writeable = smb347_usb_property_is_writeable;
