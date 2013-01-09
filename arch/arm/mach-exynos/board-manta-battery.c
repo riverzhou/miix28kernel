@@ -111,8 +111,8 @@ static inline int manta_bat_get_ds2784(void)
 			power_supply_get_by_name("ds2784-fuelgauge");
 
 	if (!manta_bat_ds2784_battery) {
-		pr_err("%s: failed to get ds2784-fuelgauge power supply\n",
-		       __func__);
+		pr_err_once("%s: failed to get ds2784-fuelgauge power supply\n",
+			    __func__);
 		return -ENODEV;
 	}
 
