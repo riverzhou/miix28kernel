@@ -19,6 +19,7 @@
 
 #include <plat/cpu.h>
 #include <plat/devs.h>
+#include <plat/fimg2d.h>
 
 #include <mach/exynos-ion.h>
 #include <mach/exynos-mfc.h>
@@ -31,10 +32,16 @@ static struct platform_device *media_devices[] __initdata = {
 	&exynos5_device_gsc2,
 	&exynos5_device_gsc3,
 	&s5p_device_jpeg,
+	&s5p_device_fimg2d,
 };
 
 static struct s5p_mfc_platdata manta_mfc_pd = {
 	.clock_rate = 333 * MHZ,
+};
+
+static struct fimg2d_platdata fimg2d_data __initdata = {
+	.hw_ver		= 0x42,
+	.gate_clkname	= "fimg2d",
 };
 
 static void __init manta_media_sysmmu_init(void)
@@ -50,6 +57,8 @@ static void __init manta_media_sysmmu_init(void)
 			    &exynos5_device_gsc3.dev);
 	platform_set_sysmmu(&SYSMMU_PLATDEV(jpeg).dev,
 			    &s5p_device_jpeg.dev);
+	platform_set_sysmmu(&SYSMMU_PLATDEV(2d).dev,
+			    &s5p_device_fimg2d.dev);
 }
 
 void __init exynos5_manta_media_init(void)
@@ -69,6 +78,8 @@ void __init exynos5_manta_media_init(void)
 	s3c_set_platdata(&exynos_gsc3_default_data,
 			 sizeof(exynos_gsc3_default_data),
 			 &exynos5_device_gsc3);
+
+	s5p_fimg2d_set_platdata(&fimg2d_data);
 
 	platform_add_devices(media_devices, ARRAY_SIZE(media_devices));
 }
