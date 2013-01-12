@@ -113,8 +113,8 @@ static int s5p_dp_read_edid(struct s5p_dp_device *dp)
 		}
 		sum = s5p_dp_calc_edid_check_sum(edid);
 		if (sum != 0) {
-			dev_err(dp->dev, "EDID bad checksum!\n");
-			return -EIO;
+			dev_warn(dp->dev, "EDID bad checksum!\n");
+			return 0;
 		}
 
 		/* Read additional EDID data */
@@ -129,8 +129,8 @@ static int s5p_dp_read_edid(struct s5p_dp_device *dp)
 		}
 		sum = s5p_dp_calc_edid_check_sum(&edid[EDID_BLOCK_LENGTH]);
 		if (sum != 0) {
-			dev_err(dp->dev, "EDID bad checksum!\n");
-			return -EIO;
+			dev_warn(dp->dev, "EDID bad checksum!\n");
+			return 0;
 		}
 
 		retval = s5p_dp_read_byte_from_dpcd(dp,
@@ -172,8 +172,8 @@ static int s5p_dp_read_edid(struct s5p_dp_device *dp)
 		}
 		sum = s5p_dp_calc_edid_check_sum(edid);
 		if (sum != 0) {
-			dev_err(dp->dev, "EDID bad checksum!\n");
-			return -EIO;
+			dev_warn(dp->dev, "EDID bad checksum!\n");
+			return 0;
 		}
 
 		retval = s5p_dp_read_byte_from_dpcd(dp,
