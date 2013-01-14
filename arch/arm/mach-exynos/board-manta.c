@@ -389,6 +389,31 @@ static struct tmu_data manta_tmu_pdata __initdata = {
 	.slope		= 0x10608802,
 };
 
+static struct persistent_ram_descriptor manta_prd[] __initdata = {
+	{
+		.name = "ram_console",
+		.size = SZ_2M,
+	},
+#ifdef CONFIG_PERSISTENT_TRACER
+	{
+		.name = "persistent_trace",
+		.size = SZ_1M,
+	},
+#endif
+};
+
+static struct persistent_ram manta_pr __initdata = {
+	.descs = manta_prd,
+	.num_descs = ARRAY_SIZE(manta_prd),
+	.start = PLAT_PHYS_OFFSET + SZ_1G + SZ_512M,
+#ifdef CONFIG_PERSISTENT_TRACER
+	.size = 3 * SZ_1M,
+#else
+	.size = SZ_2M,
+#endif
+};
+
+
 /* defined in arch/arm/mach-exynos/reserve-mem.c */
 extern void exynos_cma_region_reserve(struct cma_region *,
 				struct cma_region *, size_t, const char *);
@@ -495,6 +520,7 @@ static void __init exynos_reserve_mem(void)
 		"s5p-mfc-v6/f=fw;"
 		"s5p-mfc-v6/a=b1;";
 
+	persistent_ram_early_init(&manta_pr);
 	if (manta_bootloader_fb_start) {
 		int err = memblock_reserve(manta_bootloader_fb_start,
 				manta_bootloader_fb_size);
@@ -681,33 +707,8 @@ static void __init manta_sysmmu_init(void)
 {
 }
 
-static struct persistent_ram_descriptor manta_prd[] __initdata = {
-	{
-		.name = "ram_console",
-		.size = SZ_2M,
-	},
-#ifdef CONFIG_PERSISTENT_TRACER
-	{
-		.name = "persistent_trace",
-		.size = SZ_1M,
-	},
-#endif
-};
-
-static struct persistent_ram manta_pr __initdata = {
-	.descs = manta_prd,
-	.num_descs = ARRAY_SIZE(manta_prd),
-	.start = PLAT_PHYS_OFFSET + SZ_1G + SZ_512M,
-#ifdef CONFIG_PERSISTENT_TRACER
-	.size = 3 * SZ_1M,
-#else
-	.size = SZ_2M,
-#endif
-};
-
 static void __init manta_init_early(void)
 {
-	persistent_ram_early_init(&manta_pr);
 }
 
 static void __init soc_info_populate(struct soc_device_attribute *soc_dev_attr)
