@@ -88,7 +88,7 @@ blitend:
 
 		/* wake up context */
 		if (!atomic_read(&ctx->ncmd))
-			wake_up(&ctx->wait_q);
+			wake_up_all(&ctx->wait_q);
 	}
 
 	atomic_set(&info->active, 0);

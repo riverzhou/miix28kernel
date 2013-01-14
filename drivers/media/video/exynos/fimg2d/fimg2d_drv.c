@@ -135,12 +135,7 @@ static int fimg2d_release(struct inode *inode, struct file *file)
 	struct fimg2d_context *ctx = file->private_data;
 
 	fimg2d_debug("ctx %p\n", ctx);
-	while (1) {
-		if (!atomic_read(&ctx->ncmd))
-			break;
-
-		mdelay(2);
-	}
+	fimg2d_context_wait(ctx);
 	fimg2d_del_context(info, ctx);
 
 	kfree(ctx);
