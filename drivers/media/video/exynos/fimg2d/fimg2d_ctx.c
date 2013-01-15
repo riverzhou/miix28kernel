@@ -14,16 +14,10 @@
 #include <linux/sched.h>
 #include <linux/uaccess.h>
 #include <plat/fimg2d.h>
+#include <plat/iovmm.h>
 #include "fimg2d.h"
 #include "fimg2d_ctx.h"
-#include "fimg2d_cache.h"
 #include "fimg2d_helper.h"
-
-static int bpptable[MSK_FORMAT_END+1] = {
-	32, 32,	16, 16, 16, 16, 16, 24,	/* rgb */
-	0, 0, 0, 8, 8, 0,		/* yuv */
-	1, 4, 8, 16, 16, 16, 32, 0,	/* msk */
-};
 
 static inline int is_yuvfmt(enum color_format fmt)
 {
@@ -189,30 +183,6 @@ static void fimg2d_fixup_params(struct fimg2d_bltcmd *cmd)
 		scl->mode = NO_SCALING;
 }
 
-static int pixel2offset(int pixel, enum color_format cf)
-{
-	return (pixel * bpptable[cf]) >> 3;
-}
-
-static int width2bytes(int width, enum color_format cf)
-{
-	int bpp = bpptable[cf];
-
-	switch (bpp) {
-	case 1:
-		return (width + 7) >> 3;
-	case 4:
-		return (width + 1) >> 1;
-	case 8:
-	case 16:
-	case 24:
-	case 32:
-		return width * bpp >> 3;
-	default:
-		return 0;
-	}
-}
-
 /**
  * @plane: 0 for 1st plane, 1 for 2nd plane
  */
@@ -242,259 +212,130 @@ static int yuv_stride(int width, enum color_format cf, enum pixel_order order,
 	return width * bpp >> 3;
 }
 
-static inline void fimg2d_calc_dma_size(struct fimg2d_bltcmd *cmd)
+static inline enum dma_data_direction fimg2d_dma_direction(enum image_object i)
 {
-	struct fimg2d_image *img;
-	struct fimg2d_clip *clp;
-	struct fimg2d_rect *r;
-	struct fimg2d_dma *c;
-	int i, y1, y2, stride;
-
-	clp = &cmd->param.clipping;
-
-	for (i = 0; i < MAX_IMAGES; i++) {
-		img = &cmd->image[i];
-		if (img->addr.type != ADDR_USER &&
-				img->addr.type != ADDR_USER_CONTIG)
-			continue;
-
-		/* ! yuv format */
-		if (!is_yuvfmt(img->fmt)) {
-			r = &img->rect;
-
-			if (i == IMAGE_DST && clp->enable) {
-				y1 = clp->y1;
-				y2 = clp->y2;
-			} else {
-				y1 = r->y1;
-				y2 = r->y2;
-			}
-
-			c = &cmd->dma[i].base;
-			c->addr = img->addr.start + (img->stride * y1);
-			c->size = img->stride * (y2 - y1);
-
-			if (img->need_cacheopr) {
-				c->cached = c->size;
-				cmd->dma_all += c->cached;
-			}
-			continue;
-		}
-
-		stride = yuv_stride(img->width, img->fmt, img->order, 0);
-
-		c = &cmd->dma[i].base;
-		c->addr = img->addr.start;
-		c->size = stride * img->height;
-
-		if (img->need_cacheopr) {
-			c->cached = c->size;
-			cmd->dma_all += c->cached;
-		}
-
-		if (img->order == P2_CRCB || img->order == P2_CBCR) {
-			stride = yuv_stride(img->width, img->fmt,
-					img->order, 1);
-
-			c = &cmd->dma[i].plane2;
-			c->addr = img->plane2.start;
-			c->size = stride * img->height;
-
-			if (img->need_cacheopr) {
-				c->cached = c->size;
-				cmd->dma_all += c->cached;
-			}
-		}
+	switch (i) {
+	case IMAGE_DST:
+		return DMA_FROM_DEVICE;
+	case IMAGE_SRC:
+	case IMAGE_MSK:
+		return DMA_TO_DEVICE;
+	case IMAGE_TMP:
+		return DMA_BIDIRECTIONAL;
+	default:
+		return DMA_NONE;
 	}
 }
 
-static inline void inner_flush_clip_range(struct fimg2d_bltcmd *cmd)
+static unsigned int fimg2d_map_dma_buf(struct fimg2d_control *info,
+		struct fimg2d_dma *dma, int fd,
+		enum dma_data_direction direction)
 {
-	struct fimg2d_image *img;
-	struct fimg2d_clip *clp;
-	struct fimg2d_rect *r;
-	struct fimg2d_dma *c;
-	int clp_x, clp_w, clp_h, y, i, dir;
-	int x1, y1, x2, y2;
-	unsigned long start;
+	dma_addr_t dma_addr;
 
-	clp = &cmd->param.clipping;
-
-	for (i = 0; i < MAX_IMAGES; i++) {
-		img = &cmd->image[i];
-
-		dir = (i == IMAGE_DST) ? DMA_BIDIRECTIONAL : DMA_TO_DEVICE;
-
-		/* yuv format */
-		if (is_yuvfmt(img->fmt)) {
-			c = &cmd->dma[i].base;
-			if (c->cached)
-				fimg2d_dma_sync_inner(c->addr, c->cached, dir);
-
-			c = &cmd->dma[i].plane2;
-			if (c->cached)
-				fimg2d_dma_sync_inner(c->addr, c->cached, dir);
-
-			continue;
-		}
-
-		c = &cmd->dma[i].base;
-		if (!c->cached)
-			continue;
-
-		r = &img->rect;
-
-		if (i == IMAGE_DST && clp->enable) {
-			x1 = clp->x1;
-			y1 = clp->y1;
-			x2 = clp->x2;
-			y2 = clp->y2;
-		} else {
-			x1 = r->x1;
-			y1 = r->y1;
-			x2 = r->x2;
-			y2 = r->y2;
-		}
-
-		clp_x = pixel2offset(x1, img->fmt);
-		clp_w = width2bytes(x2 - x1, img->fmt);
-		clp_h = y2 - y1;
-
-		if (is_inner_flushrange(img->stride - clp_w))
-			fimg2d_dma_sync_inner(c->addr, c->cached, dir);
-		else {
-			for (y = 0; y < clp_h; y++) {
-				start = c->addr + (img->stride * y) + clp_x;
-				fimg2d_dma_sync_inner(start, clp_w, dir);
-			}
-		}
-	}
-}
-
-static inline void outer_flush_clip_range(struct fimg2d_bltcmd *cmd)
-{
-	struct mm_struct *mm = cmd->ctx->mm;
-	struct fimg2d_image *img;
-	struct fimg2d_clip *clp;
-	struct fimg2d_rect *r;
-	struct fimg2d_dma *c;
-	int clp_x, clp_w, clp_h, y, i, dir;
-	int x1, y1, x2, y2;
-	unsigned long start;
-
-	clp = &cmd->param.clipping;
-
-	for (i = 0; i < MAX_IMAGES; i++) {
-		img = &cmd->image[i];
-
-		/* clean pagetable on outercache */
-		c = &cmd->dma[i].base;
-		if (c->size)
-			fimg2d_clean_outer_pagetable(mm, c->addr, c->size);
-
-		c = &cmd->dma[i].plane2;
-		if (c->size)
-			fimg2d_clean_outer_pagetable(mm, c->addr, c->size);
-
-		dir = (i == IMAGE_DST) ?  CACHE_FLUSH : CACHE_CLEAN;
-
-		/* yuv format */
-		if (is_yuvfmt(img->fmt)) {
-			c = &cmd->dma[i].base;
-			if (c->cached) {
-				fimg2d_dma_sync_outer(mm, c->addr, c->cached,
-						dir);
-			}
-
-			c = &cmd->dma[i].plane2;
-			if (c->cached) {
-				fimg2d_dma_sync_outer(mm, c->addr, c->cached,
-						dir);
-			}
-
-			continue;
-		}
-
-		c = &cmd->dma[i].base;
-		if (!c->cached)
-			continue;
-
-		r = &img->rect;
-
-		if (i == IMAGE_DST && clp->enable) {
-			x1 = clp->x1;
-			y1 = clp->y1;
-			x2 = clp->x2;
-			y2 = clp->y2;
-		} else {
-			x1 = r->x1;
-			y1 = r->y1;
-			x2 = r->x2;
-			y2 = r->y2;
-		}
-
-		clp_x = pixel2offset(x1, img->fmt);
-		clp_w = width2bytes(x2 - x1, img->fmt);
-		clp_h = y2 - y1;
-
-		if (is_outer_flushrange(img->stride - clp_w))
-			fimg2d_dma_sync_outer(mm, c->addr, c->cached, dir);
-		else {
-			for (y = 0; y < clp_h; y++) {
-				start = c->addr + (img->stride * y) + clp_x;
-				fimg2d_dma_sync_outer(mm, start, clp_w, dir);
-			}
-		}
-	}
-}
-
-static int fimg2d_check_dma_sync(struct fimg2d_bltcmd *cmd)
-{
-	struct mm_struct *mm = cmd->ctx->mm;
-	struct fimg2d_dma *c;
-	enum pt_status pt;
-	int i, ret;
-
-	fimg2d_calc_dma_size(cmd);
-
-	for (i = 0; i < MAX_IMAGES; i++) {
-		c = &cmd->dma[i].base;
-		if (!c->size)
-			continue;
-
-		pt = fimg2d_check_pagetable(mm, c->addr, c->size);
-		if (pt == PT_FAULT) {
-			ret = -EFAULT;
-			goto err_pgtable;
-		}
+	dma->direction = direction;
+	dma->dma_buf = dma_buf_get(fd);
+	if (IS_ERR_OR_NULL(dma->dma_buf)) {
+		dev_err(info->dev, "dma_buf_get() failed: %ld\n",
+				PTR_ERR(dma->dma_buf));
+		goto err_buf_get;
 	}
 
-#ifdef PERF_PROFILE
-	perf_start(cmd->ctx, PERF_INNERCACHE);
-#endif
-	if (is_inner_flushall(cmd->dma_all))
-		flush_all_cpu_caches();
-	else
-		inner_flush_clip_range(cmd);
-#ifdef PERF_PROFILE
-	perf_end(cmd->ctx, PERF_INNERCACHE);
-#endif
+	dma->attachment = dma_buf_attach(dma->dma_buf, info->dev);
+	if (IS_ERR_OR_NULL(dma->attachment)) {
+		dev_err(info->dev, "dma_buf_attach() failed: %ld\n",
+				PTR_ERR(dma->attachment));
+		goto err_buf_attach;
+	}
 
-#ifdef CONFIG_OUTER_CACHE
-#ifdef PERF_PROFILE
-	perf_start(cmd->ctx, PERF_OUTERCACHE);
-#endif
-	if (is_outer_flushall(cmd->dma_all))
-		outer_flush_all();
-	else
-		outer_flush_clip_range(cmd);
-#ifdef PERF_PROFILE
-	perf_end(cmd->ctx, PERF_OUTERCACHE);
-#endif
-#endif
+	dma->sg_table = dma_buf_map_attachment(dma->attachment,
+			direction);
+	if (IS_ERR_OR_NULL(dma->sg_table)) {
+		dev_err(info->dev, "dma_buf_map_attachment() failed: %ld\n",
+				PTR_ERR(dma->sg_table));
+		goto err_buf_map_attachment;
+	}
+
+	dma_addr = iovmm_map(info->dev, dma->sg_table->sgl, 0,
+			dma->dma_buf->size);
+	if (!dma_addr || IS_ERR_VALUE(dma_addr)) {
+		dev_err(info->dev, "iovmm_map() failed: %d\n", dma->dma_addr);
+		goto err_iovmm_map;
+	}
+
+	dma->dma_addr = dma_addr;
+	return dma->dma_buf->size;
+
+err_iovmm_map:
+	dma_buf_unmap_attachment(dma->attachment, dma->sg_table,
+			direction);
+err_buf_map_attachment:
+	dma_buf_detach(dma->dma_buf, dma->attachment);
+err_buf_attach:
+	dma_buf_put(dma->dma_buf);
+err_buf_get:
 	return 0;
+}
 
-err_pgtable:
+static void fimg2d_unmap_dma_buf(struct fimg2d_control *info,
+		struct fimg2d_dma *dma)
+{
+	if (!dma->dma_addr)
+		return;
+
+	iovmm_unmap(info->dev, dma->dma_addr);
+	dma_buf_unmap_attachment(dma->attachment, dma->sg_table,
+			dma->direction);
+	dma_buf_detach(dma->dma_buf, dma->attachment);
+	dma_buf_put(dma->dma_buf);
+	memset(dma, 0, sizeof(struct fimg2d_dma));
+}
+
+static int fimg2d_import_bufs(struct fimg2d_control *info,
+		struct fimg2d_bltcmd *cmd)
+{
+	int ret = 0;
+	int i;
+	size_t j;
+
+	for (i = 0; i < MAX_IMAGES; i++) {
+		struct fimg2d_image *img = &cmd->image[i];
+		size_t num_planes = fimg2d_num_planes(img);
+
+		for (j = 0; j < num_planes; j++) {
+			int stride;
+			unsigned int buf_size = fimg2d_map_dma_buf(info,
+					&cmd->dma[i][j], img->addr.fd[j],
+					fimg2d_dma_direction(i));
+			if (!buf_size) {
+				ret = -ENOMEM;
+				goto err;
+			}
+
+			if (is_yuvfmt(img->fmt)) {
+				stride = yuv_stride(img->width, img->fmt,
+						img->order, j);
+			} else {
+				stride = img->stride;
+			}
+
+			if (buf_size < stride * img->height) {
+				dev_err(info->dev,
+						"%s plane %u too small (height = %d, stride = %d, buf_size = %u)\n",
+						imagename(i), j,
+						img->height, stride, buf_size);
+				ret = -EINVAL;
+				goto err;
+			}
+		}
+	}
+
+err:
+	if (ret)
+		for (i = 0; i < MAX_IMAGES; i++)
+			for (j = 0; j < FIMG2D_MAX_PLANES; j++)
+				fimg2d_unmap_dma_buf(info, &cmd->dma[i][j]);
+
 	return ret;
 }
 
@@ -539,10 +380,9 @@ int fimg2d_add_command(struct fimg2d_control *info, struct fimg2d_context *ctx,
 
 	fimg2d_fixup_params(cmd);
 
-	if (fimg2d_check_dma_sync(cmd)) {
-		ret = -EFAULT;
+	ret = fimg2d_import_bufs(info, cmd);
+	if (ret)
 		goto err_user;
-	}
 
 	/* add command node and increase ncmd */
 	spin_lock(&info->bltlock);
@@ -554,9 +394,8 @@ int fimg2d_add_command(struct fimg2d_control *info, struct fimg2d_context *ctx,
 	}
 	atomic_inc(&ctx->ncmd);
 	fimg2d_enqueue(&cmd->node, &info->cmd_q);
-	fimg2d_debug("ctx %p pgd %p ncmd(%d) seq_no(%u)\n",
-			cmd->ctx, (unsigned long *)cmd->ctx->mm->pgd,
-			atomic_read(&ctx->ncmd), cmd->seq_no);
+	fimg2d_debug("ctx %p ncmd(%d) seq_no(%u)\n",
+			cmd->ctx, atomic_read(&ctx->ncmd), cmd->seq_no);
 	spin_unlock(&info->bltlock);
 
 	return 0;
@@ -568,7 +407,14 @@ err_user:
 
 void fimg2d_del_command(struct fimg2d_control *info, struct fimg2d_bltcmd *cmd)
 {
+	int i;
+	size_t j;
+
 	struct fimg2d_context *ctx = cmd->ctx;
+
+	for (i = 0; i < MAX_IMAGES; i++)
+		for (j = 0; j < FIMG2D_MAX_PLANES; j++)
+			fimg2d_unmap_dma_buf(info, &cmd->dma[i][j]);
 
 	spin_lock(&info->bltlock);
 	fimg2d_dequeue(&cmd->node);

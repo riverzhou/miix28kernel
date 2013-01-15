@@ -26,7 +26,6 @@
 #include "fimg2d_clk.h"
 #include "fimg2d4x.h"
 #include "fimg2d_ctx.h"
-#include "fimg2d_cache.h"
 #include "fimg2d_helper.h"
 
 #define BLIT_TIMEOUT	msecs_to_jiffies(2000)
@@ -51,7 +50,6 @@ void fimg2d4x_bitblt(struct fimg2d_control *info)
 {
 	struct fimg2d_context *ctx;
 	struct fimg2d_bltcmd *cmd;
-	unsigned long *pgd;
 	int ret;
 
 	fimg2d_debug("enter blitter\n");
@@ -75,13 +73,6 @@ void fimg2d4x_bitblt(struct fimg2d_control *info)
 		if (ret)
 			goto blitend;
 
-		if (cmd->image[IDST].addr.type != ADDR_PHYS) {
-			pgd = (unsigned long *)ctx->mm->pgd;
-			exynos_sysmmu_enable(info->dev, (unsigned long)virt_to_phys(pgd));
-			fimg2d_debug("sysmmu enable: pgd %p ctx %p seq_no(%u)\n",
-					pgd, ctx, cmd->seq_no);
-		}
-
 		fimg2d4x_pre_bitblt(info, cmd);
 
 #ifdef PERF_PROFILE
@@ -94,10 +85,6 @@ void fimg2d4x_bitblt(struct fimg2d_control *info)
 #ifdef PERF_PROFILE
 		perf_end(cmd->ctx, PERF_BLIT);
 #endif
-		if (cmd->image[IDST].addr.type != ADDR_PHYS) {
-			exynos_sysmmu_disable(info->dev);
-			fimg2d_debug("sysmmu disable\n");
-		}
 blitend:
 		fimg2d_del_command(info, cmd);
 
@@ -257,7 +244,7 @@ static int fimg2d4x_configure(struct fimg2d_control *info,
 
 	/* src */
 	if (src->addr.type) {
-		fimg2d4x_set_src_image(info, src);
+		fimg2d4x_set_src_image(info, src, cmd->dma[ISRC]);
 		fimg2d4x_set_src_rect(info, &src->rect);
 		fimg2d4x_set_src_repeat(info, &p->repeat);
 		if (p->scaling.mode)
@@ -267,7 +254,7 @@ static int fimg2d4x_configure(struct fimg2d_control *info,
 	/* msk */
 	if (msk->addr.type) {
 		fimg2d4x_enable_msk(info);
-		fimg2d4x_set_msk_image(info, msk);
+		fimg2d4x_set_msk_image(info, msk, cmd->dma[IMSK]);
 		fimg2d4x_set_msk_rect(info, &msk->rect);
 		fimg2d4x_set_msk_repeat(info, &p->repeat);
 		if (p->scaling.mode)
@@ -276,7 +263,7 @@ static int fimg2d4x_configure(struct fimg2d_control *info,
 
 	/* dst */
 	if (dst->addr.type) {
-		fimg2d4x_set_dst_image(info, dst);
+		fimg2d4x_set_dst_image(info, dst, cmd->dma[IDST]);
 		fimg2d4x_set_dst_rect(info, &dst->rect);
 		if (p->clipping.enable)
 			fimg2d4x_enable_clipping(info, &p->clipping);

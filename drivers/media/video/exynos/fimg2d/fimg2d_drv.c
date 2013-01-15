@@ -29,6 +29,7 @@
 #include <asm/cacheflush.h>
 #include <plat/cpu.h>
 #include <plat/fimg2d.h>
+#include <plat/iovmm.h>
 #include <plat/sysmmu.h>
 #ifdef CONFIG_PM_RUNTIME
 #include <linux/pm_runtime.h>
@@ -83,12 +84,6 @@ static int fimg2d_sysmmu_fault_handler(struct device *dev,
 		goto next;
 	}
 
-	if (cmd->ctx->mm->pgd != phys_to_virt(pgtable_base)) {
-		printk(KERN_ERR "[%s] pgtable base is different from current command\n",
-				__func__);
-		goto next;
-	}
-
 	fimg2d_dump_command(cmd);
 
 next:
@@ -130,11 +125,6 @@ static int fimg2d_open(struct inode *inode, struct file *file)
 		return -ENOMEM;
 	}
 	file->private_data = (void *)ctx;
-
-	ctx->mm = current->mm;
-	fimg2d_debug("ctx %p current pgd %p init_mm pgd %p\n",
-			ctx, (unsigned long *)ctx->mm->pgd,
-			(unsigned long *)init_mm.pgd);
 
 	fimg2d_add_context(info, ctx);
 	return 0;
@@ -192,6 +182,12 @@ static long fimg2d_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		if (copy_from_user(&blit, (void *)arg, sizeof(blit)))
 			return -EFAULT;
 
+		ret = iovmm_activate(info->dev);
+		if (ret < 0) {
+			dev_err(info->dev, "failed to activate vmm\n");
+			return ret;
+		}
+
 		ret = fimg2d_add_command(info, ctx, &blit);
 		if (!ret)
 			fimg2d_request_bitblt(ctx);
@@ -199,6 +195,9 @@ static long fimg2d_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		perf_print(ctx, blit.seq_no);
 		perf_clear(ctx);
 #endif
+
+		iovmm_deactivate(info->dev);
+
 		break;
 
 	case FIMG2D_BITBLT_SYNC:

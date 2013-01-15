@@ -181,13 +181,16 @@ int fimg2d4x_blit_done_status(struct fimg2d_control *info);
 void fimg2d4x_start_blit(struct fimg2d_control *info);
 void fimg2d4x_set_max_burst_length(struct fimg2d_control *info, enum max_burst_len len);
 void fimg2d4x_set_src_type(struct fimg2d_control *info, enum image_sel type);
-void fimg2d4x_set_src_image(struct fimg2d_control *info, struct fimg2d_image *s);
+void fimg2d4x_set_src_image(struct fimg2d_control *info, struct fimg2d_image *s,
+		struct fimg2d_dma *dma);
 void fimg2d4x_set_src_rect(struct fimg2d_control *info, struct fimg2d_rect *r);
 void fimg2d4x_set_dst_type(struct fimg2d_control *info, enum image_sel type);
-void fimg2d4x_set_dst_image(struct fimg2d_control *info, struct fimg2d_image *d);
+void fimg2d4x_set_dst_image(struct fimg2d_control *info, struct fimg2d_image *d,
+		struct fimg2d_dma *dma);
 void fimg2d4x_set_dst_rect(struct fimg2d_control *info, struct fimg2d_rect *r);
 void fimg2d4x_enable_msk(struct fimg2d_control *info);
-void fimg2d4x_set_msk_image(struct fimg2d_control *info, struct fimg2d_image *m);
+void fimg2d4x_set_msk_image(struct fimg2d_control *info, struct fimg2d_image *m,
+		struct fimg2d_dma *dma);
 void fimg2d4x_set_msk_rect(struct fimg2d_control *info, struct fimg2d_rect *r);
 void fimg2d4x_set_color_fill(struct fimg2d_control *info, unsigned long color);
 void fimg2d4x_set_premultiplied(struct fimg2d_control *info);

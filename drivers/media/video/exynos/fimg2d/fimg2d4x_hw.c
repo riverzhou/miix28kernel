@@ -108,11 +108,13 @@ void fimg2d4x_set_src_type(struct fimg2d_control *info, enum image_sel type)
 	writel(cfg, info->regs + FIMG2D_SRC_SELECT_REG);
 }
 
-void fimg2d4x_set_src_image(struct fimg2d_control *info, struct fimg2d_image *s)
+void fimg2d4x_set_src_image(struct fimg2d_control *info, struct fimg2d_image *s,
+		struct fimg2d_dma *dma)
 {
 	unsigned long cfg;
 
-	writel(FIMG2D_ADDR(s->addr.start), info->regs + FIMG2D_SRC_BASE_ADDR_REG);
+	writel(FIMG2D_ADDR(dma[0].dma_addr),
+			info->regs + FIMG2D_SRC_BASE_ADDR_REG);
 	writel(FIMG2D_STRIDE(s->stride), info->regs + FIMG2D_SRC_STRIDE_REG);
 
 	if (s->order < ARGB_ORDER_END) {	/* argb */
@@ -125,7 +127,7 @@ void fimg2d4x_set_src_image(struct fimg2d_control *info, struct fimg2d_image *s)
 		cfg = (s->order - P2_CRCB) << FIMG2D_YCBCR_ORDER_SHIFT;
 		cfg |= FIMG2D_YCBCR_2PLANE;
 
-		writel(FIMG2D_ADDR(s->plane2.start),
+		writel(FIMG2D_ADDR(dma[1].dma_addr),
 				info->regs + FIMG2D_SRC_PLANE2_BASE_ADDR_REG);
 	}
 
@@ -157,11 +159,13 @@ void fimg2d4x_set_dst_type(struct fimg2d_control *info, enum image_sel type)
 /**
  * @d: set base address, stride, color format, order
 */
-void fimg2d4x_set_dst_image(struct fimg2d_control *info, struct fimg2d_image *d)
+void fimg2d4x_set_dst_image(struct fimg2d_control *info, struct fimg2d_image *d,
+		struct fimg2d_dma *dma)
 {
 	unsigned long cfg;
 
-	writel(FIMG2D_ADDR(d->addr.start), info->regs + FIMG2D_DST_BASE_ADDR_REG);
+	writel(FIMG2D_ADDR(dma[0].dma_addr),
+			info->regs + FIMG2D_DST_BASE_ADDR_REG);
 	writel(FIMG2D_STRIDE(d->stride), info->regs + FIMG2D_DST_STRIDE_REG);
 
 	if (d->order < ARGB_ORDER_END) {
@@ -174,7 +178,7 @@ void fimg2d4x_set_dst_image(struct fimg2d_control *info, struct fimg2d_image *d)
 		cfg = (d->order - P2_CRCB) << FIMG2D_YCBCR_ORDER_SHIFT;
 		cfg |= FIMG2D_YCBCR_2PLANE;
 
-		writel(FIMG2D_ADDR(d->plane2.start),
+		writel(FIMG2D_ADDR(dma[1].dma_addr),
 				info->regs + FIMG2D_DST_PLANE2_BASE_ADDR_REG);
 	}
 
@@ -199,11 +203,13 @@ void fimg2d4x_enable_msk(struct fimg2d_control *info)
 	writel(cfg, info->regs + FIMG2D_BITBLT_COMMAND_REG);
 }
 
-void fimg2d4x_set_msk_image(struct fimg2d_control *info, struct fimg2d_image *m)
+void fimg2d4x_set_msk_image(struct fimg2d_control *info, struct fimg2d_image *m,
+		struct fimg2d_dma *dma)
 {
 	unsigned long cfg;
 
-	writel(FIMG2D_ADDR(m->addr.start), info->regs + FIMG2D_MSK_BASE_ADDR_REG);
+	writel(FIMG2D_ADDR(dma[0].dma_addr),
+			info->regs + FIMG2D_MSK_BASE_ADDR_REG);
 	writel(FIMG2D_STRIDE(m->stride), info->regs + FIMG2D_MSK_STRIDE_REG);
 
 	cfg = m->order << FIMG2D_MSK_ORDER_SHIFT;

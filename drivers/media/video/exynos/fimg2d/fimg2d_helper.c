@@ -11,7 +11,6 @@
 */
 
 #include "fimg2d.h"
-#include "fimg2d_cache.h"
 #include "fimg2d_helper.h"
 
 void perf_print(struct fimg2d_context *ctx, int seq_no)
@@ -38,7 +37,6 @@ void fimg2d_dump_command(struct fimg2d_bltcmd *cmd)
 	struct fimg2d_param *p = &cmd->param;
 	struct fimg2d_image *img;
 	struct fimg2d_rect *r;
-	struct fimg2d_dma *c;
 
 	printk(KERN_INFO " op: %d\n", cmd->op);
 	printk(KERN_INFO " solid color: 0x%lx\n", p->solid_color);
@@ -72,19 +70,17 @@ void fimg2d_dump_command(struct fimg2d_bltcmd *cmd)
 	}
 
 	for (i = 0; i < MAX_IMAGES; i++) {
+		size_t num_planes, j;
 		img = &cmd->image[i];
 		if (!img->addr.type)
 			continue;
 
 		r = &img->rect;
 
-		printk(KERN_INFO " %s type: %d addr: 0x%lx\n",
-				imagename(i), img->addr.type, img->addr.start);
-
-		if (img->plane2.type) {
-			printk(KERN_INFO " %s type: %d plane2: 0x%lx\n",
-					imagename(i), img->plane2.type,
-					img->plane2.start);
+		num_planes = fimg2d_num_planes(img);
+		for (j = 0; j < num_planes; j++) {
+			printk(KERN_INFO " %s fd[%u]: %d\n",
+					imagename(i), j, img->addr.fd[j]);
 		}
 
 		printk(KERN_INFO " %s width: %d height: %d "
@@ -94,26 +90,7 @@ void fimg2d_dump_command(struct fimg2d_bltcmd *cmd)
 		printk(KERN_INFO " %s rect LT(%d,%d) RB(%d,%d) WH(%d,%d)\n",
 				imagename(i), r->x1, r->y1, r->x2, r->y2,
 				rect_w(r), rect_h(r));
-
-		c = &cmd->dma[i].base;
-		if (c->size) {
-			printk(KERN_INFO " %s dma base addr: 0x%lx " \
-					"size: 0x%x cached: 0x%x\n",
-					imagename(i), c->addr, c->size,
-					c->cached);
-		}
-
-		c = &cmd->dma[i].plane2;
-		if (c->size) {
-			printk(KERN_INFO " %s dma plane2 addr: 0x%lx " \
-					"size: 0x%x cached: 0x%x\n",
-					imagename(i), c->addr, c->size,
-					c->cached);
-		}
 	}
-
-	if (cmd->dma_all)
-		printk(KERN_INFO " dma size all: 0x%x bytes\n", cmd->dma_all);
 
 	printk(KERN_INFO " ctx: %p seq_no(%u) sync(%d)\n",
 				cmd->ctx, cmd->seq_no, cmd->sync);

@@ -111,6 +111,14 @@ static inline void perf_clear(struct fimg2d_context *ctx)
 		ctx->perf[i].valid = 0;
 }
 
+static inline size_t fimg2d_num_planes(struct fimg2d_image *img)
+{
+	if (!img->addr.type)
+		return 0;
+
+	return img->order < P1_ORDER_END ? 1 : 2;
+}
+
 void perf_print(struct fimg2d_context *ctx, int seq_no);
 void fimg2d_dump_command(struct fimg2d_bltcmd *cmd);
 
