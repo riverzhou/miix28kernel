@@ -191,10 +191,6 @@ static long fimg2d_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		ret = fimg2d_add_command(info, ctx, &blit);
 		if (!ret)
 			fimg2d_request_bitblt(ctx);
-#ifdef PERF_PROFILE
-		perf_print(ctx, blit.seq_no);
-		perf_clear(ctx);
-#endif
 
 		iovmm_deactivate(info->dev);
 

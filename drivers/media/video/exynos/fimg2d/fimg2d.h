@@ -380,40 +380,12 @@ struct fimg2d_blit {
 #ifdef __KERNEL__
 
 /**
- * Enables definition to estimate performance.
- * These debug codes includes printk, so perf
- * data are unreliable under multi instance environment
- */
-#undef PERF_PROFILE
-#define PERF_TIMEVAL
-
-enum perf_desc {
-	PERF_INNERCACHE,
-	PERF_OUTERCACHE,
-	PERF_BLIT,
-	PERF_END
-};
-#define MAX_PERF_DESCS		PERF_END
-
-struct fimg2d_perf {
-	int valid;
-#ifdef PERF_TIMEVAL
-	struct timeval start;
-	struct timeval end;
-#else
-	unsigned long long start;
-	unsigned long long end;
-#endif
-};
-
-/**
  * @ncmd: request count in blit command queue
  * @wait_q: conext wait queue head
 */
 struct fimg2d_context {
 	atomic_t ncmd;
 	wait_queue_head_t wait_q;
-	struct fimg2d_perf perf[MAX_PERF_DESCS];
 };
 
 /**

@@ -28,6 +28,9 @@
 #include "fimg2d_ctx.h"
 #include "fimg2d_helper.h"
 
+#define CREATE_TRACE_POINTS
+#include "fimg2d_trace.h"
+
 #define BLIT_TIMEOUT	msecs_to_jiffies(2000)
 
 static inline void fimg2d4x_blit_wait(struct fimg2d_control *info, struct fimg2d_bltcmd *cmd)
@@ -75,16 +78,11 @@ void fimg2d4x_bitblt(struct fimg2d_control *info)
 
 		fimg2d4x_pre_bitblt(info, cmd);
 
-#ifdef PERF_PROFILE
-		perf_start(cmd->ctx, PERF_BLIT);
-#endif
+		trace_fimg2d_bitblt_start(cmd->seq_no);
 		/* start blit */
 		info->run(info);
 		fimg2d4x_blit_wait(info, cmd);
-
-#ifdef PERF_PROFILE
-		perf_end(cmd->ctx, PERF_BLIT);
-#endif
+		trace_fimg2d_bitblt_end(cmd->seq_no);
 blitend:
 		fimg2d_del_command(info, cmd);
 

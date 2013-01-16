@@ -13,24 +13,6 @@
 #include "fimg2d.h"
 #include "fimg2d_helper.h"
 
-void perf_print(struct fimg2d_context *ctx, int seq_no)
-{
-	int i;
-	long time;
-	struct fimg2d_perf *perf;
-
-	for (i = 0; i < MAX_PERF_DESCS; i++) {
-		perf = &ctx->perf[i];
-		if (perf->valid != 0x11)
-			continue;
-		time = elapsed_usec(ctx, i);
-		printk(KERN_INFO "[FIMG2D PERF (%8s)] ctx(0x%08x) seq(%d) " \
-				"%8ld   usec\n",
-				perfname(i), (unsigned int)ctx, seq_no, time);
-	}
-	printk(KERN_INFO "[FIMG2D PERF **]\n");
-}
-
 void fimg2d_dump_command(struct fimg2d_bltcmd *cmd)
 {
 	int i;
