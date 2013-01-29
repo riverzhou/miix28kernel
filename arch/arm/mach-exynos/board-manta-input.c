@@ -31,8 +31,8 @@
 static struct mxt_platform_data atmel_mxt_ts_pdata = {
 	.x_line         = 32,
 	.y_line         = 52,
-	.x_size         = 4095,
-	.y_size         = 4095,
+	.x_size         = 2560,
+	.y_size         = 1600,
 	.orient         = MXT_DIAGONAL,
 	.irqflags       = IRQF_TRIGGER_LOW | IRQF_ONESHOT,
 	.boot_address   = 0x26,

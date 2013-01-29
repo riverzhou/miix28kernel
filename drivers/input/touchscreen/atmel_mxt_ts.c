@@ -700,6 +700,7 @@ static void mxt_input_report(struct mxt_data *data)
 {
 	struct mxt_finger *finger = data->finger;
 	struct input_dev *input_dev = data->input_dev;
+
 	int finger_num = 0;
 	int id;
 
@@ -713,6 +714,12 @@ static void mxt_input_report(struct mxt_data *data)
 
 		if (finger[id].status != MXT_RELEASE) {
 			finger_num++;
+
+			// We reserve a 14px left edge swipe start area
+			// and translate all touches within to (1, y)
+			if (finger[id].x < 14)
+				finger[id].x = 1;
+
 			input_report_abs(input_dev, ABS_MT_TOUCH_MAJOR,
 					finger[id].area);
 			input_report_abs(input_dev, ABS_MT_POSITION_X,
