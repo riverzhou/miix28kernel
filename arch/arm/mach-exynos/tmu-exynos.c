@@ -107,10 +107,10 @@ static void tmu_monitor(struct work_struct *work)
 		enable_irq(info->irq);
 		goto out;
 	case TMU_STATUS_THROTTLED:
-		if (cur_temp > data->ts.stop_throttle)
-			exynos_thermal_throttle();
 		if (cur_temp >= data->ts.start_tripping)
 			info->tmu_state = TMU_STATUS_TRIPPED;
+		else if (cur_temp > data->ts.stop_throttle)
+			exynos_thermal_throttle();
 		else
 			info->tmu_state = TMU_STATUS_NORMAL;
 		break;
