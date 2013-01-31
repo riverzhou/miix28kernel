@@ -31,7 +31,7 @@
  * - dup to add a ref
  * - close to remove a ref
  */
-mali_error kbase_stream_create(const char * name, int * out_fd);
+mali_error kbase_stream_create(const char *name, int *const out_fd);
 
 /*
  * Create a fence in a stream object
@@ -47,7 +47,6 @@ int kbase_stream_create_fence(int tl_fd);
  */
 mali_error kbase_fence_validate(int fd);
 
-
 /* Returns true if the specified timeline is allocated by Mali */
 int kbase_sync_timeline_is_ours(struct sync_timeline *timeline);
 
@@ -55,7 +54,7 @@ int kbase_sync_timeline_is_ours(struct sync_timeline *timeline);
  *
  * One timeline should be allocated per API context.
  */
-struct sync_timeline *kbase_sync_timeline_alloc(const char * name);
+struct sync_timeline *kbase_sync_timeline_alloc(const char *name);
 
 /* Allocates a sync point within the timeline.
  *

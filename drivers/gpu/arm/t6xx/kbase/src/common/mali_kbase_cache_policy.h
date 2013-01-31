@@ -39,5 +39,4 @@
  */
 u32 kbase_cache_enabled(u32 flags, u32 nr_pages);
 
-#endif /* _KBASE_CACHE_POLICY_H_ */
-
+#endif				/* _KBASE_CACHE_POLICY_H_ */

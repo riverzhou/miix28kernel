@@ -21,18 +21,17 @@
 #define _KBASE_SECURITY_H_
 
 /* Security flags */
-#define KBASE_SEC_FLAG_NOAUDIT (0u << 0)              /* Silently handle privilege failure */
-#define KBASE_SEC_FLAG_AUDIT   (1u << 0)              /* Write audit message on privilege failure */
-#define KBASE_SEC_FLAG_MASK    (KBASE_SEC_FLAG_AUDIT) /* Mask of all valid flag bits */
+#define KBASE_SEC_FLAG_NOAUDIT (0u << 0)	/* Silently handle privilege failure */
+#define KBASE_SEC_FLAG_AUDIT   (1u << 0)	/* Write audit message on privilege failure */
+#define KBASE_SEC_FLAG_MASK    (KBASE_SEC_FLAG_AUDIT)	/* Mask of all valid flag bits */
 
 /* List of unique capabilities that have security access privileges */
 typedef enum {
-		/* Instrumentation Counters access privilege */
-        KBASE_SEC_INSTR_HW_COUNTERS_COLLECT = 1,
-        KBASE_SEC_MODIFY_PRIORITY
-		/* Add additional access privileges here */
+	/* Instrumentation Counters access privilege */
+	KBASE_SEC_INSTR_HW_COUNTERS_COLLECT = 1,
+	KBASE_SEC_MODIFY_PRIORITY
+	    /* Add additional access privileges here */
 } kbase_security_capability;
-
 
 /**
  * kbase_security_has_capability - determine whether a task has a particular effective capability
@@ -45,5 +44,4 @@ typedef enum {
 
 mali_bool kbase_security_has_capability(kbase_context *kctx, kbase_security_capability cap, u32 flags);
 
-#endif /* _KBASE_SECURITY_H_ */
-
+#endif				/* _KBASE_SECURITY_H_ */

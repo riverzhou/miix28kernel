@@ -11,20 +11,21 @@
  */
 
 
+#include <linux/string.h>
 #include <kbase/src/linux/mali_kbase_config_linux.h>
-#include <osk/mali_osk.h>
+#include <kbase/mali_kbase_debug.h>
 
 #ifdef CONFIG_MALI_PLATFORM_FAKE
 
-void kbasep_config_parse_io_resources(const kbase_io_resources *io_resources, struct resource *linux_resources)
+void kbasep_config_parse_io_resources(const kbase_io_resources *io_resources, struct resource *const linux_resources)
 {
-	OSK_ASSERT(io_resources != NULL);
-	OSK_ASSERT(linux_resources != NULL);
+	KBASE_DEBUG_ASSERT(io_resources != NULL);
+	KBASE_DEBUG_ASSERT(linux_resources != NULL);
 
 	memset(linux_resources, 0, PLATFORM_CONFIG_RESOURCE_COUNT * sizeof(struct resource));
 
 	linux_resources[0].start = io_resources->io_memory_region.start;
-	linux_resources[0].end   = io_resources->io_memory_region.end;
+	linux_resources[0].end = io_resources->io_memory_region.end;
 	linux_resources[0].flags = IORESOURCE_MEM;
 
 	linux_resources[1].start = linux_resources[1].end = io_resources->job_irq_number;
@@ -37,4 +38,4 @@ void kbasep_config_parse_io_resources(const kbase_io_resources *io_resources, st
 	linux_resources[3].flags = IORESOURCE_IRQ | IORESOURCE_IRQ_HIGHLEVEL;
 }
 
-#endif /* CONFIG_MALI_PLATFORM_FAKE */
+#endif				/* CONFIG_MALI_PLATFORM_FAKE */

@@ -41,6 +41,9 @@ typedef enum base_hw_issue {
 	/* On job complete with non-done the cache is not flushed */
 	BASE_HW_ISSUE_6787,
 
+	/* WLS allocation does not respect the Instances field in the Thread Storage Descriptor */
+	BASE_HW_ISSUE_7027,
+
 	/* The clamp integer coordinate flag bit of the sampler descriptor is reserved */
 	BASE_HW_ISSUE_7144,
 
@@ -66,6 +69,9 @@ typedef enum base_hw_issue {
 	/* uTLB deadlock could occur when writing to an invalid page at the same time as
 	 * access to a valid page in the same uTLB cache line ( == 4 PTEs == 16K block of mapping) */
 	BASE_HW_ISSUE_8316,
+
+	/* TLS base address mismatch, must stay below 1MB TLS */
+	BASE_HW_ISSUE_8381,
 
 	/* HT: TERMINATE for RUN command ignored if previous LOAD_DESCRIPTOR is still executing */
 	BASE_HW_ISSUE_8394,
@@ -119,7 +125,7 @@ typedef enum base_hw_issue {
 
 	/* Problem with number of work registers in the RSD if set to 0 */
 	BASE_HW_ISSUE_9275,
-	
+
 	/* Incorrect coverage mask for 8xMSAA */
 	BASE_HW_ISSUE_9423,
 
@@ -135,6 +141,18 @@ typedef enum base_hw_issue {
 	/* RA DCD load request to SDC returns invalid load ignore causing colour buffer mismatch */
 	BASE_HW_ISSUE_10327,
 
+	/* MAG / MIN filter selection happens after image descriptor clamps were applied */
+	BASE_HW_ISSUE_10472,
+
+	/* MMU TLB invalidation hazards */
+	BASE_HW_ISSUE_10649,
+
+	/* Missing cache flush in multi core-group configuration */
+	BASE_HW_ISSUE_10676,
+
+	/* Indexed format 95 cannot be used with a component swizzle of "set to 1" when sampled as integer texture */
+	BASE_HW_ISSUE_10682,
+
 	/* The BASE_HW_ISSUE_END value must be the last issue listed in this enumeration
 	 * and must be the last value in each array that contains the list of workarounds
 	 * for a particular HW version.
@@ -142,16 +160,15 @@ typedef enum base_hw_issue {
 	BASE_HW_ISSUE_END
 } base_hw_issue;
 
-
 /**
  * Workarounds configuration for each HW revision
  */
 /* Mali T60x r0p0-15dev0 - 2011-W39-stable-9 */
-static const base_hw_issue base_hw_issues_t60x_r0p0_15dev0[] =
-{
+static const base_hw_issue base_hw_issues_t60x_r0p0_15dev0[] = {
 	BASE_HW_ISSUE_6367,
 	BASE_HW_ISSUE_6402,
 	BASE_HW_ISSUE_6787,
+	BASE_HW_ISSUE_7027,
 	BASE_HW_ISSUE_7144,
 	BASE_HW_ISSUE_7393,
 	BASE_HW_ISSUE_8186,
@@ -160,6 +177,7 @@ static const base_hw_issue base_hw_issues_t60x_r0p0_15dev0[] =
 	BASE_HW_ISSUE_8260,
 	BASE_HW_ISSUE_8280,
 	BASE_HW_ISSUE_8316,
+	BASE_HW_ISSUE_8381,
 	BASE_HW_ISSUE_8394,
 	BASE_HW_ISSUE_8401,
 	BASE_HW_ISSUE_8408,
@@ -179,16 +197,20 @@ static const base_hw_issue base_hw_issues_t60x_r0p0_15dev0[] =
 	BASE_HW_ISSUE_9435,
 	BASE_HW_ISSUE_9510,
 	BASE_HW_ISSUE_9630,
+	BASE_HW_ISSUE_10472,
+	BASE_HW_ISSUE_10649,
+	BASE_HW_ISSUE_10676,
+	BASE_HW_ISSUE_10682,
 	/* List of hardware issues must end with BASE_HW_ISSUE_END */
 	BASE_HW_ISSUE_END
 };
 
 /* Mali T60x r0p0-00rel0 - 2011-W46-stable-13c */
-static const base_hw_issue base_hw_issues_t60x_r0p0_eac[] =
-{
+static const base_hw_issue base_hw_issues_t60x_r0p0_eac[] = {
 	BASE_HW_ISSUE_6367,
 	BASE_HW_ISSUE_6402,
 	BASE_HW_ISSUE_6787,
+	BASE_HW_ISSUE_7027,
 	BASE_HW_ISSUE_7393,
 	BASE_HW_ISSUE_8564,
 	BASE_HW_ISSUE_8803,
@@ -198,16 +220,20 @@ static const base_hw_issue base_hw_issues_t60x_r0p0_eac[] =
 	BASE_HW_ISSUE_9423,
 	BASE_HW_ISSUE_9435,
 	BASE_HW_ISSUE_9510,
+	BASE_HW_ISSUE_10472,
+	BASE_HW_ISSUE_10649,
+	BASE_HW_ISSUE_10676,
+	BASE_HW_ISSUE_10682,
 	/* List of hardware issues must end with BASE_HW_ISSUE_END */
 	BASE_HW_ISSUE_END
 };
 
 /* Mali T60x r0p1 */
-static const base_hw_issue base_hw_issues_t60x_r0p1[] =
-{
+static const base_hw_issue base_hw_issues_t60x_r0p1[] = {
 	BASE_HW_ISSUE_6367,
 	BASE_HW_ISSUE_6402,
 	BASE_HW_ISSUE_6787,
+	BASE_HW_ISSUE_7027,
 	BASE_HW_ISSUE_7393,
 	BASE_HW_ISSUE_8564,
 	BASE_HW_ISSUE_8803,
@@ -216,16 +242,20 @@ static const base_hw_issue base_hw_issues_t60x_r0p1[] =
 	BASE_HW_ISSUE_9275,
 	BASE_HW_ISSUE_9435,
 	BASE_HW_ISSUE_9510,
+	BASE_HW_ISSUE_10472,
+	BASE_HW_ISSUE_10649,
+	BASE_HW_ISSUE_10676,
+	BASE_HW_ISSUE_10682,
 	/* List of hardware issues must end with BASE_HW_ISSUE_END */
 	BASE_HW_ISSUE_END
 };
 
 /* Mali T65x r0p1 */
-static const base_hw_issue base_hw_issues_t65x_r0p1[] =
-{
+static const base_hw_issue base_hw_issues_t65x_r0p1[] = {
 	BASE_HW_ISSUE_6367,
 	BASE_HW_ISSUE_6402,
 	BASE_HW_ISSUE_6787,
+	BASE_HW_ISSUE_7027,
 	BASE_HW_ISSUE_7393,
 	BASE_HW_ISSUE_8564,
 	BASE_HW_ISSUE_8803,
@@ -234,32 +264,94 @@ static const base_hw_issue base_hw_issues_t65x_r0p1[] =
 	BASE_HW_ISSUE_9275,
 	BASE_HW_ISSUE_9435,
 	BASE_HW_ISSUE_9510,
+	BASE_HW_ISSUE_10472,
+	BASE_HW_ISSUE_10649,
+	BASE_HW_ISSUE_10676,
+	BASE_HW_ISSUE_10682,
 	/* List of hardware issues must end with BASE_HW_ISSUE_END */
 	BASE_HW_ISSUE_END
 };
 
 /* Mali T62x r0p0 */
-static const base_hw_issue base_hw_issues_t62x_r0p0[] =
-{
+static const base_hw_issue base_hw_issues_t62x_r0p0[] = {
 	BASE_HW_ISSUE_6402,
 	BASE_HW_ISSUE_8803,
-	BASE_HW_ISSUE_8975,
 	BASE_HW_ISSUE_9435,
 	BASE_HW_ISSUE_10327,
+	BASE_HW_ISSUE_10472,
+	BASE_HW_ISSUE_10649,
+	BASE_HW_ISSUE_10676,
+	BASE_HW_ISSUE_10682,
 	/* List of hardware issues must end with BASE_HW_ISSUE_END */
 	BASE_HW_ISSUE_END
 };
 
 /* Mali T67x r0p0 */
-static const base_hw_issue base_hw_issues_t67x_r0p0[] =
-{
+static const base_hw_issue base_hw_issues_t67x_r0p0[] = {
 	BASE_HW_ISSUE_6402,
 	BASE_HW_ISSUE_8803,
-	BASE_HW_ISSUE_8975,
 	BASE_HW_ISSUE_9435,
 	BASE_HW_ISSUE_10327,
+	BASE_HW_ISSUE_10472,
+	BASE_HW_ISSUE_10649,
+	BASE_HW_ISSUE_10676,
+	BASE_HW_ISSUE_10682,
 	/* List of hardware issues must end with BASE_HW_ISSUE_END */
 	BASE_HW_ISSUE_END
 };
 
-#endif /* _BASE_HWCONFIG_H_ */
+/* Mali T62x r0p1 */
+static const base_hw_issue base_hw_issues_t62x_r0p1[] = {
+	BASE_HW_ISSUE_6402,
+	BASE_HW_ISSUE_8803,
+	BASE_HW_ISSUE_8975,
+	BASE_HW_ISSUE_9435,
+    BASE_HW_ISSUE_10327,
+	BASE_HW_ISSUE_10472,
+	BASE_HW_ISSUE_10649,
+	BASE_HW_ISSUE_10676,
+	BASE_HW_ISSUE_10682,
+	/* List of hardware issues must end with BASE_HW_ISSUE_END */
+	BASE_HW_ISSUE_END
+};
+
+/* Mali T67x r0p1 */
+static const base_hw_issue base_hw_issues_t67x_r0p1[] = {
+	BASE_HW_ISSUE_6402,
+	BASE_HW_ISSUE_8803,
+	BASE_HW_ISSUE_8975,
+	BASE_HW_ISSUE_9435,
+    BASE_HW_ISSUE_10327,
+	BASE_HW_ISSUE_10472,
+	BASE_HW_ISSUE_10649,
+	BASE_HW_ISSUE_10676,
+	BASE_HW_ISSUE_10682,
+	/* List of hardware issues must end with BASE_HW_ISSUE_END */
+	BASE_HW_ISSUE_END
+};
+
+/* Mali T62x r1p0 */
+static const base_hw_issue base_hw_issues_t62x_r1p0[] = {
+        BASE_HW_ISSUE_6402,
+        BASE_HW_ISSUE_8803,
+        BASE_HW_ISSUE_8975,
+        BASE_HW_ISSUE_9435,
+        BASE_HW_ISSUE_10472,
+        BASE_HW_ISSUE_10649,
+        /* List of hardware issues must end with BASE_HW_ISSUE_END */
+        BASE_HW_ISSUE_END
+};
+
+/* Mali T67x r1p0 */
+static const base_hw_issue base_hw_issues_t67x_r1p0[] = {
+        BASE_HW_ISSUE_6402,
+        BASE_HW_ISSUE_8803,
+        BASE_HW_ISSUE_8975,
+        BASE_HW_ISSUE_9435,
+        BASE_HW_ISSUE_10472,
+        BASE_HW_ISSUE_10649,
+        /* List of hardware issues must end with BASE_HW_ISSUE_END */
+        BASE_HW_ISSUE_END
+};
+
+#endif				/* _BASE_HWCONFIG_H_ */

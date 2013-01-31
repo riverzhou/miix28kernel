@@ -25,8 +25,7 @@
 #define KBASE_GPU_SPEED_MHZ    123
 #define KBASE_GPU_PC_SIZE_LOG2 16U
 
-typedef struct kbase_gpuprops_regdump
-{
+typedef struct kbase_gpuprops_regdump {
 	u32 gpu_id;
 	u32 l2_features;
 	u32 l3_features;
@@ -51,28 +50,24 @@ typedef struct kbase_gpuprops_regdump
 
 	u32 l3_present_lo;
 	u32 l3_present_hi;
-}kbase_gpuprops_regdump;
+} kbase_gpuprops_regdump;
 
-typedef struct kbase_gpu_cache_props
-{
+typedef struct kbase_gpu_cache_props {
 	u8 associativity;
 	u8 external_bus_width;
-}kbase_gpu_cache_props;
+} kbase_gpu_cache_props;
 
-typedef struct kbase_gpu_mem_props
-{
+typedef struct kbase_gpu_mem_props {
 	u8 core_group;
 	u8 supergroup;
-}kbase_gpu_mem_props;
+} kbase_gpu_mem_props;
 
-typedef struct kbase_gpu_mmu_props
-{
+typedef struct kbase_gpu_mmu_props {
 	u8 va_bits;
 	u8 pa_bits;
-}kbase_gpu_mmu_props;
+} kbase_gpu_mmu_props;
 
-typedef struct mali_kbase_gpu_props
-{
+typedef struct mali_kbase_gpu_props {
 	/* kernel-only properties */
 	u8 num_cores;
 	u8 num_core_groups;
@@ -93,8 +88,6 @@ typedef struct mali_kbase_gpu_props
 
 	/* Properties shared with userspace */
 	base_gpu_props props;
-}kbase_gpu_props;
+} kbase_gpu_props;
 
-
-
-#endif /* _KBASE_GPUPROPS_TYPES_H_ */
+#endif				/* _KBASE_GPUPROPS_TYPES_H_ */

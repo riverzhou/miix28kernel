@@ -22,7 +22,7 @@
 
 void kbase_pm_register_vsync_callback(kbase_device *kbdev)
 {
-	OSK_ASSERT(kbdev != NULL);
+	KBASE_DEBUG_ASSERT(kbdev != NULL);
 
 	/* no VSync metrics will be available */
 	kbdev->pm.metrics.platform_data = NULL;
@@ -30,5 +30,5 @@ void kbase_pm_register_vsync_callback(kbase_device *kbdev)
 
 void kbase_pm_unregister_vsync_callback(kbase_device *kbdev)
 {
-	OSK_ASSERT(kbdev != NULL);
+	KBASE_DEBUG_ASSERT(kbdev != NULL);
 }

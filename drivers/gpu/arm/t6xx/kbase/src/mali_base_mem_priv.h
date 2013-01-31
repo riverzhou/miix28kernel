@@ -36,12 +36,12 @@
  *	- size = the amount of data to be synced, in bytes.
  *	- offset is ignored.
  */
-typedef struct basep_syncset
-{
-	mali_addr64 mem_handle;
-	u64         user_addr;
-	u32         size;
-	u8          type;
+typedef struct basep_syncset {
+	base_mem_handle mem_handle;
+	u64 user_addr;
+	u64 size;
+	u8 type;
+	u8 padding[7];
 } basep_syncset;
 
 #endif
