@@ -81,7 +81,7 @@ static int jd_run_atom(kbase_jd_atom *katom)
 			/* The job has not completed */
 			kbasep_list_trace_add(2, kctx->kbdev, katom, &kctx->waiting_soft_jobs, KBASE_TRACE_LIST_ADD, KBASE_TRACE_LIST_WAITING_SOFT_JOBS);
 			OSK_DLIST_PUSH_BACK(&kctx->waiting_soft_jobs, katom,
-			                    kbase_jd_atom, dep_item[0]);
+			                    kbase_jd_atom, waiting_soft_jobs_item);
 		}
 		return 0;
 	}
@@ -552,7 +552,7 @@ STATIC INLINE void jd_resolve_dep(osk_dlist *out_list, kbase_jd_atom *katom, u8 
 			dep_atom->status = KBASE_JD_ATOM_STATE_COMPLETED;
 
 			kbasep_list_trace_add(5, dep_atom->kctx->kbdev, dep_atom, out_list, KBASE_TRACE_LIST_ADD, KBASE_TRACE_LIST_RUNNABLE_JOBS);
-			OSK_DLIST_PUSH_FRONT(out_list, dep_atom, kbase_jd_atom, dep_item[0]);
+			OSK_DLIST_PUSH_FRONT(out_list, dep_atom, kbase_jd_atom, runnable_jobs_item);
 		}
 		else if (!dep_atom->dep_atom[other_d])
 		{
@@ -561,7 +561,7 @@ STATIC INLINE void jd_resolve_dep(osk_dlist *out_list, kbase_jd_atom *katom, u8 
 #endif
 			{
 				kbasep_list_trace_add(6, dep_atom->kctx->kbdev, dep_atom, out_list, KBASE_TRACE_LIST_ADD, KBASE_TRACE_LIST_RUNNABLE_JOBS);
-				OSK_DLIST_PUSH_FRONT(out_list, dep_atom, kbase_jd_atom, dep_item[0]);
+				OSK_DLIST_PUSH_FRONT(out_list, dep_atom, kbase_jd_atom, runnable_jobs_item);
 			}
 		}
 	}
@@ -609,14 +609,14 @@ mali_bool jd_done_nolock(kbase_jd_atom *katom)
 
 	katom->status = KBASE_JD_ATOM_STATE_COMPLETED;
 	kbasep_list_trace_add(8, katom->kctx->kbdev, katom, &completed_jobs, KBASE_TRACE_LIST_ADD, KBASE_TRACE_LIST_COMPLETED_JOBS);
-	OSK_DLIST_PUSH_BACK(&completed_jobs, katom, kbase_jd_atom, dep_item[0]);
+	OSK_DLIST_PUSH_BACK(&completed_jobs, katom, kbase_jd_atom, completed_jobs_item);
 
 	while(!OSK_DLIST_IS_EMPTY(&completed_jobs))
 	{
 		int err;
-		kbase_jd_atom *katom_aux = OSK_DLIST_BACK(&completed_jobs, kbase_jd_atom, dep_item[0]);
+		kbase_jd_atom *katom_aux = OSK_DLIST_BACK(&completed_jobs, kbase_jd_atom, completed_jobs_item);
 		kbasep_list_trace_add(9, katom_aux->kctx->kbdev, katom_aux, &completed_jobs, KBASE_TRACE_LIST_DEL, KBASE_TRACE_LIST_COMPLETED_JOBS);
-		katom = OSK_DLIST_POP_BACK(&completed_jobs, kbase_jd_atom, dep_item[0], err);
+		katom = OSK_DLIST_POP_BACK(&completed_jobs, kbase_jd_atom, completed_jobs_item, err);
 		if (err) {
 			kbasep_list_trace_dump(katom->kctx->kbdev);
 			BUG();
@@ -632,9 +632,9 @@ mali_bool jd_done_nolock(kbase_jd_atom *katom)
 		{
 			int err;
 			kbase_jd_atom *node;
-			kbase_jd_atom *katom_aux = OSK_DLIST_BACK(&runnable_jobs, kbase_jd_atom, dep_item[0]);
+			kbase_jd_atom *katom_aux = OSK_DLIST_BACK(&runnable_jobs, kbase_jd_atom, runnable_jobs_item);
 			kbasep_list_trace_add(10, katom_aux->kctx->kbdev, katom_aux, &runnable_jobs, KBASE_TRACE_LIST_DEL, KBASE_TRACE_LIST_RUNNABLE_JOBS);
-			node = OSK_DLIST_POP_BACK(&runnable_jobs, kbase_jd_atom, dep_item[0], err);
+			node = OSK_DLIST_POP_BACK(&runnable_jobs, kbase_jd_atom, runnable_jobs_item, err);
 			if (err) {
 				kbasep_list_trace_dump(node->kctx->kbdev);
 				BUG();
@@ -659,7 +659,7 @@ mali_bool jd_done_nolock(kbase_jd_atom *katom)
 			if (node->status == KBASE_JD_ATOM_STATE_COMPLETED)
 			{
 				kbasep_list_trace_add(11, node->kctx->kbdev, node, &completed_jobs, KBASE_TRACE_LIST_ADD, KBASE_TRACE_LIST_COMPLETED_JOBS);
-				OSK_DLIST_PUSH_BACK(&completed_jobs, node, kbase_jd_atom, dep_item[0]);
+				OSK_DLIST_PUSH_BACK(&completed_jobs, node, kbase_jd_atom, completed_jobs_item);
 			}
 		}
 
@@ -888,7 +888,7 @@ static mali_bool jd_submit_atom(kbase_context *kctx, const base_jd_atom_v2 *user
 		}
 		/* The job has not yet completed */
 		kbasep_list_trace_add(14, kctx->kbdev, katom, &kctx->waiting_soft_jobs, KBASE_TRACE_LIST_ADD, KBASE_TRACE_LIST_WAITING_SOFT_JOBS);
-		OSK_DLIST_PUSH_BACK(&kctx->waiting_soft_jobs, katom, kbase_jd_atom, dep_item[0]);
+		OSK_DLIST_PUSH_BACK(&kctx->waiting_soft_jobs, katom, kbase_jd_atom, waiting_soft_jobs_item);
 		ret = MALI_FALSE;
 	}
 	else if ((katom->core_req & BASEP_JD_REQ_ATOM_TYPE) != BASE_JD_REQ_DEP)
@@ -1264,7 +1264,7 @@ void kbase_jd_zap_context(kbase_context *kctx)
 	kbase_job_zap_context(kctx);
 
 	mutex_lock(&kctx->jctx.lock);
-	OSK_DLIST_FOREACH(&kctx->waiting_soft_jobs, kbase_jd_atom, dep_item[0], katom)
+	OSK_DLIST_FOREACH(&kctx->waiting_soft_jobs, kbase_jd_atom, waiting_soft_jobs_item, katom)
 	{
 		kbase_cancel_soft_job(katom);
 	}

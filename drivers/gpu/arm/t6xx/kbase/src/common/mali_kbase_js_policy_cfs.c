@@ -917,7 +917,7 @@ static enum hrtimer_restart timer_callback( struct hrtimer * timer )
 
 	if (reset_needed)
 	{
-		OSK_PRINT_WARN(OSK_BASE_JM, "JS: Job has been on the GPU for too long");
+		OSK_PRINT_ERROR(OSK_BASE_JM, "JS: Job has been on the GPU for too long");
 		if (kbase_prepare_to_reset_gpu_locked(kbdev))
 		{
 			kbase_reset_gpu_locked(kbdev);

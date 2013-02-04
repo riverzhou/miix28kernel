@@ -76,9 +76,9 @@ int kbase_event_dequeue(kbase_context *ctx, base_jd_event_v2 *uevent)
 	}
 
 	/* normal event processing */
-	trace_atom = OSK_DLIST_FRONT(&ctx->event_list, kbase_jd_atom, dep_item[0]);
+	trace_atom = OSK_DLIST_FRONT(&ctx->event_list, kbase_jd_atom, event_item);
 	kbasep_list_trace_add(0, ctx->kbdev, trace_atom, &ctx->event_list, KBASE_TRACE_LIST_DEL, KBASE_TRACE_LIST_EVENT_LIST);
-	atom = OSK_DLIST_POP_FRONT(&ctx->event_list, kbase_jd_atom, dep_item[0], err);
+	atom = OSK_DLIST_POP_FRONT(&ctx->event_list, kbase_jd_atom, event_item, err);
 	if (err) {
 		kbasep_list_trace_dump(ctx->kbdev);
 		BUG();
@@ -117,7 +117,7 @@ static void kbase_event_post_worker(osk_workq_work *data)
 
 	kbasep_list_trace_add(1, ctx->kbdev, atom, &ctx->event_list, KBASE_TRACE_LIST_ADD, KBASE_TRACE_LIST_EVENT_LIST);
 	mutex_lock(&ctx->event_mutex);
-	OSK_DLIST_PUSH_BACK(&ctx->event_list, atom, kbase_jd_atom, dep_item[0]);
+	OSK_DLIST_PUSH_BACK(&ctx->event_list, atom, kbase_jd_atom, event_item);
 	mutex_unlock(&ctx->event_mutex);
 
 	kbase_event_wakeup(ctx);
