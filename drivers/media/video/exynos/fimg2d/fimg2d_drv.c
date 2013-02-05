@@ -118,25 +118,39 @@ static void fimg2d_request_bitblt(struct fimg2d_context *ctx)
 static int fimg2d_open(struct inode *inode, struct file *file)
 {
 	struct fimg2d_context *ctx;
+	int ret = 0;
+
+	mutex_lock(&info->open_lock);
+
+	if (atomic_read(&info->nctx)) {
+		dev_err(info->dev, "already open\n");
+		ret = -EBUSY;
+		goto out;
+	}
 
 	ctx = kzalloc(sizeof(*ctx), GFP_KERNEL);
 	if (!ctx) {
 		printk(KERN_ERR "[%s] not enough memory for ctx\n", __func__);
-		return -ENOMEM;
+		ret = -ENOMEM;
+		goto out;
 	}
 	file->private_data = (void *)ctx;
 
 	fimg2d_add_context(info, ctx);
-	return 0;
+out:
+	mutex_unlock(&info->open_lock);
+	return ret;
 }
 
 static int fimg2d_release(struct inode *inode, struct file *file)
 {
 	struct fimg2d_context *ctx = file->private_data;
 
+	mutex_lock(&info->open_lock);
 	fimg2d_debug("ctx %p\n", ctx);
 	fimg2d_context_wait(ctx);
 	fimg2d_del_context(info, ctx);
+	mutex_unlock(&info->open_lock);
 
 	kfree(ctx);
 	return 0;
@@ -241,6 +255,7 @@ static int fimg2d_setup_controller(struct fimg2d_control *info)
 	atomic_set(&info->active, 0);
 
 	spin_lock_init(&info->bltlock);
+	mutex_init(&info->open_lock);
 
 	INIT_LIST_HEAD(&info->cmd_q);
 	init_waitqueue_head(&info->wait_q);

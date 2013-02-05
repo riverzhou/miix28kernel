@@ -23,6 +23,7 @@
 #include <linux/atomic.h>
 #include <linux/dma-mapping.h>
 #include <linux/dma-buf.h>
+#include <linux/mutex.h>
 
 #define FIMG2D_MINOR			(240)
 #define to_fimg2d_plat(d)		(to_platform_device(d)->dev.platform_data)
@@ -445,6 +446,7 @@ struct fimg2d_control {
 	atomic_t busy;
 	atomic_t active;
 	spinlock_t bltlock;
+	struct mutex open_lock;
 	wait_queue_head_t wait_q;
 	struct list_head cmd_q;
 	struct workqueue_struct *work_q;
