@@ -29,6 +29,7 @@
 #include <asm/cacheflush.h>
 #include <plat/cpu.h>
 #include <plat/fimg2d.h>
+#include <plat/iovmm.h>
 #include <plat/sysmmu.h>
 #ifdef CONFIG_PM_RUNTIME
 #include <linux/pm_runtime.h>
@@ -83,12 +84,6 @@ static int fimg2d_sysmmu_fault_handler(struct device *dev,
 		goto next;
 	}
 
-	if (cmd->ctx->mm->pgd != phys_to_virt(pgtable_base)) {
-		printk(KERN_ERR "[%s] pgtable base is different from current command\n",
-				__func__);
-		goto next;
-	}
-
 	fimg2d_dump_command(cmd);
 
 next:
@@ -123,35 +118,39 @@ static void fimg2d_request_bitblt(struct fimg2d_context *ctx)
 static int fimg2d_open(struct inode *inode, struct file *file)
 {
 	struct fimg2d_context *ctx;
+	int ret = 0;
+
+	mutex_lock(&info->open_lock);
+
+	if (atomic_read(&info->nctx)) {
+		dev_err(info->dev, "already open\n");
+		ret = -EBUSY;
+		goto out;
+	}
 
 	ctx = kzalloc(sizeof(*ctx), GFP_KERNEL);
 	if (!ctx) {
 		printk(KERN_ERR "[%s] not enough memory for ctx\n", __func__);
-		return -ENOMEM;
+		ret = -ENOMEM;
+		goto out;
 	}
 	file->private_data = (void *)ctx;
 
-	ctx->mm = current->mm;
-	fimg2d_debug("ctx %p current pgd %p init_mm pgd %p\n",
-			ctx, (unsigned long *)ctx->mm->pgd,
-			(unsigned long *)init_mm.pgd);
-
 	fimg2d_add_context(info, ctx);
-	return 0;
+out:
+	mutex_unlock(&info->open_lock);
+	return ret;
 }
 
 static int fimg2d_release(struct inode *inode, struct file *file)
 {
 	struct fimg2d_context *ctx = file->private_data;
 
+	mutex_lock(&info->open_lock);
 	fimg2d_debug("ctx %p\n", ctx);
-	while (1) {
-		if (!atomic_read(&ctx->ncmd))
-			break;
-
-		mdelay(2);
-	}
+	fimg2d_context_wait(ctx);
 	fimg2d_del_context(info, ctx);
+	mutex_unlock(&info->open_lock);
 
 	kfree(ctx);
 	return 0;
@@ -172,10 +171,8 @@ static long fimg2d_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 	int ret = 0;
 	struct fimg2d_context *ctx;
 	struct fimg2d_platdata *pdata;
-	union {
-		struct fimg2d_blit *blit;
-		struct fimg2d_version ver;
-	} u;
+	struct fimg2d_blit blit;
+	struct fimg2d_version ver;
 
 	ctx = file->private_data;
 	if (!ctx) {
@@ -185,16 +182,27 @@ static long fimg2d_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 
 	switch (cmd) {
 	case FIMG2D_BITBLT_BLIT:
-		fimg2d_debug("FIMG2D_BITBLT_BLIT ctx: %p\n", ctx);
-		u.blit = (struct fimg2d_blit *)arg;
+		if (info->err) {
+			printk(KERN_ERR "[%s] device error, do sw fallback\n",
+					__func__);
+			return -EFAULT;
+		}
 
-		ret = fimg2d_add_command(info, ctx, u.blit);
+		if (copy_from_user(&blit, (void *)arg, sizeof(blit)))
+			return -EFAULT;
+
+		ret = iovmm_activate(info->dev);
+		if (ret < 0) {
+			dev_err(info->dev, "failed to activate vmm\n");
+			return ret;
+		}
+
+		ret = fimg2d_add_command(info, ctx, &blit);
 		if (!ret)
 			fimg2d_request_bitblt(ctx);
-#ifdef PERF_PROFILE
-		perf_print(ctx, u.blit->seq_no);
-		perf_clear(ctx);
-#endif
+
+		iovmm_deactivate(info->dev);
+
 		break;
 
 	case FIMG2D_BITBLT_SYNC:
@@ -203,12 +211,12 @@ static long fimg2d_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		break;
 
 	case FIMG2D_BITBLT_VERSION:
-		fimg2d_debug("FIMG2D_BITBLT_VERSION ctx: %p\n", ctx);
 		pdata = to_fimg2d_plat(info->dev);
-		u.ver.hw = pdata->hw_ver;
-		u.ver.sw = 0;
-		fimg2d_debug("fimg2d version, hw: 0x%x sw: 0x%x\n", u.ver.hw, u.ver.sw);
-		if (copy_to_user((void *)arg, &u.ver, sizeof(u.ver)))
+		ver.hw = pdata->hw_ver;
+		ver.sw = 0;
+		fimg2d_debug("fimg2d version, hw: 0x%x sw: 0x%x\n",
+				ver.hw, ver.sw);
+		if (copy_to_user((void *)arg, &ver, sizeof(ver)))
 			return -EFAULT;
 		break;
 
@@ -247,6 +255,7 @@ static int fimg2d_setup_controller(struct fimg2d_control *info)
 	atomic_set(&info->active, 0);
 
 	spin_lock_init(&info->bltlock);
+	mutex_init(&info->open_lock);
 
 	INIT_LIST_HEAD(&info->cmd_q);
 	init_waitqueue_head(&info->wait_q);

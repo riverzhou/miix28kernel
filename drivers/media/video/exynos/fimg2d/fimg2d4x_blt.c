@@ -26,8 +26,10 @@
 #include "fimg2d_clk.h"
 #include "fimg2d4x.h"
 #include "fimg2d_ctx.h"
-#include "fimg2d_cache.h"
 #include "fimg2d_helper.h"
+
+#define CREATE_TRACE_POINTS
+#include "fimg2d_trace.h"
 
 #define BLIT_TIMEOUT	msecs_to_jiffies(2000)
 
@@ -51,7 +53,7 @@ void fimg2d4x_bitblt(struct fimg2d_control *info)
 {
 	struct fimg2d_context *ctx;
 	struct fimg2d_bltcmd *cmd;
-	unsigned long *pgd;
+	int ret;
 
 	fimg2d_debug("enter blitter\n");
 
@@ -70,41 +72,23 @@ void fimg2d4x_bitblt(struct fimg2d_control *info)
 
 		atomic_set(&info->busy, 1);
 
-		info->configure(info, cmd);
-
-		if (cmd->image[IDST].addr.type != ADDR_PHYS) {
-			pgd = (unsigned long *)ctx->mm->pgd;
-			exynos_sysmmu_enable(info->dev, (unsigned long)virt_to_phys(pgd));
-			fimg2d_debug("sysmmu enable: pgd %p ctx %p seq_no(%u)\n",
-					pgd, ctx, cmd->seq_no);
-		}
+		ret = info->configure(info, cmd);
+		if (ret)
+			goto blitend;
 
 		fimg2d4x_pre_bitblt(info, cmd);
 
-#ifdef PERF_PROFILE
-		perf_start(cmd->ctx, PERF_BLIT);
-#endif
+		trace_fimg2d_bitblt_start(cmd->seq_no);
 		/* start blit */
 		info->run(info);
 		fimg2d4x_blit_wait(info, cmd);
-
-#ifdef PERF_PROFILE
-		perf_end(cmd->ctx, PERF_BLIT);
-#endif
-		if (cmd->image[IDST].addr.type != ADDR_PHYS) {
-			exynos_sysmmu_disable(info->dev);
-			fimg2d_debug("sysmmu disable\n");
-		}
+		trace_fimg2d_bitblt_end(cmd->seq_no);
 blitend:
-		spin_lock(&info->bltlock);
-		fimg2d_dequeue(&cmd->node);
-		kfree(cmd);
-		atomic_dec(&ctx->ncmd);
+		fimg2d_del_command(info, cmd);
 
 		/* wake up context */
 		if (!atomic_read(&ctx->ncmd))
-			wake_up(&ctx->wait_q);
-		spin_unlock(&info->bltlock);
+			wake_up_all(&ctx->wait_q);
 	}
 
 	atomic_set(&info->active, 0);
@@ -118,33 +102,42 @@ blitend:
 	fimg2d_debug("exit blitter\n");
 }
 
+static inline int is_opaque(enum color_format fmt)
+{
+	switch (fmt) {
+	case CF_ARGB_8888:
+	case CF_ARGB_1555:
+	case CF_ARGB_4444:
+		return 0;
+
+	default:
+		return 1;
+	}
+}
+
 static int fast_op(struct fimg2d_bltcmd *cmd)
 {
 	int sa, da, ga;
 	int fop = cmd->op;
-	struct fimg2d_image *sm, *dm;
+	struct fimg2d_image *src, *msk, *dst;
 	struct fimg2d_param *p = &cmd->param;
 
-	if (cmd->image[IMSK].addr.type != ADDR_NONE)
+	src = &cmd->image[ISRC];
+	msk = &cmd->image[IMSK];
+	dst = &cmd->image[IDST];
+
+	if (msk->addr.type)
 		return fop;
 
-	sm = &cmd->image[ISRC];
-	dm = &cmd->image[IDST];
+	ga = p->g_alpha;
+	da = is_opaque(dst->fmt) ? 0xff : 0;
 
-	if (sm->addr.type == ADDR_NONE)
+	if (!src->addr.type)
 		sa = (p->solid_color >> 24) & 0xff;
 	else
-		sa = is_opaque(sm->fmt) ? 0xff : 0;
-
-	da = is_opaque(dm->fmt) ? 0xff : 0;
-	ga = p->g_alpha;
+		sa = is_opaque(src->fmt) ? 0xff : 0;
 
 	switch (cmd->op) {
-	case BLIT_OP_SOLID_FILL:
-	case BLIT_OP_CLR:
-	case BLIT_OP_SRC:
-	case BLIT_OP_DST:
-		break;
 	case BLIT_OP_SRC_OVER:
 		/* Sc + (1-Sa)*Dc = Sc */
 		if (sa == 0xff && ga == 0xff)
@@ -153,7 +146,7 @@ static int fast_op(struct fimg2d_bltcmd *cmd)
 	case BLIT_OP_DST_OVER:
 		/* (1-Da)*Sc + Dc = Dc */
 		if (da == 0xff)
-			fop = BLIT_OP_DST;
+			fop = BLIT_OP_DST;	/* nop */
 		break;
 	case BLIT_OP_SRC_IN:
 		/* Da*Sc = Sc */
@@ -163,7 +156,7 @@ static int fast_op(struct fimg2d_bltcmd *cmd)
 	case BLIT_OP_DST_IN:
 		/* Sa*Dc = Dc */
 		if (sa == 0xff && ga == 0xff)
-			fop = BLIT_OP_DST;
+			fop = BLIT_OP_DST;	/* nop */
 		break;
 	case BLIT_OP_SRC_OUT:
 		/* (1-Da)*Sc = 0 */
@@ -183,27 +176,31 @@ static int fast_op(struct fimg2d_bltcmd *cmd)
 	case BLIT_OP_DST_ATOP:
 		/* (1-Da)*Sc + Sa*Dc = Dc */
 		if (sa == 0xff && da == 0xff && ga == 0xff)
-			fop = BLIT_OP_DST;
+			fop = BLIT_OP_DST;	/* nop */
 		break;
 	default:
 		break;
 	}
 
-	if (fop == BLIT_OP_SRC) {
-		if (sm->addr.type == ADDR_NONE && sa == 0xff && ga == 0xff)
-			fop = BLIT_OP_SOLID_FILL;
-	}
+	if (fop == BLIT_OP_SRC && !src->addr.type && ga == 0xff)
+		fop = BLIT_OP_SOLID_FILL;
 
 	return fop;
 }
 
-static void fimg2d4x_configure(struct fimg2d_control *info, struct fimg2d_bltcmd *cmd)
+static int fimg2d4x_configure(struct fimg2d_control *info,
+				struct fimg2d_bltcmd *cmd)
 {
 	int op;
 	enum image_sel srcsel, dstsel;
 	struct fimg2d_param *p = &cmd->param;
+	struct fimg2d_image *src, *msk, *dst;
 
 	fimg2d_debug("ctx %p seq_no(%u)\n", cmd->ctx, cmd->seq_no);
+
+	src = &cmd->image[ISRC];
+	msk = &cmd->image[IMSK];
+	dst = &cmd->image[IDST];
 
 	/* TODO: batch blit */
 	fimg2d4x_reset(info);
@@ -216,17 +213,16 @@ static void fimg2d4x_configure(struct fimg2d_control *info, struct fimg2d_bltcmd
 	switch (op) {
 	case BLIT_OP_SOLID_FILL:
 		srcsel = dstsel = IMG_FGCOLOR;
-		fimg2d4x_set_color_fill(info, p->solid_color);
+		fimg2d4x_set_fgcolor(info, p->solid_color);
 		break;
 	case BLIT_OP_CLR:
 		srcsel = dstsel = IMG_FGCOLOR;
 		fimg2d4x_set_color_fill(info, 0);
 		break;
 	case BLIT_OP_DST:
-		srcsel = IMG_FGCOLOR;
-		break;
+		return -1;	/* nop */
 	default:
-		if (cmd->image[ISRC].addr.type == ADDR_NONE) {
+		if (!src->addr.type) {
 			srcsel = IMG_FGCOLOR;
 			fimg2d4x_set_fgcolor(info, p->solid_color);
 		}
@@ -245,42 +241,45 @@ static void fimg2d4x_configure(struct fimg2d_control *info, struct fimg2d_bltcmd
 	fimg2d4x_set_dst_type(info, dstsel);
 
 	/* src */
-	if (cmd->image[ISRC].addr.type != ADDR_NONE) {
-		fimg2d4x_set_src_image(info, &cmd->image[ISRC]);
-		fimg2d4x_set_src_rect(info, &cmd->image[ISRC].rect);
+	if (src->addr.type) {
+		fimg2d4x_set_src_image(info, src, cmd->dma[ISRC]);
+		fimg2d4x_set_src_rect(info, &src->rect);
 		fimg2d4x_set_src_repeat(info, &p->repeat);
-		if (p->scaling.mode != NO_SCALING)
-			fimg2d4x_set_src_scaling(info, &p->scaling);
+		if (p->scaling.mode)
+			fimg2d4x_set_src_scaling(info, &p->scaling, &p->repeat);
 	}
 
 	/* msk */
-	if (cmd->image[IMSK].addr.type != ADDR_NONE) {
+	if (msk->addr.type) {
 		fimg2d4x_enable_msk(info);
-		fimg2d4x_set_msk_image(info, &cmd->image[IMSK]);
-		fimg2d4x_set_msk_rect(info, &cmd->image[IMSK].rect);
+		fimg2d4x_set_msk_image(info, msk, cmd->dma[IMSK]);
+		fimg2d4x_set_msk_rect(info, &msk->rect);
 		fimg2d4x_set_msk_repeat(info, &p->repeat);
-		if (p->scaling.mode != NO_SCALING)
-			fimg2d4x_set_msk_scaling(info, &p->scaling);
+		if (p->scaling.mode)
+			fimg2d4x_set_msk_scaling(info, &p->scaling, &p->repeat);
 	}
 
 	/* dst */
-	if (cmd->image[IDST].addr.type != ADDR_NONE) {
-		fimg2d4x_set_dst_image(info, &cmd->image[IDST]);
-		fimg2d4x_set_dst_rect(info, &cmd->image[IDST].rect);
-		fimg2d4x_enable_clipping(info, &cmd->image[IDST].rect);
+	if (dst->addr.type) {
+		fimg2d4x_set_dst_image(info, dst, cmd->dma[IDST]);
+		fimg2d4x_set_dst_rect(info, &dst->rect);
+		if (p->clipping.enable)
+			fimg2d4x_enable_clipping(info, &p->clipping);
 	}
 
 	/* bluescreen */
-	if (p->bluscr.mode != OPAQUE)
+	if (p->bluscr.mode)
 		fimg2d4x_set_bluescreen(info, &p->bluscr);
 
 	/* rotation */
-	if (p->rotate != ORIGIN)
+	if (p->rotate)
 		fimg2d4x_set_rotation(info, p->rotate);
 
 	/* dithering */
 	if (p->dither)
 		fimg2d4x_enable_dithering(info);
+
+	return 0;
 }
 
 static void fimg2d4x_run(struct fimg2d_control *info)
