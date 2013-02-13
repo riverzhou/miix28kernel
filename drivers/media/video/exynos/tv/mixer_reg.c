@@ -462,17 +462,21 @@ void mxr_reg_set_pixel_blend(struct mxr_device *mdev, int sub_mxr, int num,
 
 	if (sub_mxr == MXR_SUB_MIXER0 && num == MXR_LAYER_GRP0)
 		mxr_write_mask(mdev, MXR_GRAPHIC_CFG(0), val,
-				MXR_GRP_CFG_PIXEL_BLEND_EN);
+				MXR_GRP_CFG_PIXEL_BLEND_EN |
+				MXR_GRP_CFG_PRE_MUL_MODE);
 	else if (sub_mxr == MXR_SUB_MIXER0 && num == MXR_LAYER_GRP1)
 		mxr_write_mask(mdev, MXR_GRAPHIC_CFG(1), val,
-				MXR_GRP_CFG_PIXEL_BLEND_EN);
+				MXR_GRP_CFG_PIXEL_BLEND_EN |
+				MXR_GRP_CFG_PRE_MUL_MODE);
 #if defined(CONFIG_ARCH_EXYNOS5)
 	else if (sub_mxr == MXR_SUB_MIXER1 && num == MXR_LAYER_GRP0)
 		mxr_write_mask(mdev, MXR1_GRAPHIC_CFG(0), val,
-				MXR_GRP_CFG_PIXEL_BLEND_EN);
+				MXR_GRP_CFG_PIXEL_BLEND_EN |
+				MXR_GRP_CFG_PRE_MUL_MODE);
 	else if (sub_mxr == MXR_SUB_MIXER1 && num == MXR_LAYER_GRP1)
 		mxr_write_mask(mdev, MXR1_GRAPHIC_CFG(1), val,
-				MXR_GRP_CFG_PIXEL_BLEND_EN);
+				MXR_GRP_CFG_PIXEL_BLEND_EN |
+				MXR_GRP_CFG_PRE_MUL_MODE);
 #endif
 
 	mxr_vsync_set_update(mdev, MXR_ENABLE);

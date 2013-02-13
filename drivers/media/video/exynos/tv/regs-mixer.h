@@ -155,6 +155,7 @@
 
 /* bits for MXR_GRAPHICn_CFG */
 #define MXR_GRP_CFG_BLANK_KEY_OFF	(1 << 21)
+#define MXR_GRP_CFG_PRE_MUL_MODE	(1 << 20)
 #define MXR_GRP_CFG_LAYER_BLEND_EN	(1 << 17)
 #define MXR_GRP_CFG_PIXEL_BLEND_EN	(1 << 16)
 #define MXR_GRP_CFG_FORMAT_VAL(x)	MXR_MASK_VAL(x, 11, 8)
