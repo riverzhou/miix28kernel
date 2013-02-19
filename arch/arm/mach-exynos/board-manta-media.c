@@ -20,6 +20,7 @@
 #include <plat/cpu.h>
 #include <plat/devs.h>
 #include <plat/fimg2d.h>
+#include <plat/jpeg.h>
 
 #include <mach/exynos-ion.h>
 #include <mach/exynos-mfc.h>
@@ -80,6 +81,7 @@ void __init exynos5_manta_media_init(void)
 			 &exynos5_device_gsc3);
 
 	s5p_fimg2d_set_platdata(&fimg2d_data);
+	exynos5_jpeg_setup_clock(&s5p_device_jpeg.dev, 150000000);
 
 	platform_add_devices(media_devices, ARRAY_SIZE(media_devices));
 }
