@@ -479,7 +479,7 @@ static int manta_late_probe(struct snd_soc_card *card)
 	if (ret < 0)
 		dev_err(codec->dev, "Failed to set KEY_VOLUMEDOWN: %d\n", ret);
 
-	wm8958_mic_detect(codec, &machine->jack, NULL, NULL);
+	wm8958_mic_detect(codec, &machine->jack, NULL, NULL, NULL, NULL);
 
 	return 0;
 }
