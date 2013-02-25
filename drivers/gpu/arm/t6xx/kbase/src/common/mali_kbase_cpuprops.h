@@ -34,7 +34,7 @@ struct kbase_uk_cpuprops;
  * See @ref kbase_cpuprops_clock_speed_function for details on the parameters
  * and return value.
  */
-int kbase_cpuprops_get_default_clock_speed(u32 *clock_speed);
+int kbase_cpuprops_get_default_clock_speed(u32 * const clock_speed);
 
 /**
  * @brief Provides CPU properties data.
@@ -46,6 +46,6 @@ int kbase_cpuprops_get_default_clock_speed(u32 *clock_speed);
  *
  * @return MALI_ERROR_NONE on success. Any other value indicates failure.
  */
-mali_error kbase_cpuprops_uk_get_props(kbase_context *kctx, struct kbase_uk_cpuprops* kbase_props);
+mali_error kbase_cpuprops_uk_get_props(kbase_context *kctx, struct kbase_uk_cpuprops * const kbase_props);
 
 #endif /*_KBASE_CPUPROPS_H_*/

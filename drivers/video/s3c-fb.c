@@ -2157,7 +2157,7 @@ static int s3c_fb_get_user_ion_handle(struct s3c_fb *sfb,
 				struct s3c_fb_user_ion_client *user_ion_client)
 {
 	/* Create fd for ion_buffer */
-	user_ion_client->fd = ion_share_dma_buf(sfb->fb_ion_client,
+	user_ion_client->fd = ion_share_dma_buf_fd(sfb->fb_ion_client,
 					win->dma_buf_data.ion_handle);
 	if (user_ion_client->fd < 0) {
 		pr_err("ion_share_fd failed\n");
@@ -2399,7 +2399,7 @@ static int __devinit s3c_fb_alloc_memory(struct s3c_fb *sfb,
 		return -ENOMEM;
 	}
 
-	fd = ion_share_dma_buf(sfb->fb_ion_client, handle);
+	fd = ion_share_dma_buf_fd(sfb->fb_ion_client, handle);
 	if (fd < 0) {
 		dev_err(sfb->dev, "ion_share_dma_buf() failed\n");
 		goto err_share_dma_buf;

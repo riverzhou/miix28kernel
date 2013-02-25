@@ -49,8 +49,7 @@
 /**
  * Relative memory performance indicators. Enum elements should always be defined in slowest to fastest order.
  */
-typedef enum kbase_memory_performance
-{
+typedef enum kbase_memory_performance {
 	KBASE_MEM_PERF_SLOW,
 	KBASE_MEM_PERF_NORMAL,
 	KBASE_MEM_PERF_FAST,
@@ -61,8 +60,7 @@ typedef enum kbase_memory_performance
 /**
  * Device wide configuration
  */
-enum
-{
+enum {
 	/**
 	 * Invalid attribute ID (reserve 0).
 	 *
@@ -448,6 +446,49 @@ enum
 	KBASE_CONFIG_ATTR_PLATFORM_FUNCS,
 
 	/**
+	 * Limit ARID width on the AXI bus.
+	 *
+	 * Attached value: u32 register value
+	 *    KBASE_AID_32 - use the full 32 IDs (5 ID bits)
+	 *    KBASE_AID_16 - use 16 IDs (4 ID bits)
+	 *    KBASE_AID_8  - use 8 IDs (3 ID bits)
+	 *    KBASE_AID_4  - use 4 IDs (2 ID bits)
+	 * Default value: KBASE_AID_32 (no limit). Note hardware implementation
+	 * may limit to a lower value.
+	 */
+	KBASE_CONFIG_ATTR_ARID_LIMIT,
+
+	/**
+	 * Limit AWID width on the AXI bus.
+	 *
+	 * Attached value: u32 register value
+	 *    KBASE_AID_32 - use the full 32 IDs (5 ID bits)
+	 *    KBASE_AID_16 - use 16 IDs (4 ID bits)
+	 *    KBASE_AID_8  - use 8 IDs (3 ID bits)
+	 *    KBASE_AID_4  - use 4 IDs (2 ID bits)
+	 * Default value: KBASE_AID_32 (no limit). Note hardware implementation
+	 * may limit to a lower value.
+	 */
+	KBASE_CONFIG_ATTR_AWID_LIMIT,
+
+	/**
+	 * Enable alternative hardware counter capture for the Mali shader cores.
+	 *
+	 * Attached value: mali_bool value
+	 * Default value: @ref MALI_FALSE
+	 */
+	KBASE_CONFIG_ATTR_ALTERNATIVE_HWC,
+
+	/**
+	 * Rate at which dvfs data should be collected.
+	 *
+	 * Attached value: u32 value
+	 * Default value: 500 Milliseconds
+	 */
+
+	KBASE_CONFIG_ATTR_POWER_MANAGEMENT_DVFS_FREQ,
+
+	/**
 	 * End of attribute list indicator.
 	 * The configuration loader will stop processing any more elements
 	 * when it encounters this attribute.
@@ -458,8 +499,7 @@ enum
 	KBASE_CONFIG_ATTR_END = 0x1FFFUL
 };
 
-enum
-{
+enum {
 	/**
 	 * Invalid attribute ID (reserve 0).
 	 *
@@ -497,14 +537,37 @@ enum
 	KBASE_MEM_ATTR_END = 0x1FFFUL
 };
 
+enum {
+	/**
+	 * Use unrestricted Address ID width on the AXI bus.
+	 */
+	KBASE_AID_32 = 0x0,
+
+	/**
+	 * Restrict GPU to a half of maximum Address ID count.
+	 * This will reduce performance, but reduce bus load due to GPU.
+	 */
+	KBASE_AID_16 = 0x3,
+
+	/**
+	 * Restrict GPU to a quarter of maximum Address ID count.
+	 * This will reduce performance, but reduce bus load due to GPU.
+	 */
+	KBASE_AID_8  = 0x2,
+
+	/**
+	 * Restrict GPU to an eighth of maximum Address ID count.
+	 * This will reduce performance, but reduce bus load due to GPU.
+	 */
+	KBASE_AID_4  = 0x1
+};
 
 /*
  * @brief specifies a single attribute
  *
  * Attribute is identified by attr field. Data is either integer or a pointer to attribute-specific structure.
  */
-typedef struct kbase_attribute
-{
+typedef struct kbase_attribute {
 	int id;
 	uintptr_t data;
 } kbase_attribute;
@@ -514,12 +577,11 @@ typedef struct kbase_attribute
  *
  * Specifies base, size and attributes of a memory bank
  */
-typedef struct kbase_memory_resource
-{
+typedef struct kbase_memory_resource {
 	u64 base;
 	u64 size;
-	struct kbase_attribute * attributes;
-	const char * name;
+	struct kbase_attribute *attributes;
+	const char *name;
 } kbase_memory_resource;
 
 /* Forward declaration of kbase_device */
@@ -530,22 +592,21 @@ struct kbase_device;
  *
  * By default no functions are required. No additional platform specific control is necessary.
  */
-typedef struct kbase_platform_funcs_conf
-{
+typedef struct kbase_platform_funcs_conf {
 	/**
 	 * Function pointer for platform specific initialization or NULL if no initialization function is required.
 	 * This function will be called \em before any other callbacks listed in the kbase_attribute struct (such as
 	 * Power Management callbacks).
 	 * The platform specific private pointer kbase_device::platform_context can be accessed (and possibly initialized) in here.
 	 */
-	mali_bool (*platform_init_func)(struct kbase_device *kbdev);
+	mali_bool(*platform_init_func) (struct kbase_device *kbdev);
 	/**
 	 * Function pointer for platform specific termination or NULL if no termination function is required.
 	 * This function will be called \em after any other callbacks listed in the kbase_attribute struct (such as
 	 * Power Management callbacks).
 	 * The platform specific private pointer kbase_device::platform_context can be accessed (and possibly terminated) in here.
 	 */
-	void (*platform_term_func)(struct kbase_device *kbdev);
+	void (*platform_term_func) (struct kbase_device *kbdev);
 
 } kbase_platform_funcs_conf;
 
@@ -554,8 +615,7 @@ typedef struct kbase_platform_funcs_conf
  *
  * By default no callbacks will be made and the GPU must not be powered off.
  */
-typedef struct kbase_pm_callback_conf
-{
+typedef struct kbase_pm_callback_conf {
 	/** Callback for when the GPU is idle and the power to it can be switched off.
 	 *
 	 * The system integrator can decide whether to either do nothing, just switch off
@@ -563,7 +623,7 @@ typedef struct kbase_pm_callback_conf
 	 * The platform specific private pointer kbase_device::platform_context can be accessed and modified in here. It is the
 	 * platform \em callbacks responsiblity to initialize and terminate this pointer if used (see @ref kbase_platform_funcs_conf).
 	 */
-	void (*power_off_callback)(struct kbase_device *kbdev);
+	void (*power_off_callback) (struct kbase_device *kbdev);
 
 	/** Callback for when the GPU is about to become active and power must be supplied.
 	 *
@@ -577,7 +637,7 @@ typedef struct kbase_pm_callback_conf
 	 *
 	 * @return 1 if the GPU state may have been lost, 0 otherwise.
 	 */
-	int (*power_on_callback)(struct kbase_device *kbdev);
+	int (*power_on_callback) (struct kbase_device *kbdev);
 
 	/** Callback for handling runtime power management initialization.
 	 *
@@ -588,7 +648,7 @@ typedef struct kbase_pm_callback_conf
 	 *
 	 * @return MALI_ERROR_NONE on success, else mali_error erro code.
 	 */
-	mali_error (*power_runtime_init_callback)(struct kbase_device *kbdev);
+	 mali_error(*power_runtime_init_callback) (struct kbase_device *kbdev);
 
 	/** Callback for handling runtime power management termination.
 	 *
@@ -596,7 +656,7 @@ typedef struct kbase_pm_callback_conf
 	 * should no longer be called by the OS on completion of this function.
 	 * Note: for linux the kernel must have CONFIG_PM_RUNTIME enabled to use this feature.
 	 */
-	void (*power_runtime_term_callback)(struct kbase_device *kbdev);
+	void (*power_runtime_term_callback) (struct kbase_device *kbdev);
 
 	/** Callback for runtime power-off power management callback
 	 *
@@ -605,14 +665,14 @@ typedef struct kbase_pm_callback_conf
 	 *
 	 * @return 0 on success, else OS error code.
 	 */
-	void (*power_runtime_off_callback)(struct kbase_device *kbdev);
+	void (*power_runtime_off_callback) (struct kbase_device *kbdev);
 
 	/** Callback for runtime power-on power management callback
 	 *
 	 * For linux this callback will be called by the kernel runtime_resume callback.
 	 * Note: for linux the kernel must have CONFIG_PM_RUNTIME enabled to use this feature.
 	 */
-	int (*power_runtime_on_callback)(struct kbase_device *kbdev);
+	int (*power_runtime_on_callback) (struct kbase_device *kbdev);
 
 } kbase_pm_callback_conf;
 
@@ -624,7 +684,7 @@ typedef struct kbase_pm_callback_conf
  *
  * @return 0 on success, 1 on error.
  */
-typedef int (*kbase_cpuprops_clock_speed_function)(u32 *clock_speed);
+typedef int (*kbase_cpuprops_clock_speed_function) (u32 *clock_speed);
 
 /**
  * Type of the function pointer for KBASE_CONFIG_ATTR_GPU_SPEED_FUNC.
@@ -636,37 +696,34 @@ typedef int (*kbase_cpuprops_clock_speed_function)(u32 *clock_speed);
  * @return 0 on success, 1 on error. When an error is returned the caller assumes a current
  * GPU speed as specified by KBASE_CONFIG_ATTR_GPU_FREQ_KHZ_MAX.
  */
-typedef int (*kbase_gpuprops_clock_speed_function)(u32 *clock_speed);
+typedef int (*kbase_gpuprops_clock_speed_function) (u32 *clock_speed);
 
 #ifdef CONFIG_MALI_PLATFORM_FAKE
 /*
  * @brief Specifies start and end of I/O memory region.
  */
-typedef struct kbase_io_memory_region
-{
-	u64       start;
-	u64       end;
+typedef struct kbase_io_memory_region {
+	u64 start;
+	u64 end;
 } kbase_io_memory_region;
 
 /*
  * @brief Specifies I/O related resources like IRQs and memory region for I/O operations.
  */
-typedef struct kbase_io_resources
-{
-	u32                      job_irq_number;
-	u32                      mmu_irq_number;
-	u32                      gpu_irq_number;
-	kbase_io_memory_region   io_memory_region;
+typedef struct kbase_io_resources {
+	u32 job_irq_number;
+	u32 mmu_irq_number;
+	u32 gpu_irq_number;
+	kbase_io_memory_region io_memory_region;
 } kbase_io_resources;
 
-typedef struct kbase_platform_config
-{
+typedef struct kbase_platform_config {
 	const kbase_attribute *attributes;
 	const kbase_io_resources *io_resources;
 	u32 midgard_type;
 } kbase_platform_config;
 
-#endif /* CONFIG_MALI_PLATFORM_FAKE */
+#endif				/* CONFIG_MALI_PLATFORM_FAKE */
 /**
  * @brief Return character string associated with the given midgard type.
  *
@@ -736,8 +793,8 @@ uintptr_t kbasep_get_config_value(struct kbase_device *kbdev, const kbase_attrib
  * @param[out] cpu_performance  Pointer to variable which will hold CPU performance value
  * @param[out] gpu_performance  Pointer to variable which will hold GPU performance value
  */
-void kbasep_get_memory_performance(const kbase_memory_resource *resource,
-				kbase_memory_performance *cpu_performance, kbase_memory_performance *gpu_performance);
+void kbasep_get_memory_performance(const kbase_memory_resource * resource,
+				kbase_memory_performance * const cpu_performance, kbase_memory_performance * const gpu_performance);
 
 /**
  * @brief Validates configuration attributes
@@ -760,7 +817,7 @@ mali_bool kbasep_validate_configuration_attributes(struct kbase_device *kbdev, c
  * @return Pointer to the platform config
  */
 kbase_platform_config *kbasep_get_platform_config(void);
-#endif /* CONFIG_MALI_PLATFORM_FAKE */
+#endif				/* CONFIG_MALI_PLATFORM_FAKE */
 
 /**
  * @brief Platform specific call to initialize hardware
@@ -786,9 +843,8 @@ mali_bool kbasep_platform_device_init(struct kbase_device *kbdev);
  */
 void kbasep_platform_device_term(struct kbase_device *kbdev);
 
+	  /** @} *//* end group kbase_config */
+	  /** @} *//* end group base_kbase_api */
+	  /** @} *//* end group base_api */
 
-/** @} */ /* end group kbase_config */
-/** @} */ /* end group base_kbase_api */
-/** @} */ /* end group base_api */
-
-#endif /* _KBASE_CONFIG_H_ */
+#endif				/* _KBASE_CONFIG_H_ */

@@ -61,12 +61,11 @@
  * }
  * @enddot
  */
-typedef enum kbasep_pm_always_on_state
-{
-	KBASEP_PM_ALWAYS_ON_STATE_POWERING_UP,      /**< The GPU is powering up */
+typedef enum kbasep_pm_always_on_state {
+	KBASEP_PM_ALWAYS_ON_STATE_POWERING_UP,	    /**< The GPU is powering up */
 	KBASEP_PM_ALWAYS_ON_STATE_POWERING_DOWN,    /**< The GPU is powering down */
-	KBASEP_PM_ALWAYS_ON_STATE_POWERED_UP,       /**< The GPU is powered up and jobs can execute */
-	KBASEP_PM_ALWAYS_ON_STATE_POWERED_DOWN,     /**< The GPU is powered down and the system can suspend */
+	KBASEP_PM_ALWAYS_ON_STATE_POWERED_UP,	    /**< The GPU is powered up and jobs can execute */
+	KBASEP_PM_ALWAYS_ON_STATE_POWERED_DOWN,	    /**< The GPU is powered down and the system can suspend */
 	KBASEP_PM_ALWAYS_ON_STATE_CHANGING_POLICY   /**< The power policy is about to change */
 } kbasep_pm_always_on_state;
 
@@ -74,8 +73,7 @@ typedef enum kbasep_pm_always_on_state
  *
  * This contains data that is private to the particular power policy that is active.
  */
-typedef struct kbasep_pm_policy_always_on
-{
+typedef struct kbasep_pm_policy_always_on {
 	kbasep_pm_always_on_state state;  /**< The current state of the policy */
 } kbasep_pm_policy_always_on;
 

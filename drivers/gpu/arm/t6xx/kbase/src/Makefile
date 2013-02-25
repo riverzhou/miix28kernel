@@ -15,7 +15,6 @@ KDIR ?= /lib/modules/$(shell uname -r)/build
 UMP_PATH_RELATIVE = $(CURDIR)/../../../../../base/ump
 KBASE_PATH_RELATIVE = $(CURDIR)/../../kbase
 KDS_PATH_RELATIVE = $(CURDIR)/../../../../../..
-OSK_PATH = $(ROOT)/kernel/drivers/gpu/arm/t6xx/kbase/osk
 EXTRA_SYMBOLS = $(UMP_PATH_RELATIVE)/src/Module.symvers
 
 ifeq ($(MALI_UNIT_TEST), 1)

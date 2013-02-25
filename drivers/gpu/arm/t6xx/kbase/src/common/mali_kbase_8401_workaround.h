@@ -20,10 +20,9 @@
 #ifndef _KBASE_8401_WORKAROUND_H_
 #define _KBASE_8401_WORKAROUND_H_
 
-mali_error kbasep_8401_workaround_init(kbase_device *kbdev);
+mali_error kbasep_8401_workaround_init(kbase_device * const kbdev);
 void kbasep_8401_workaround_term(kbase_device *kbdev);
 void kbasep_8401_submit_dummy_job(kbase_device *kbdev, int js);
 mali_bool kbasep_8401_is_workaround_job(kbase_jd_atom *katom);
 
-#endif /* _KBASE_8401_WORKAROUND_H_ */
-
+#endif				/* _KBASE_8401_WORKAROUND_H_ */

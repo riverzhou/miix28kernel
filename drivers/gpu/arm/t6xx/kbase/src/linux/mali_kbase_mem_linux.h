@@ -20,8 +20,7 @@
 #ifndef _KBASE_MEM_LINUX_H_
 #define _KBASE_MEM_LINUX_H_
 
-struct kbase_va_region *kbase_pmem_alloc(kbase_context *kctx, u32 size,
-					 u32 flags, u16 *pmem_cookie);
+struct kbase_va_region *kbase_pmem_alloc(kbase_context *kctx, u32 size, u32 flags, u16 * const pmem_cookie);
 int kbase_mmap(struct file *file, struct vm_area_struct *vma);
 
 /* @brief Allocate memory from kernel space and map it onto the GPU
@@ -39,4 +38,4 @@ void *kbase_va_alloc(kbase_context *kctx, u32 size);
  */
 void kbase_va_free(kbase_context *kctx, void *va);
 
-#endif /* _KBASE_MEM_LINUX_H_ */
+#endif				/* _KBASE_MEM_LINUX_H_ */

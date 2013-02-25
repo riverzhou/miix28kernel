@@ -32,8 +32,7 @@
  * @param[in]  io_resource      Input IO resource data
  * @param[out] linux_resources  Pointer to output array of Linux resource structures
  */
-void kbasep_config_parse_io_resources(const kbase_io_resources *io_resource, struct resource *linux_resources);
-#endif /* CONFIG_MALI_PLATFORM_FAKE */
+void kbasep_config_parse_io_resources(const kbase_io_resources *io_resource, struct resource *const linux_resources);
+#endif				/* CONFIG_MALI_PLATFORM_FAKE */
 
-
-#endif /* _KBASE_CONFIG_LINUX_H_ */
+#endif				/* _KBASE_CONFIG_LINUX_H_ */
