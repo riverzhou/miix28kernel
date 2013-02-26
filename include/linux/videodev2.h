@@ -680,6 +680,8 @@ struct v4l2_buffer {
 #define V4L2_BUF_FLAG_NO_CACHE_CLEAN		0x1000
 /* Expects and returns a sync fence */
 #define V4L2_BUF_FLAG_USE_SYNC	0x2000
+/* Buffer is end of stream */
+#define V4L2_BUF_FLAG_LAST_FRAME	0x4000
 
 /*
  *	O V E R L A Y   P R E V I E W
