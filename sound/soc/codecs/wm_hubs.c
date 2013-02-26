@@ -199,15 +199,56 @@ static void wm_hubs_dcs_cache_set(struct snd_soc_codec *codec, u16 dcs_cfg)
 	list_add_tail(&cache->list, &hubs->dcs_cache);
 }
 
+static void wm_hubs_read_dc_servo(struct snd_soc_codec *codec,
+				  u16 *reg_l, u16 *reg_r)
+{
+	struct wm_hubs_data *hubs = snd_soc_codec_get_drvdata(codec);
+	u16 dcs_reg, reg;
+
+	switch (hubs->dcs_readback_mode) {
+	case 2:
+		dcs_reg = WM8994_DC_SERVO_4E;
+		break;
+	case 1:
+		dcs_reg = WM8994_DC_SERVO_READBACK;
+		break;
+	default:
+		dcs_reg = WM8993_DC_SERVO_3;
+		break;
+	}
+
+	/* Different chips in the family support different readback
+	 * methods.
+	 */
+	switch (hubs->dcs_readback_mode) {
+	case 0:
+		*reg_l = snd_soc_read(codec, WM8993_DC_SERVO_READBACK_1)
+			& WM8993_DCS_INTEG_CHAN_0_MASK;
+		*reg_r = snd_soc_read(codec, WM8993_DC_SERVO_READBACK_2)
+			& WM8993_DCS_INTEG_CHAN_1_MASK;
+		break;
+	case 2:
+	case 1:
+		reg = snd_soc_read(codec, dcs_reg);
+		*reg_r = (reg & WM8993_DCS_DAC_WR_VAL_1_MASK)
+			>> WM8993_DCS_DAC_WR_VAL_1_SHIFT;
+		*reg_l = reg & WM8993_DCS_DAC_WR_VAL_0_MASK;
+		break;
+	default:
+		WARN(1, "Unknown DCS readback method\n");
+		return;
+	}
+}
+
 /*
  * Startup calibration of the DC servo
  */
-static void calibrate_dc_servo(struct snd_soc_codec *codec)
+static void enable_dc_servo(struct snd_soc_codec *codec)
 {
 	struct wm_hubs_data *hubs = snd_soc_codec_get_drvdata(codec);
 	struct wm_hubs_dcs_cache *cache;
 	s8 offset;
-	u16 reg, reg_l, reg_r, dcs_cfg, dcs_reg;
+	u16 reg_l, reg_r, dcs_cfg, dcs_reg;
 
 	switch (hubs->dcs_readback_mode) {
 	case 2:
@@ -245,27 +286,7 @@ static void calibrate_dc_servo(struct snd_soc_codec *codec)
 				  WM8993_DCS_TRIG_STARTUP_1);
 	}
 
-	/* Different chips in the family support different readback
-	 * methods.
-	 */
-	switch (hubs->dcs_readback_mode) {
-	case 0:
-		reg_l = snd_soc_read(codec, WM8993_DC_SERVO_READBACK_1)
-			& WM8993_DCS_INTEG_CHAN_0_MASK;
-		reg_r = snd_soc_read(codec, WM8993_DC_SERVO_READBACK_2)
-			& WM8993_DCS_INTEG_CHAN_1_MASK;
-		break;
-	case 2:
-	case 1:
-		reg = snd_soc_read(codec, dcs_reg);
-		reg_r = (reg & WM8993_DCS_DAC_WR_VAL_1_MASK)
-			>> WM8993_DCS_DAC_WR_VAL_1_SHIFT;
-		reg_l = reg & WM8993_DCS_DAC_WR_VAL_0_MASK;
-		break;
-	default:
-		WARN(1, "Unknown DCS readback method\n");
-		return;
-	}
+	wm_hubs_read_dc_servo(codec, &reg_l, &reg_r);
 
 	dev_dbg(codec->dev, "DCS input: %x %x\n", reg_l, reg_r);
 
@@ -276,12 +297,16 @@ static void calibrate_dc_servo(struct snd_soc_codec *codec)
 			hubs->dcs_codes_l, hubs->dcs_codes_r);
 
 		/* HPOUT1R */
-		offset = reg_r;
+		offset = (s8)reg_r;
+		dev_dbg(codec->dev, "DCS right %d->%d\n", offset,
+			offset + hubs->dcs_codes_r);
 		offset += hubs->dcs_codes_r;
 		dcs_cfg = (u8)offset << WM8993_DCS_DAC_WR_VAL_1_SHIFT;
 
 		/* HPOUT1L */
-		offset = reg_l;
+		offset = (s8)reg_l;
+		dev_dbg(codec->dev, "DCS left %d->%d\n", offset,
+			offset + hubs->dcs_codes_l);
 		offset += hubs->dcs_codes_l;
 		dcs_cfg |= (u8)offset;
 
@@ -535,7 +560,7 @@ static int hp_event(struct snd_soc_dapm_widget *w,
 		snd_soc_update_bits(codec, WM8993_DC_SERVO_1,
 				    WM8993_DCS_TIMER_PERIOD_01_MASK, 0);
 
-		calibrate_dc_servo(codec);
+		enable_dc_servo(codec);
 
 		reg |= WM8993_HPOUT1R_OUTP | WM8993_HPOUT1R_RMV_SHORT |
 			WM8993_HPOUT1L_OUTP | WM8993_HPOUT1L_RMV_SHORT;
@@ -1116,6 +1141,8 @@ int wm_hubs_add_analogue_routes(struct snd_soc_codec *codec,
 {
 	struct wm_hubs_data *hubs = snd_soc_codec_get_drvdata(codec);
 	struct snd_soc_dapm_context *dapm = &codec->dapm;
+
+	hubs->codec = codec;
 
 	INIT_LIST_HEAD(&hubs->dcs_cache);
 	init_completion(&hubs->dcs_done);
