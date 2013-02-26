@@ -3505,9 +3505,6 @@ static void wm8958_mic_id(void *data, u16 status)
 
 		/* If we have jackdet that will detect removal */
 		wm1811_micd_stop(codec);
-
-		snd_soc_jack_report(wm8994->micdet[0].jack, SND_JACK_HEADPHONE,
-				    SND_JACK_HEADSET);
 	}
 }
 
