@@ -1349,6 +1349,7 @@ static inline int _loop_infiniteloop(unsigned dry_run, u8 buf[],
 	/* forever loop */
 	off += _emit_MOV(dry_run, &buf[off], SAR, pxs->x->src_addr);
 	off += _emit_MOV(dry_run, &buf[off], DAR, pxs->x->dst_addr);
+	off += _emit_FLUSHP(dry_run, &buf[off], pxs->r->peri);
 
 	/* loop0 */
 	off += _emit_LP(dry_run, &buf[off], 0,  lcnt0);
@@ -1515,6 +1516,7 @@ static inline int _setup_xfer(unsigned dry_run, u8 buf[],
 	off += _emit_MOV(dry_run, &buf[off], SAR, x->src_addr);
 	/* DMAMOV DAR, x->dst_addr */
 	off += _emit_MOV(dry_run, &buf[off], DAR, x->dst_addr);
+	off += _emit_FLUSHP(dry_run, &buf[off], pxs->r->peri);
 
 	/* Setup Loop(s) */
 	off += _setup_loops(dry_run, &buf[off], pxs);
