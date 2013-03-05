@@ -11,7 +11,7 @@
 
 
 # Driver version string which is returned to userspace via an ioctl
-MALI_RELEASE_NAME ?= "r2p0-00rel0"
+MALI_RELEASE_NAME ?= "not_released"
 
 # Paths required for build
 KBASE_PATH = $(src)/../..
@@ -152,7 +152,7 @@ ifeq ($(CONFIG_MALI_T6XX),m)
     SRC += platform/$(platform_name)/mali_kbase_config_$(platform_name).c
 else
 	obj-$(CONFIG_MALI_T6XX) += platform/
-endif
+endif 
 endif
 
 # Tell the Linux build system from which .o file to create the kernel module

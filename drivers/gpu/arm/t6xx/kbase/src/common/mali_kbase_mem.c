@@ -1174,7 +1174,7 @@ void kbase_free_phy_pages_helper(struct kbase_va_region * reg, u32 nr_pages_to_f
 {
 	kbase_context * kctx;
 	phys_addr_t * page_array;
-
+	mali_bool sync_back;
 	KBASE_DEBUG_ASSERT(reg);
 	/* Can't call this on TB buffers */
 	KBASE_DEBUG_ASSERT(0 == (reg->flags & KBASE_REG_IS_TB));
@@ -1194,7 +1194,8 @@ void kbase_free_phy_pages_helper(struct kbase_va_region * reg, u32 nr_pages_to_f
 
 	page_array = kbase_get_phy_pages(reg);
 
-	kbase_mem_allocator_free(&kctx->osalloc, nr_pages_to_free, page_array + reg->nr_alloc_pages - nr_pages_to_free);
+	sync_back = ( reg->flags & KBASE_REG_CPU_CACHED ) ? MALI_TRUE : MALI_FALSE;
+	kbase_mem_allocator_free(&kctx->osalloc, nr_pages_to_free, page_array + reg->nr_alloc_pages - nr_pages_to_free, sync_back);
 
 	reg->nr_alloc_pages -= nr_pages_to_free;
 

@@ -138,11 +138,17 @@ typedef enum base_hw_issue {
 	/* Occasionally the GPU will issue multiple page faults for the same address before the MMU page table has been read by the GPU */
 	BASE_HW_ISSUE_9630,
 
+	/* Must clear the 64 byte private state of the tiler information */
+	BASE_HW_ISSUE_10127,
+
 	/* RA DCD load request to SDC returns invalid load ignore causing colour buffer mismatch */
 	BASE_HW_ISSUE_10327,
 
 	/* MAG / MIN filter selection happens after image descriptor clamps were applied */
 	BASE_HW_ISSUE_10472,
+
+	/* LD_SPECIAL instruction reads incorrect RAW tile buffer value when internal tib format is R10G10B10A2 */
+	BASE_HW_ISSUE_10632,
 
 	/* MMU TLB invalidation hazards */
 	BASE_HW_ISSUE_10649,
@@ -152,6 +158,12 @@ typedef enum base_hw_issue {
 
 	/* Indexed format 95 cannot be used with a component swizzle of "set to 1" when sampled as integer texture */
 	BASE_HW_ISSUE_10682,
+	
+	/* sometimes HW doesn't invalidate cached VPDs when it has to */
+	BASE_HW_ISSUE_10684,
+
+	/* Intermittent missing interrupt on job completion */
+	BASE_HW_ISSUE_10883,
 
 	/* The BASE_HW_ISSUE_END value must be the last issue listed in this enumeration
 	 * and must be the last value in each array that contains the list of workarounds
@@ -198,9 +210,12 @@ static const base_hw_issue base_hw_issues_t60x_r0p0_15dev0[] = {
 	BASE_HW_ISSUE_9510,
 	BASE_HW_ISSUE_9630,
 	BASE_HW_ISSUE_10472,
+	BASE_HW_ISSUE_10632,
 	BASE_HW_ISSUE_10649,
 	BASE_HW_ISSUE_10676,
 	BASE_HW_ISSUE_10682,
+	BASE_HW_ISSUE_10684,
+	BASE_HW_ISSUE_10883,
 	/* List of hardware issues must end with BASE_HW_ISSUE_END */
 	BASE_HW_ISSUE_END
 };
@@ -221,9 +236,12 @@ static const base_hw_issue base_hw_issues_t60x_r0p0_eac[] = {
 	BASE_HW_ISSUE_9435,
 	BASE_HW_ISSUE_9510,
 	BASE_HW_ISSUE_10472,
+	BASE_HW_ISSUE_10632,
 	BASE_HW_ISSUE_10649,
 	BASE_HW_ISSUE_10676,
 	BASE_HW_ISSUE_10682,
+	BASE_HW_ISSUE_10684,
+	BASE_HW_ISSUE_10883,
 	/* List of hardware issues must end with BASE_HW_ISSUE_END */
 	BASE_HW_ISSUE_END
 };
@@ -243,9 +261,12 @@ static const base_hw_issue base_hw_issues_t60x_r0p1[] = {
 	BASE_HW_ISSUE_9435,
 	BASE_HW_ISSUE_9510,
 	BASE_HW_ISSUE_10472,
+	BASE_HW_ISSUE_10632,
 	BASE_HW_ISSUE_10649,
 	BASE_HW_ISSUE_10676,
 	BASE_HW_ISSUE_10682,
+	BASE_HW_ISSUE_10684,
+	BASE_HW_ISSUE_10883,
 	/* List of hardware issues must end with BASE_HW_ISSUE_END */
 	BASE_HW_ISSUE_END
 };
@@ -265,9 +286,12 @@ static const base_hw_issue base_hw_issues_t65x_r0p1[] = {
 	BASE_HW_ISSUE_9435,
 	BASE_HW_ISSUE_9510,
 	BASE_HW_ISSUE_10472,
+	BASE_HW_ISSUE_10632,
 	BASE_HW_ISSUE_10649,
 	BASE_HW_ISSUE_10676,
 	BASE_HW_ISSUE_10682,
+	BASE_HW_ISSUE_10684,
+	BASE_HW_ISSUE_10883,
 	/* List of hardware issues must end with BASE_HW_ISSUE_END */
 	BASE_HW_ISSUE_END
 };
@@ -277,11 +301,15 @@ static const base_hw_issue base_hw_issues_t62x_r0p0[] = {
 	BASE_HW_ISSUE_6402,
 	BASE_HW_ISSUE_8803,
 	BASE_HW_ISSUE_9435,
+	BASE_HW_ISSUE_10127,
 	BASE_HW_ISSUE_10327,
 	BASE_HW_ISSUE_10472,
+	BASE_HW_ISSUE_10632,
 	BASE_HW_ISSUE_10649,
 	BASE_HW_ISSUE_10676,
 	BASE_HW_ISSUE_10682,
+	BASE_HW_ISSUE_10684,
+	BASE_HW_ISSUE_10883,
 	/* List of hardware issues must end with BASE_HW_ISSUE_END */
 	BASE_HW_ISSUE_END
 };
@@ -291,11 +319,15 @@ static const base_hw_issue base_hw_issues_t67x_r0p0[] = {
 	BASE_HW_ISSUE_6402,
 	BASE_HW_ISSUE_8803,
 	BASE_HW_ISSUE_9435,
+	BASE_HW_ISSUE_10127,
 	BASE_HW_ISSUE_10327,
 	BASE_HW_ISSUE_10472,
+	BASE_HW_ISSUE_10632,
 	BASE_HW_ISSUE_10649,
 	BASE_HW_ISSUE_10676,
 	BASE_HW_ISSUE_10682,
+	BASE_HW_ISSUE_10684,
+	BASE_HW_ISSUE_10883,
 	/* List of hardware issues must end with BASE_HW_ISSUE_END */
 	BASE_HW_ISSUE_END
 };
@@ -306,11 +338,15 @@ static const base_hw_issue base_hw_issues_t62x_r0p1[] = {
 	BASE_HW_ISSUE_8803,
 	BASE_HW_ISSUE_8975,
 	BASE_HW_ISSUE_9435,
-    BASE_HW_ISSUE_10327,
+	BASE_HW_ISSUE_10127,
+	BASE_HW_ISSUE_10327,
 	BASE_HW_ISSUE_10472,
+	BASE_HW_ISSUE_10632,
 	BASE_HW_ISSUE_10649,
 	BASE_HW_ISSUE_10676,
 	BASE_HW_ISSUE_10682,
+	BASE_HW_ISSUE_10684,
+	BASE_HW_ISSUE_10883,
 	/* List of hardware issues must end with BASE_HW_ISSUE_END */
 	BASE_HW_ISSUE_END
 };
@@ -321,37 +357,58 @@ static const base_hw_issue base_hw_issues_t67x_r0p1[] = {
 	BASE_HW_ISSUE_8803,
 	BASE_HW_ISSUE_8975,
 	BASE_HW_ISSUE_9435,
-    BASE_HW_ISSUE_10327,
+	BASE_HW_ISSUE_10127,
+	BASE_HW_ISSUE_10327,
 	BASE_HW_ISSUE_10472,
+	BASE_HW_ISSUE_10632,
 	BASE_HW_ISSUE_10649,
 	BASE_HW_ISSUE_10676,
 	BASE_HW_ISSUE_10682,
+	BASE_HW_ISSUE_10684,
+	BASE_HW_ISSUE_10883,
 	/* List of hardware issues must end with BASE_HW_ISSUE_END */
 	BASE_HW_ISSUE_END
 };
 
 /* Mali T62x r1p0 */
 static const base_hw_issue base_hw_issues_t62x_r1p0[] = {
-        BASE_HW_ISSUE_6402,
-        BASE_HW_ISSUE_8803,
-        BASE_HW_ISSUE_8975,
-        BASE_HW_ISSUE_9435,
-        BASE_HW_ISSUE_10472,
-        BASE_HW_ISSUE_10649,
-        /* List of hardware issues must end with BASE_HW_ISSUE_END */
-        BASE_HW_ISSUE_END
+	BASE_HW_ISSUE_6402,
+	BASE_HW_ISSUE_8803,
+	BASE_HW_ISSUE_8975,
+	BASE_HW_ISSUE_9435,
+	BASE_HW_ISSUE_10472,
+	BASE_HW_ISSUE_10649,
+	BASE_HW_ISSUE_10684,
+	BASE_HW_ISSUE_10883,
+	/* List of hardware issues must end with BASE_HW_ISSUE_END */
+	BASE_HW_ISSUE_END
 };
 
 /* Mali T67x r1p0 */
 static const base_hw_issue base_hw_issues_t67x_r1p0[] = {
-        BASE_HW_ISSUE_6402,
-        BASE_HW_ISSUE_8803,
-        BASE_HW_ISSUE_8975,
-        BASE_HW_ISSUE_9435,
-        BASE_HW_ISSUE_10472,
-        BASE_HW_ISSUE_10649,
-        /* List of hardware issues must end with BASE_HW_ISSUE_END */
-        BASE_HW_ISSUE_END
+	BASE_HW_ISSUE_6402,
+	BASE_HW_ISSUE_8803,
+	BASE_HW_ISSUE_8975,
+	BASE_HW_ISSUE_9435,
+	BASE_HW_ISSUE_10472,
+	BASE_HW_ISSUE_10649,
+	BASE_HW_ISSUE_10684,
+	BASE_HW_ISSUE_10883,
+	/* List of hardware issues must end with BASE_HW_ISSUE_END */
+	BASE_HW_ISSUE_END
+};
+
+/* Mali T75x r0p0 */
+static const base_hw_issue base_hw_issues_t75x_r0p0[] = {
+	BASE_HW_ISSUE_6402,
+	BASE_HW_ISSUE_8803,
+	BASE_HW_ISSUE_8975,
+	BASE_HW_ISSUE_9435,
+	BASE_HW_ISSUE_10472,
+	BASE_HW_ISSUE_10649,
+	BASE_HW_ISSUE_10883,
+	/* List of hardware issues must end with BASE_HW_ISSUE_END */
+	BASE_HW_ISSUE_END
 };
 
 #endif				/* _BASE_HWCONFIG_H_ */

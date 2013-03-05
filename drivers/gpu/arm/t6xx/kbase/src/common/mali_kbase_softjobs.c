@@ -63,6 +63,8 @@ static int kbase_dump_cpu_gpu_time(kbase_jd_atom *katom)
 		return pm_active_err;
 	}
 
+	kbase_pm_request_gpu_cycle_counter(kctx->kbdev);
+
 	/* Read hi, lo, hi to ensure that overflow from lo to hi is handled correctly */
 	do {
 		hi1 = kbase_reg_read(kctx->kbdev, GPU_CONTROL_REG(CYCLE_COUNT_HI), NULL);
@@ -81,6 +83,8 @@ static int kbase_dump_cpu_gpu_time(kbase_jd_atom *katom)
 
 	/* Record the CPU's idea of current time */
 	getnstimeofday(&ts);
+
+	kbase_pm_release_gpu_cycle_counter(kctx->kbdev);
 
 	kbase_pm_context_idle(kctx->kbdev);
 

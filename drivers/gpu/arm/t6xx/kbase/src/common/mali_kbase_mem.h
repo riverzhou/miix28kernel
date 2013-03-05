@@ -107,13 +107,13 @@ typedef struct kbase_va_region {
  * the Linux mmap() interface limits us to 2^32 pages (2^44 bytes, see
  * mmap64 man page for reference).
  */
-#define KBASE_REG_ZONE_EXEC         KBASE_REG_ZONE(1)	/* Dedicated 4GB region for shader code */
+#define KBASE_REG_ZONE_EXEC         KBASE_REG_ZONE(1)	/* Dedicated 16MB region for shader code */
 #define KBASE_REG_ZONE_EXEC_BASE    ((1ULL << 32) >> PAGE_SHIFT)
-#define KBASE_REG_ZONE_EXEC_SIZE    (((1ULL << 33) >> PAGE_SHIFT) - \
+#define KBASE_REG_ZONE_EXEC_SIZE    ((((1ULL << 32) + 0x1000000) >> PAGE_SHIFT) - \
 					KBASE_REG_ZONE_EXEC_BASE)
 
 #define KBASE_REG_ZONE_TMEM         KBASE_REG_ZONE(2)
-#define KBASE_REG_ZONE_TMEM_BASE    ((1ULL << 33) >> PAGE_SHIFT)	/* Starting after KBASE_REG_ZONE_EXEC */
+#define KBASE_REG_ZONE_TMEM_BASE    (((1ULL << 32) + 0x1000000) >> PAGE_SHIFT)	/* Starting after KBASE_REG_ZONE_EXEC */
 #define KBASE_REG_ZONE_TMEM_SIZE    (((1ULL << 44) >> PAGE_SHIFT) - \
 					KBASE_REG_ZONE_TMEM_BASE)
 #endif
@@ -215,8 +215,9 @@ mali_error kbase_mem_allocator_alloc(kbase_mem_allocator * allocator, u32 nr_pag
  * @param[in] allocator Allocator to free the memory back to
  * @param nr_pages Number of pages to free
  * @param[in] pages Pointer to an array holding the physical address of the paghes to free.
+ * @param[in] sync_back MALI_TRUE case the memory should be synced back
  */
-void kbase_mem_allocator_free(kbase_mem_allocator * allocator, u32 nr_pages, phys_addr_t *pages);
+void kbase_mem_allocator_free(kbase_mem_allocator * allocator, u32 nr_pages, phys_addr_t *pages, mali_bool sync_back);
 
 /**
  * @brief Terminate an OS based memory allocator.

@@ -842,10 +842,10 @@ static int kbase_release(struct inode *inode, struct file *filp)
 
 	dev_dbg(kbdev->osdev.dev, "deleted base context\n");
 	kbase_release_device(kbdev);
-	return 0;
+	return 0; 
 }
 
-#define CALL_MAX_SIZE 512
+#define CALL_MAX_SIZE 528 
 
 static long kbase_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 {
@@ -1526,7 +1526,7 @@ typedef struct {
 /**
  * Array of available shader affinity split configurations.
  */
-static sc_split_config const sc_split_configs[] =
+static sc_split_config const sc_split_configs[] = 
 {
 	/* All must be the first config (default). */
 	{
@@ -2065,7 +2065,7 @@ static int kbase_common_device_init(kbase_device *kbdev)
 	}
 
 	inited |= inited_sc_split;
-#endif
+#endif 
 
 	if (device_create_file(osdev->dev, &dev_attr_gpu_memory)) {
 		dev_err(osdev->dev, "Couldn't create gpu_memory sysfs file\n");

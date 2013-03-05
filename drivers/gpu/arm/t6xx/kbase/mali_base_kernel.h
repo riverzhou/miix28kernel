@@ -1166,16 +1166,35 @@ struct mali_base_gpu_core_props {
  *
  * More information is possible - but associativity and bus width are not
  * required by upper-level apis.
-
  */
-struct mali_base_gpu_cache_props {
-	u32 log2_line_size;
-	u32 log2_cache_size;
+struct mali_base_gpu_l2_cache_props {
+	u8 log2_line_size;
+	u8 log2_cache_size;
+	u8 num_l2_slices; /* Number of L2C slices. 1 or higher */
+	u8 padding[5];
+};
+
+struct mali_base_gpu_l3_cache_props {
+	u8 log2_line_size;
+	u8 log2_cache_size;
+	u8 padding[6];
 };
 
 struct mali_base_gpu_tiler_props {
 	u32 bin_size_bytes;	/* Max is 4*2^15 */
 	u32 max_active_levels;	/* Max is 2^15 */
+};
+
+/**
+ * GPU threading system details. If a value is 0 the information is not available on
+ * the implementation of the GPU. 
+ */
+struct mali_base_gpu_thread_props {
+	u16 max_registers;			/* Total size [1..65535] of the register file available per core. */
+	u8 max_task_queue;			/* Max. tasks [1..255] which may be sent to a core before it becomes blocked. */
+	u8 max_thread_group_split;	/* Max. allowed value [1..15] of the Thread Group Split field. */
+	u8 impl_tech;		    	/* 1 = Silicon, 2 = FPGA, 3 = SW Model/Emulation */
+	u8 padding[3];
 };
 
 /**
@@ -1276,6 +1295,11 @@ struct midg_raw_gpu_props {
 	u32 texture_features[3];
 
 	u32 gpu_id;
+	
+	u32 thread_max_threads;
+	u32 thread_max_workgroup_size;
+	u32 thread_max_barrier_size;
+	u32 thread_features;
 
 	u32 padding;
 };
@@ -1286,9 +1310,10 @@ struct midg_raw_gpu_props {
  */
 typedef struct mali_base_gpu_props {
 	struct mali_base_gpu_core_props core_props;
-	struct mali_base_gpu_cache_props l2_props;
-	struct mali_base_gpu_cache_props l3_props;
+	struct mali_base_gpu_l2_cache_props l2_props;
+	struct mali_base_gpu_l3_cache_props l3_props;
 	struct mali_base_gpu_tiler_props tiler_props;
+	struct mali_base_gpu_thread_props thread_props;
 
 	/** This member is large, likely to be 128 bytes */
 	struct midg_raw_gpu_props raw_props;

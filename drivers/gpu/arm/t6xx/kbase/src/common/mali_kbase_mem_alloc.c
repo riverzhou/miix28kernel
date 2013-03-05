@@ -164,7 +164,7 @@ err_out_roll_back:
 }
 KBASE_EXPORT_TEST_API(kbase_mem_allocator_alloc)
 
-void kbase_mem_allocator_free(kbase_mem_allocator *allocator, u32 nr_pages, phys_addr_t *pages)
+void kbase_mem_allocator_free(kbase_mem_allocator *allocator, u32 nr_pages, phys_addr_t *pages, mali_bool sync_back)
 {
 	int i = 0;
 	int page_count = 0;
@@ -202,6 +202,19 @@ void kbase_mem_allocator_free(kbase_mem_allocator *allocator, u32 nr_pages, phys
 
 			p = pfn_to_page(PFN_DOWN(pages[i]));
 			pages[i] = (phys_addr_t)0;
+			/* Sync back the memory to ensure that future cache invalidations
+			 * don't trample on memory.
+			 */
+			if( sync_back )
+			{
+				void* mp = kmap(p);
+				if( NULL != mp)
+				{
+					kbase_sync_to_cpu(PFN_PHYS(page_to_pfn(p)), mp, PAGE_SIZE);
+					kunmap(p);
+				}
+
+			}
 			list_add(&p->lru, &new_free_list_items);
 			page_count++;
 		}
@@ -212,3 +225,4 @@ void kbase_mem_allocator_free(kbase_mem_allocator *allocator, u32 nr_pages, phys
 	mutex_unlock(&allocator->free_list_lock);
 }
 KBASE_EXPORT_TEST_API(kbase_mem_allocator_free)
+
