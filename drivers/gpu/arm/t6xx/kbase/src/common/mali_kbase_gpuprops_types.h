@@ -50,6 +50,11 @@ typedef struct kbase_gpuprops_regdump {
 
 	u32 l3_present_lo;
 	u32 l3_present_hi;
+
+	u32 thread_max_threads;
+	u32 thread_max_workgroup_size;
+	u32 thread_max_barrier_size;
+	u32 thread_features;
 } kbase_gpuprops_regdump;
 
 typedef struct kbase_gpu_cache_props {

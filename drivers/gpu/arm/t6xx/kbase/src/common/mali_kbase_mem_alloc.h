@@ -25,3 +25,4 @@ typedef struct kbase_mem_allocator
 	struct list_head    free_list_head;
 	struct shrinker     free_list_reclaimer;
 } kbase_mem_allocator;
+

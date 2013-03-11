@@ -78,6 +78,11 @@
 #define TIMESTAMP_LO            0x098	/* (RO) Global time stamp counter, low word */
 #define TIMESTAMP_HI            0x09C	/* (RO) Global time stamp counter, high word */
 
+#define THREAD_MAX_THREADS		0x0A0	/* (RO) Maximum number of threads per core */
+#define THREAD_MAX_WORKGROUP_SIZE 0x0A4	/* (RO) Maximum workgroup size */
+#define THREAD_MAX_BARRIER_SIZE 0x0A8	/* (RO) Maximum threads waiting at a barrier */
+#define THREAD_FEATURES         0x0AC	/* (RO) Thread features */
+
 #define TEXTURE_FEATURES_0      0x0B0	/* (RO) Support flags for indexed texture formats 0..31 */
 #define TEXTURE_FEATURES_1      0x0B4	/* (RO) Support flags for indexed texture formats 32..63 */
 #define TEXTURE_FEATURES_2      0x0B8	/* (RO) Support flags for indexed texture formats 64..95 */
@@ -414,6 +419,7 @@
 #define GPU_ID_PI_T65X                    0x3456
 #define GPU_ID_PI_T62X                    0x0620
 #define GPU_ID_PI_T67X                    0x0670
+#define GPU_ID_PI_T75X                    0x5308
 
 /* Values for GPU_ID_VERSION_STATUS field for PRODUCT_ID GPU_ID_PI_T60X and GPU_ID_PI_T65X */
 #define GPU_ID_S_15DEV0                   0x1

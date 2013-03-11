@@ -10,6 +10,8 @@
  *
  */
 
+
+
 #include <linux/ioport.h>
 #include <linux/clk.h>
 #include <kbase/src/common/mali_kbase.h>
@@ -80,13 +82,13 @@ static int mali_pm_notifier(struct notifier_block *nb,unsigned long event,void* 
  *   */
 mali_bool kbase_platform_exynos5_init(kbase_device *kbdev)
 {
-	if(MALI_ERROR_NONE == kbase_platform_init(kbdev))
-	{
+ 	if(MALI_ERROR_NONE == kbase_platform_init(kbdev))
+ 	{
 		if (register_pm_notifier(&mali_pm_nb)) {
 			return MALI_FALSE;
 		}
-		return MALI_TRUE;
-	}
+ 		return MALI_TRUE;
+ 	}
 
 	return MALI_FALSE;
 }
@@ -166,7 +168,7 @@ static int pm_callback_runtime_on(kbase_device *kbdev)
 #ifdef CONFIG_MALI_T6XX_DVFS
 	if (kbase_platform_dvfs_enable(true, MALI_DVFS_START_FREQ)!= MALI_TRUE)
 		return -EPERM;
-#endif
+#endif	
 	return 0;
 }
 
@@ -209,6 +211,10 @@ static kbase_attribute config_attributes[] = {
 	 KBASE_CONFIG_ATTR_POWER_MANAGEMENT_CALLBACKS,
 	 (uintptr_t) &pm_callbacks},
 #endif
+	{
+		KBASE_CONFIG_ATTR_POWER_MANAGEMENT_DVFS_FREQ,
+		100 
+	}, /* 100ms */
 	{
 	 KBASE_CONFIG_ATTR_PLATFORM_FUNCS,
 	 (uintptr_t) &platform_funcs},

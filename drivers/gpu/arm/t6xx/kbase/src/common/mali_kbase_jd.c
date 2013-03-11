@@ -421,7 +421,6 @@ static mali_error kbase_jd_pre_external_resources(kbase_jd_atom *katom, const ba
 		katom->kds_dep_satisfied = MALI_FALSE;
 
 		wait_failed = kds_async_waitall(&katom->kds_rset,
-										KDS_FLAG_LOCKED_IGNORE,
 										&katom->kctx->jctx.kds_cb,
 										katom,
 										NULL,
@@ -706,6 +705,15 @@ static mali_bool jd_submit_atom(kbase_context *kctx, const base_jd_atom_v2 *user
 	 * depends on a previous atom with the same number behaves as expected */
 	katom->event_code = BASE_JD_EVENT_DONE;
 	katom->status = KBASE_JD_ATOM_STATE_QUEUED;
+
+	/* Reject atoms with job chain = NULL, as these cause issues with soft-stop */
+	if (0 == katom->jc && (katom->core_req & BASEP_JD_REQ_ATOM_TYPE) != BASE_JD_REQ_DEP)
+	{
+		KBASE_DEBUG_PRINT_WARN(KBASE_JD, "Rejecting atom with jc = NULL");
+		katom->event_code = BASE_JD_EVENT_JOB_INVALID;
+		ret = jd_done_nolock(katom);
+		goto out;
+	}
 
 	/*
 	 * If the priority is increased we need to check the caller has security caps to do this, if

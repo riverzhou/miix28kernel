@@ -80,6 +80,17 @@ STATIC void kbase_gpuprops_dump_registers(kbase_device *kbdev, kbase_gpuprops_re
 
 	/* Fill regdump with the content of the relevant registers */
 	regdump->gpu_id = kbase_os_reg_read(kbdev, GPU_CONTROL_REG(GPU_ID));
+
+#ifdef CONFIG_MALI_REMAP_ID
+	/* T75X DM1 bitfile reports GPU ID differently - see SKRYMIR-481 */
+	if (regdump->gpu_id == GPU_ID_MAKE(GPU_ID_PI_T62X, 0, 0, 1)) {
+		KBASE_DEBUG_PRINT_RAW(KBASE_CORE,
+		    "WARNING: T75X DM1 bitfile currently reports itself as a T620 r0p0 status 1.\n"
+		    "         Driver is patched to consider this to be a T75X r0p0 status 0.\n");
+		regdump->gpu_id = GPU_ID_MAKE(GPU_ID_PI_T75X, 0, 0, 0);
+	}
+#endif
+
 	regdump->l2_features = kbase_os_reg_read(kbdev, GPU_CONTROL_REG(L2_FEATURES));
 	regdump->l3_features = kbase_os_reg_read(kbdev, GPU_CONTROL_REG(L3_FEATURES));
 	regdump->tiler_features = kbase_os_reg_read(kbdev, GPU_CONTROL_REG(TILER_FEATURES));
@@ -93,6 +104,11 @@ STATIC void kbase_gpuprops_dump_registers(kbase_device *kbdev, kbase_gpuprops_re
 
 	for (i = 0; i < BASE_GPU_NUM_TEXTURE_FEATURES_REGISTERS; i++)
 		regdump->texture_features[i] = kbase_os_reg_read(kbdev, GPU_CONTROL_REG(TEXTURE_FEATURES_REG(i)));
+
+	regdump->thread_max_threads = kbase_os_reg_read(kbdev, GPU_CONTROL_REG(THREAD_MAX_THREADS));
+	regdump->thread_max_workgroup_size = kbase_os_reg_read(kbdev, GPU_CONTROL_REG(THREAD_MAX_WORKGROUP_SIZE));
+	regdump->thread_max_barrier_size = kbase_os_reg_read(kbdev, GPU_CONTROL_REG(THREAD_MAX_BARRIER_SIZE));
+	regdump->thread_features = kbase_os_reg_read(kbdev, GPU_CONTROL_REG(THREAD_FEATURES));
 
 	regdump->shader_present_lo = kbase_os_reg_read(kbdev, GPU_CONTROL_REG(SHADER_PRESENT_LO));
 	regdump->shader_present_hi = kbase_os_reg_read(kbdev, GPU_CONTROL_REG(SHADER_PRESENT_HI));
@@ -216,6 +232,11 @@ static void kbase_gpuprops_get_props(base_gpu_props * const gpu_props, kbase_dev
 
 	for (i = 0; i < BASE_GPU_NUM_TEXTURE_FEATURES_REGISTERS; i++)
 		gpu_props->raw_props.texture_features[i] = regdump.texture_features[i];
+
+	gpu_props->raw_props.thread_max_barrier_size = regdump.thread_max_barrier_size;
+	gpu_props->raw_props.thread_max_threads = regdump.thread_max_threads;
+	gpu_props->raw_props.thread_max_workgroup_size = regdump.thread_max_workgroup_size;
+	gpu_props->raw_props.thread_features = regdump.thread_features;
 }
 
 /**
@@ -243,12 +264,22 @@ static void kbase_gpuprops_calculate_props(base_gpu_props * const gpu_props, kba
 
 	gpu_props->l2_props.log2_line_size = KBASE_UBFX32(gpu_props->raw_props.l2_features, 0U, 8);
 	gpu_props->l2_props.log2_cache_size = KBASE_UBFX32(gpu_props->raw_props.l2_features, 16U, 8);
+	if (gpu_props->core_props.product_id == GPU_ID_PI_T75X) {
+		gpu_props->l2_props.num_l2_slices = KBASE_UBFX32(gpu_props->raw_props.mem_features, 8U, 4) + 1;
+	} else {
+		gpu_props->l2_props.num_l2_slices = 1;
+	}
 
 	gpu_props->l3_props.log2_line_size = KBASE_UBFX32(gpu_props->raw_props.l3_features, 0U, 8);
 	gpu_props->l3_props.log2_cache_size = KBASE_UBFX32(gpu_props->raw_props.l3_features, 16U, 8);
 
 	gpu_props->tiler_props.bin_size_bytes = 1 << KBASE_UBFX32(gpu_props->raw_props.tiler_features, 0U, 6);
 	gpu_props->tiler_props.max_active_levels = KBASE_UBFX32(gpu_props->raw_props.tiler_features, 8U, 4);
+
+	gpu_props->thread_props.max_registers = KBASE_UBFX32(gpu_props->raw_props.thread_features, 0U, 16);
+	gpu_props->thread_props.max_task_queue = KBASE_UBFX32(gpu_props->raw_props.thread_features, 16U, 8);
+	gpu_props->thread_props.max_thread_group_split = KBASE_UBFX32(gpu_props->raw_props.thread_features, 24U, 6);
+	gpu_props->thread_props.impl_tech = KBASE_UBFX32(gpu_props->raw_props.thread_features, 30U, 2);
 
 	/* Initialize the coherent_group structure for each group */
 	kbase_gpuprops_construct_coherent_groups(gpu_props);

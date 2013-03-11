@@ -282,7 +282,7 @@ mali_error kbasep_8401_workaround_init(kbase_device * const kbdev)
 	while (i--)
 		kunmap(pfn_to_page(PFN_DOWN(kbdev->workaround_compute_job_pa[i])));
 
-	kbase_mem_allocator_free(&workaround_kctx->osalloc, KBASE_8401_WORKAROUND_COMPUTEJOB_COUNT, kbdev->workaround_compute_job_pa);
+	kbase_mem_allocator_free(&workaround_kctx->osalloc, KBASE_8401_WORKAROUND_COMPUTEJOB_COUNT, kbdev->workaround_compute_job_pa, MALI_TRUE);
  no_pages:
 	kbase_destroy_context(workaround_kctx);
 
@@ -307,7 +307,7 @@ void kbasep_8401_workaround_term(kbase_device *kbdev)
 	for (i = 0; i < KBASE_8401_WORKAROUND_COMPUTEJOB_COUNT; i++)
 		kunmap(pfn_to_page(PFN_DOWN(kbdev->workaround_compute_job_pa[i])));
 
-	kbase_mem_allocator_free(&kbdev->workaround_kctx->osalloc, KBASE_8401_WORKAROUND_COMPUTEJOB_COUNT, kbdev->workaround_compute_job_pa);
+	kbase_mem_allocator_free(&kbdev->workaround_kctx->osalloc, KBASE_8401_WORKAROUND_COMPUTEJOB_COUNT, kbdev->workaround_compute_job_pa, MALI_TRUE);
 
 	kbase_destroy_context(kbdev->workaround_kctx);
 	kbdev->workaround_kctx = NULL;

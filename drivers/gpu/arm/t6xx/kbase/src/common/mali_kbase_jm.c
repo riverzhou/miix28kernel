@@ -359,6 +359,14 @@ void kbase_job_done(kbase_device *kbdev, u32 done)
  spurious:
 			done = kbase_reg_read(kbdev, JOB_CONTROL_REG(JOB_IRQ_RAWSTAT), NULL);
 
+			if (kbase_hw_has_issue(kbdev, BASE_HW_ISSUE_10883)) {
+				/* Workaround for missing interrupt caused by PRLAM-10883 */
+				if (((active >> i) & 1) && (0 == kbase_reg_read(kbdev, JOB_SLOT_REG(i, JSn_STATUS), NULL))) {
+					/* Force job slot to be processed again */
+					done |= (1u << i);
+				}
+			}
+
 			failed = done >> 16;
 			finished = (done & 0xFFFF) | failed;
 		} while (finished & (1 << i));

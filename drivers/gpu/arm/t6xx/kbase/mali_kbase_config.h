@@ -453,7 +453,7 @@ enum {
 	 *    KBASE_AID_16 - use 16 IDs (4 ID bits)
 	 *    KBASE_AID_8  - use 8 IDs (3 ID bits)
 	 *    KBASE_AID_4  - use 4 IDs (2 ID bits)
-	 * Default value: KBASE_AID_32 (no limit). Note hardware implementation
+	 * Default value: KBASE_AID_32 (no limit). Note hardware implementation 
 	 * may limit to a lower value.
 	 */
 	KBASE_CONFIG_ATTR_ARID_LIMIT,
@@ -466,7 +466,7 @@ enum {
 	 *    KBASE_AID_16 - use 16 IDs (4 ID bits)
 	 *    KBASE_AID_8  - use 8 IDs (3 ID bits)
 	 *    KBASE_AID_4  - use 4 IDs (2 ID bits)
-	 * Default value: KBASE_AID_32 (no limit). Note hardware implementation
+	 * Default value: KBASE_AID_32 (no limit). Note hardware implementation 
 	 * may limit to a lower value.
 	 */
 	KBASE_CONFIG_ATTR_AWID_LIMIT,
@@ -745,18 +745,6 @@ const char *kbasep_midgard_type_to_string(u32 midgard_type);
 int kbasep_get_config_attribute_count(const kbase_attribute *attributes);
 
 /**
- * @brief Gets the count of attributes with specified id
- *
- * Function gets the count of attributes with specified id in the given attribute array
- *
- * @param[in]  attributes     Array of attributes
- * @param[in]  attribute_id   Id of attributes to count
-  *
- * @return  Number of attributes in the array that have specified id
- */
-int kbasep_get_config_attribute_count_by_id(const kbase_attribute *attributes, int attribute_id);
-
-/**
  * @brief Gets the next config attribute with the specified ID from the array of attributes.
  *
  * Function gets the next attribute with specified attribute id within specified array. If no such attribute is found,
@@ -782,19 +770,6 @@ const kbase_attribute *kbasep_get_next_attribute(const kbase_attribute *attribut
  * @return Value of attribute with the given id
  */
 uintptr_t kbasep_get_config_value(struct kbase_device *kbdev, const kbase_attribute *attributes, int attribute_id);
-
-/**
- * @brief Obtain memory performance values from kbase_memory_resource structure.
- *
- * Function gets cpu and gpu memory performance values from memory resource structure and puts them in the variables
- * provided as parameters. If the performance of memory bank is not in resource attributes, default value is used.
- *
- * @param[in]  resource         Structure containing information about memory bank to use
- * @param[out] cpu_performance  Pointer to variable which will hold CPU performance value
- * @param[out] gpu_performance  Pointer to variable which will hold GPU performance value
- */
-void kbasep_get_memory_performance(const kbase_memory_resource * resource,
-				kbase_memory_performance * const cpu_performance, kbase_memory_performance * const gpu_performance);
 
 /**
  * @brief Validates configuration attributes

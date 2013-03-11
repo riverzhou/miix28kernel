@@ -129,3 +129,4 @@ TRACE_EVENT(mali_timeline_gpu_power_active,
 
 /* This part must be outside protection */
 #include <trace/define_trace.h>
+

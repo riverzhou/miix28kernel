@@ -167,21 +167,6 @@ int kbasep_get_config_attribute_count(const kbase_attribute *attributes)
 	return count;
 }
 
-int kbasep_get_config_attribute_count_by_id(const kbase_attribute *attributes, int attribute_id)
-{
-	int count = 0;
-	KBASE_DEBUG_ASSERT(attributes != NULL);
-
-	while (attributes->id != KBASE_CONFIG_ATTR_END) {
-		if (attributes->id == attribute_id)
-			count++;
-
-		attributes++;
-	}
-
-	return count;
-}
-
 const kbase_attribute *kbasep_get_next_attribute(const kbase_attribute *attributes, int attribute_id)
 {
 	KBASE_DEBUG_ASSERT(attributes != NULL);
@@ -295,31 +280,6 @@ void kbasep_platform_device_term(kbase_device *kbdev)
 	if (platform_funcs) {
 		if (platform_funcs->platform_term_func)
 			platform_funcs->platform_term_func(kbdev);
-	}
-}
-
-void kbasep_get_memory_performance(const kbase_memory_resource *resource, kbase_memory_performance * const cpu_performance,
-		kbase_memory_performance * const gpu_performance)
-{
-	kbase_attribute *attributes;
-
-	KBASE_DEBUG_ASSERT(resource != NULL);
-	KBASE_DEBUG_ASSERT(cpu_performance != NULL);
-	KBASE_DEBUG_ASSERT(gpu_performance != NULL);
-
-	attributes = resource->attributes;
-	*cpu_performance = *gpu_performance = KBASE_MEM_PERF_NORMAL;	/* default performance */
-
-	if (attributes == NULL)
-		return;
-
-	while (attributes->id != KBASE_CONFIG_ATTR_END) {
-		if (attributes->id == KBASE_MEM_ATTR_PERF_GPU)
-			*gpu_performance = (kbase_memory_performance) attributes->data;
-		else if (attributes->id == KBASE_MEM_ATTR_PERF_CPU)
-			*cpu_performance = (kbase_memory_performance) attributes->data;
-
-		attributes++;
 	}
 }
 

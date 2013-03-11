@@ -281,8 +281,8 @@ int kbase_platform_dvfs_enable(bool enable, int freq)
 		spin_unlock_irqrestore(&mali_dvfs_spinlock, flags);
 
 		kbase_platform_dvfs_set_level(dvfs_status->kbdev, dvfs_status->step);
-	}
-
+ 	}
+ 
 	if (enable != kbdev->pm.metrics.timer_active) {
 		if (enable) {
 			spin_lock_irqsave(&kbdev->pm.metrics.lock, flags);

@@ -36,13 +36,13 @@ typedef enum
 
 extern ssize_t show_timeline_defs(struct device *dev, struct device_attribute *attr, char *buf);
 
-/* mali_timeline.h defines kernel tracepoints used by the KBASE_TIMELINE
+/* mali_timeline.h defines kernel tracepoints used by the KBASE_TIMELINE 
    functions.
-   Output is timestamped by either sched_clock() (default), local_clock(), or
+   Output is timestamped by either sched_clock() (default), local_clock(), or 
    cpu_clock(), depending on /sys/kernel/debug/tracing/trace_clock */
 #include "mali_timeline.h"
 
-/* Trace number of atoms in flight for kctx (atoms either not completed, or in
+/* Trace number of atoms in flight for kctx (atoms either not completed, or in 
    process of being returned to user */
 #define KBASE_TIMELINE_ATOMS_IN_FLIGHT(kctx, count)                                 \
 	do                                                                          \
@@ -112,3 +112,4 @@ extern ssize_t show_timeline_defs(struct device *dev, struct device_attribute *a
 #endif				/* CONFIG_MALI_TRACE_TIMELINE */
 
 #endif				/* _KBASE_TRACE_TIMELINE_H */
+

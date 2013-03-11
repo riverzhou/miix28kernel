@@ -91,7 +91,7 @@ typedef struct kbasep_js_policy_cfs {
 	 * -1 if context queue is empty. */
 	atomic64_t least_runtime_us;
 
-	/* Number of us the least-run context in the realtime (priority) context queue
+	/* Number of us the least-run context in the realtime (priority) context queue 
 	 * has been running for. -1 if realtime context queue is empty. */
 	atomic64_t rt_least_runtime_us;
 } kbasep_js_policy_cfs;

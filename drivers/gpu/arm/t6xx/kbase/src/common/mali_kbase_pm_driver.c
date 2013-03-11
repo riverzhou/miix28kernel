@@ -935,7 +935,7 @@ static void kbase_pm_hw_issues(kbase_device *kbdev)
 	/* Enable alternative hardware counter selection if configured. */
 	if( kbasep_get_config_value(kbdev, kbdev->config_attributes, KBASE_CONFIG_ATTR_ALTERNATIVE_HWC) )
 		value |= (1 << 3);
-
+	
 	if (value != 0)
 		kbase_reg_write(kbdev, GPU_CONTROL_REG(SHADER_CONFIG), value, NULL);
 

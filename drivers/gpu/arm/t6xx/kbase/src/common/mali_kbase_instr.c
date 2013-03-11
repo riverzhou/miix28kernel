@@ -596,3 +596,4 @@ void kbase_instr_hwcnt_resume(kbase_device *kbdev)
 	}
 
 }
+

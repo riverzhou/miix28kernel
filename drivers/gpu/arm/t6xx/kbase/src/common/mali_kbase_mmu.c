@@ -269,7 +269,7 @@ phys_addr_t kbase_mmu_alloc_pgd(kbase_context *kctx)
 
 	page = kmap(pfn_to_page(PFN_DOWN(pgd)));
 	if (NULL == page) {
-		kbase_mem_allocator_free(kctx->pgd_allocator, 1, &pgd);
+		kbase_mem_allocator_free(kctx->pgd_allocator, 1, &pgd, MALI_FALSE);
 		kbase_mem_usage_release_pages(&kctx->usage, 1);
 		kbase_mem_usage_release_pages(&kctx->kbdev->memdev.usage, 1);
 		return 0;
@@ -711,7 +711,7 @@ static void mmu_teardown_level(kbase_context *kctx, phys_addr_t pgd, int level, 
 
 			beenthere("pte %lx level %d", (unsigned long)target_pgd, level + 1);
 			if (zap) {
-				kbase_mem_allocator_free(kctx->pgd_allocator, 1, &target_pgd);
+				kbase_mem_allocator_free(kctx->pgd_allocator, 1, &target_pgd, MALI_TRUE);
 				kbase_process_page_usage_dec(kctx, 1 );
 				kbase_mem_usage_release_pages(&kctx->usage, 1);
 				kbase_mem_usage_release_pages(&kctx->kbdev->memdev.usage, 1);
@@ -751,7 +751,7 @@ void kbase_mmu_free_pgd(kbase_context *kctx)
 	mmu_teardown_level(kctx, kctx->pgd, MIDGARD_MMU_TOPLEVEL, 1, kctx->mmu_teardown_pages);
 
 	beenthere("pgd %lx", (unsigned long)kctx->pgd);
-	kbase_mem_allocator_free(kctx->pgd_allocator, 1, &kctx->pgd);
+	kbase_mem_allocator_free(kctx->pgd_allocator, 1, &kctx->pgd, MALI_TRUE);
 	kbase_process_page_usage_dec(kctx, 1 );
 	kbase_mem_usage_release_pages(&kctx->usage, 1);
 	kbase_mem_usage_release_pages(&kctx->kbdev->memdev.usage, 1);
