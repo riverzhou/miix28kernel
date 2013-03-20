@@ -1,0 +1,8 @@
+arch="armhf"
+supported="Nexus 4"
+desc="Nexus 4"
+target="Nexus 4 phone"
+#bootloader="flash-kernel"
+provides=""
+section_image="universe/base"
+do_debug="Yes"
