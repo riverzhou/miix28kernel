@@ -89,7 +89,7 @@ abidir		:= $(CURDIR)/$(DEBIAN)/abi/$(release)-$(revision)/$(arch)
 prev_abidir	:= $(CURDIR)/$(DEBIAN)/abi/$(release)-$(prev_revision)/$(arch)
 commonconfdir	:= $(CURDIR)/$(DEBIAN)/config
 archconfdir	:= $(CURDIR)/$(DEBIAN)/config/$(arch)
-sharedconfdir	:= $(CURDIR)/debian.master/config
+sharedconfdir	:= $(CURDIR)/$(DEBIAN)/config
 builddir	:= $(CURDIR)/debian/build
 stampdir	:= $(CURDIR)/debian/stamps
 
