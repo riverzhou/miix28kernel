@@ -181,6 +181,12 @@ static struct wm8994_pdata wm1811_pdata = {
 
 	.ldo_ena_always_driven = true,
 	.irq_base = MANTA_IRQ_BOARD_AUDIO_START,
+
+	/*
+	 * Restrict the i2s clock for a maximum of 2 channels to keep
+	 * the bus within spec since i2s0 is shared with the HDMI block
+	 */
+	.max_channels_clocked = {2, 2, 2},
 };
 
 static struct i2c_board_info i2c_devs7[] __initdata = {
