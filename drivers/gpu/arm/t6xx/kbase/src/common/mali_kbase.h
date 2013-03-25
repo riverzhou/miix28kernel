@@ -42,8 +42,8 @@
 
 #include "mali_kbase_pm.h"
 #include "mali_kbase_mem_lowlevel.h"
-#include "mali_kbase_trace_timeline.h"
 #include "mali_kbase_defs.h"
+#include "mali_kbase_trace_timeline.h"
 #include "mali_kbase_js.h"
 #include "mali_kbase_mem.h"
 #include "mali_kbase_security.h"
@@ -107,7 +107,8 @@ void kbase_destroy_os_context(kbase_os_context *osctx);
 mali_error kbase_jd_init(kbase_context *kctx);
 void kbase_jd_exit(kbase_context *kctx);
 mali_error kbase_jd_submit(kbase_context *kctx, const kbase_uk_job_submit *user_bag);
-void kbase_jd_done(kbase_jd_atom *katom, int slot_nr, ktime_t *end_timestamp, mali_bool start_new_jobs);
+void kbase_jd_done(kbase_jd_atom *katom, int slot_nr, ktime_t *end_timestamp,
+                   kbasep_js_atom_done_code done_code);
 void kbase_jd_cancel(kbase_device *kbdev, kbase_jd_atom *katom);
 void kbase_jd_zap_context(kbase_context *kctx);
 mali_bool jd_done_nolock(kbase_jd_atom *katom);
@@ -236,6 +237,22 @@ const char *kbase_exception_name(u32 exception_code);
  */
 static INLINE mali_bool kbase_pm_is_suspending(struct kbase_device *kbdev) {
 	return kbdev->pm.suspending;
+}
+
+/**
+ * Return the atom's ID, as was originally supplied by userspace in
+ * base_jd_atom_v2::atom_number
+ */
+static INLINE int kbase_jd_atom_id(kbase_context *kctx, kbase_jd_atom *katom)
+{
+	int result;
+	KBASE_DEBUG_ASSERT(kctx);
+	KBASE_DEBUG_ASSERT(katom);
+	KBASE_DEBUG_ASSERT(katom->kctx == kctx);
+
+	result = katom - &kctx->jctx.atoms[0];
+	KBASE_DEBUG_ASSERT(result >= 0 && result <= BASE_JD_ATOM_COUNT);
+	return result;
 }
 
 #if KBASE_TRACE_ENABLE != 0

@@ -32,9 +32,6 @@ kbase_context *kbase_create_context(kbase_device *kbdev)
 {
 	kbase_context *kctx;
 	mali_error mali_err;
-#ifdef CONFIG_MALI_TRACE_TIMELINE
-	int i;
-#endif
 
 	KBASE_DEBUG_ASSERT(kbdev != NULL);
 
@@ -99,9 +96,6 @@ kbase_context *kbase_create_context(kbase_device *kbdev)
 
 #ifdef CONFIG_MALI_TRACE_TIMELINE
 	atomic_set(&kctx->timeline.jd_atoms_in_flight, 0);
-
-	for (i = 0; i < BASE_JM_SUBMIT_SLOTS; i++)
-		atomic_set(&kctx->timeline.jm_atoms_submitted[i], 0);
 #endif
 
 	return kctx;

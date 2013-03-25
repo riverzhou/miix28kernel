@@ -165,6 +165,9 @@ typedef enum base_hw_issue {
 	/* Intermittent missing interrupt on job completion */
 	BASE_HW_ISSUE_10883,
 
+	/* Depth bounds incorrectly normalized in hierz depth bounds test */
+	BASE_HW_ISSUE_10931,
+
 	/* The BASE_HW_ISSUE_END value must be the last issue listed in this enumeration
 	 * and must be the last value in each array that contains the list of workarounds
 	 * for a particular HW version.
@@ -216,6 +219,7 @@ static const base_hw_issue base_hw_issues_t60x_r0p0_15dev0[] = {
 	BASE_HW_ISSUE_10682,
 	BASE_HW_ISSUE_10684,
 	BASE_HW_ISSUE_10883,
+	BASE_HW_ISSUE_10931,
 	/* List of hardware issues must end with BASE_HW_ISSUE_END */
 	BASE_HW_ISSUE_END
 };
@@ -242,6 +246,7 @@ static const base_hw_issue base_hw_issues_t60x_r0p0_eac[] = {
 	BASE_HW_ISSUE_10682,
 	BASE_HW_ISSUE_10684,
 	BASE_HW_ISSUE_10883,
+	BASE_HW_ISSUE_10931,
 	/* List of hardware issues must end with BASE_HW_ISSUE_END */
 	BASE_HW_ISSUE_END
 };
@@ -267,6 +272,7 @@ static const base_hw_issue base_hw_issues_t60x_r0p1[] = {
 	BASE_HW_ISSUE_10682,
 	BASE_HW_ISSUE_10684,
 	BASE_HW_ISSUE_10883,
+	BASE_HW_ISSUE_10931,
 	/* List of hardware issues must end with BASE_HW_ISSUE_END */
 	BASE_HW_ISSUE_END
 };
@@ -292,6 +298,7 @@ static const base_hw_issue base_hw_issues_t65x_r0p1[] = {
 	BASE_HW_ISSUE_10682,
 	BASE_HW_ISSUE_10684,
 	BASE_HW_ISSUE_10883,
+	BASE_HW_ISSUE_10931,
 	/* List of hardware issues must end with BASE_HW_ISSUE_END */
 	BASE_HW_ISSUE_END
 };
@@ -310,6 +317,7 @@ static const base_hw_issue base_hw_issues_t62x_r0p0[] = {
 	BASE_HW_ISSUE_10682,
 	BASE_HW_ISSUE_10684,
 	BASE_HW_ISSUE_10883,
+	BASE_HW_ISSUE_10931,
 	/* List of hardware issues must end with BASE_HW_ISSUE_END */
 	BASE_HW_ISSUE_END
 };
@@ -328,6 +336,7 @@ static const base_hw_issue base_hw_issues_t67x_r0p0[] = {
 	BASE_HW_ISSUE_10682,
 	BASE_HW_ISSUE_10684,
 	BASE_HW_ISSUE_10883,
+	BASE_HW_ISSUE_10931,
 	/* List of hardware issues must end with BASE_HW_ISSUE_END */
 	BASE_HW_ISSUE_END
 };
@@ -347,6 +356,7 @@ static const base_hw_issue base_hw_issues_t62x_r0p1[] = {
 	BASE_HW_ISSUE_10682,
 	BASE_HW_ISSUE_10684,
 	BASE_HW_ISSUE_10883,
+	BASE_HW_ISSUE_10931,
 	/* List of hardware issues must end with BASE_HW_ISSUE_END */
 	BASE_HW_ISSUE_END
 };
@@ -366,6 +376,7 @@ static const base_hw_issue base_hw_issues_t67x_r0p1[] = {
 	BASE_HW_ISSUE_10682,
 	BASE_HW_ISSUE_10684,
 	BASE_HW_ISSUE_10883,
+	BASE_HW_ISSUE_10931,
 	/* List of hardware issues must end with BASE_HW_ISSUE_END */
 	BASE_HW_ISSUE_END
 };
@@ -380,6 +391,7 @@ static const base_hw_issue base_hw_issues_t62x_r1p0[] = {
 	BASE_HW_ISSUE_10649,
 	BASE_HW_ISSUE_10684,
 	BASE_HW_ISSUE_10883,
+	BASE_HW_ISSUE_10931,
 	/* List of hardware issues must end with BASE_HW_ISSUE_END */
 	BASE_HW_ISSUE_END
 };
@@ -394,6 +406,7 @@ static const base_hw_issue base_hw_issues_t67x_r1p0[] = {
 	BASE_HW_ISSUE_10649,
 	BASE_HW_ISSUE_10684,
 	BASE_HW_ISSUE_10883,
+	BASE_HW_ISSUE_10931,
 	/* List of hardware issues must end with BASE_HW_ISSUE_END */
 	BASE_HW_ISSUE_END
 };
@@ -407,6 +420,7 @@ static const base_hw_issue base_hw_issues_t75x_r0p0[] = {
 	BASE_HW_ISSUE_10472,
 	BASE_HW_ISSUE_10649,
 	BASE_HW_ISSUE_10883,
+	BASE_HW_ISSUE_10931,
 	/* List of hardware issues must end with BASE_HW_ISSUE_END */
 	BASE_HW_ISSUE_END
 };

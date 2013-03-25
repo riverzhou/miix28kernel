@@ -446,6 +446,26 @@ typedef struct kbase_trace {
 	u8 flags;
 } kbase_trace;
 
+#ifdef CONFIG_MALI_TRACE_TIMELINE
+typedef struct kbase_trace_kctx_timeline {
+	atomic_t jd_atoms_in_flight;
+	u32 owner_tgid;
+} kbase_trace_kctx_timeline;
+
+typedef struct kbase_trace_kbdev_timeline {
+	/* Note: strictly speaking, not needed, because it's in sync with
+	 * kbase_device::jm_slots[]::submitted_nr
+	 *
+	 * But it's kept as an example of how to add global timeline tracking
+	 * information
+	 *
+	 * The caller must hold kbasep_js_device_data::runpool_irq::lock when
+	 * accessing this */
+	u8 slot_atoms_submitted[BASE_JM_SUBMIT_SLOTS];
+} kbase_trace_kbdev_timeline;
+#endif /* CONFIG_MALI_TRACE_TIMELINE */
+
+
 typedef struct kbasep_kctx_list_element {
 	struct list_head link;
 	kbase_context    *kctx;
@@ -596,6 +616,10 @@ struct kbase_device {
 #ifdef CONFIG_MALI_T6XX_RT_PM
 	struct delayed_work runtime_pm_workqueue;
 #endif
+
+#ifdef CONFIG_MALI_TRACE_TIMELINE
+	kbase_trace_kbdev_timeline timeline;
+#endif
 };
 
 struct kbase_context {
@@ -651,7 +675,7 @@ struct kbase_context {
 	struct mm_struct * process_mm;
 
 #ifdef CONFIG_MALI_TRACE_TIMELINE
-	kbase_trace_timeline timeline;
+	kbase_trace_kctx_timeline timeline;
 #endif
 };
 

@@ -798,6 +798,7 @@ void MOCKABLE(kbase_pm_enable_interrupts) (kbase_device *kbdev)
 	 * Clear all interrupts,
 	 * and unmask them all.
 	 */
+
 	spin_lock_irqsave(&kbdev->pm.power_change_lock, flags);
 	kbase_reg_write(kbdev, GPU_CONTROL_REG(GPU_IRQ_CLEAR), GPU_IRQ_REG_ALL, NULL);
 	kbase_reg_write(kbdev, GPU_CONTROL_REG(GPU_IRQ_MASK), GPU_IRQ_REG_ALL, NULL);
@@ -808,6 +809,14 @@ void MOCKABLE(kbase_pm_enable_interrupts) (kbase_device *kbdev)
 
 	kbase_reg_write(kbdev, MMU_REG(MMU_IRQ_CLEAR), 0xFFFFFFFF, NULL);
 	kbase_reg_write(kbdev, MMU_REG(MMU_IRQ_MASK), 0xFFFFFFFF, NULL);
+
+	/* Now allow IRQs, as we can receive them now */
+	spin_lock_irqsave(&kbdev->pm.gpu_powered_lock, flags);
+	kbdev->pm.gpu_irq_mask = GPU_IRQ_REG_ALL;
+	kbdev->pm.mmu_irq_mask = 0xFFFFFFFF;
+	kbdev->pm.job_irq_mask = 0xFFFFFFFF;
+	spin_unlock_irqrestore(&kbdev->pm.gpu_powered_lock, flags);
+
 }
 
 KBASE_EXPORT_TEST_API(kbase_pm_enable_interrupts)
@@ -831,6 +840,13 @@ void MOCKABLE(kbase_pm_disable_interrupts) (kbase_device *kbdev)
 
 	kbase_reg_write(kbdev, MMU_REG(MMU_IRQ_MASK), 0, NULL);
 	kbase_reg_write(kbdev, MMU_REG(MMU_IRQ_CLEAR), 0xFFFFFFFF, NULL);
+
+	/* Now disallow IRQs, as we don't expect to receive them now */
+	spin_lock_irqsave(&kbdev->pm.gpu_powered_lock, flags);
+	kbdev->pm.gpu_irq_mask = 0;
+	kbdev->pm.mmu_irq_mask = 0;
+	kbdev->pm.job_irq_mask = 0;
+	spin_unlock_irqrestore(&kbdev->pm.gpu_powered_lock, flags);
 }
 
 KBASE_EXPORT_TEST_API(kbase_pm_disable_interrupts)
@@ -860,7 +876,7 @@ void kbase_pm_clock_on(kbase_device *kbdev)
 
 	if (kbdev->pm.callback_power_on && kbdev->pm.callback_power_on(kbdev)) {
 		/* GPU state was lost, reset GPU to ensure it is in a consistent state */
-		kbase_pm_init_hw(kbdev);
+		kbase_pm_init_hw(kbdev,MALI_TRUE);
 	}
 
 	spin_lock_irqsave(&kbdev->pm.gpu_powered_lock, flags);
@@ -944,18 +960,18 @@ static void kbase_pm_hw_issues(kbase_device *kbdev)
 
 	/* Limit read ID width for AXI */
 	config_value = (u32) kbasep_get_config_value(kbdev, kbdev->config_attributes, KBASE_CONFIG_ATTR_ARID_LIMIT);
-	value &= ~(0x3 << 24);
-	value |= (config_value & 0x3) << 24;
+	value &= ~(L2_MMU_CONFIG_LIMIT_EXTERNAL_READS);
+	value |= (config_value & 0x3) << L2_MMU_CONFIG_LIMIT_EXTERNAL_READS_SHIFT;
 
 	/* Limit write ID width for AXI */
 	config_value = (u32) kbasep_get_config_value(kbdev, kbdev->config_attributes, KBASE_CONFIG_ATTR_AWID_LIMIT);
-	value &= ~(0x3 << 26);
-	value |= (config_value & 0x3) << 26;
+	value &= ~(L2_MMU_CONFIG_LIMIT_EXTERNAL_WRITES);
+	value |= (config_value & 0x3) << L2_MMU_CONFIG_LIMIT_EXTERNAL_WRITES_SHIFT;
 
 	kbase_reg_write(kbdev, GPU_CONTROL_REG(L2_MMU_CONFIG), value, NULL);
 }
 
-mali_error kbase_pm_init_hw(kbase_device *kbdev)
+mali_error kbase_pm_init_hw(kbase_device *kbdev, mali_bool enable_irqs )
 {
 	unsigned long flags;
 	struct kbasep_reset_timeout_data rtdata;
@@ -985,6 +1001,10 @@ mali_error kbase_pm_init_hw(kbase_device *kbdev)
 	kbase_reg_write(kbdev, GPU_CONTROL_REG(GPU_COMMAND), GPU_COMMAND_SOFT_RESET, NULL);
 
 	/* Unmask the reset complete interrupt only */
+	spin_lock_irqsave(&kbdev->pm.gpu_powered_lock, flags);
+	kbdev->pm.gpu_irq_mask = RESET_COMPLETED;
+	spin_unlock_irqrestore(&kbdev->pm.gpu_powered_lock, flags);
+
 	kbase_reg_write(kbdev, GPU_CONTROL_REG(GPU_IRQ_MASK), RESET_COMPLETED, NULL);
 
 	/* Initialize a structure for tracking the status of the reset */
@@ -1046,9 +1066,11 @@ mali_error kbase_pm_init_hw(kbase_device *kbdev)
 	return MALI_ERROR_FUNCTION_FAILED;
 
  out:
-	/* Re-enable interrupts */
-	kbase_pm_enable_interrupts(kbdev);
-
+	/* Re-enable interrupts if requested*/
+	if ( enable_irqs )
+	{
+		kbase_pm_enable_interrupts(kbdev);
+	}
 	/* If cycle counter was in use-re enable it */
 	spin_lock_irqsave(&kbdev->pm.gpu_cycle_counter_requests_lock, flags);
 

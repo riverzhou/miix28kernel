@@ -74,6 +74,10 @@ mali_error kbase_pm_init(kbase_device *kbdev)
 
 	kbdev->pm.gpu_powered = MALI_FALSE;
 	kbdev->pm.suspending = MALI_FALSE;
+	kbdev->pm.gpu_irq_mask = 0;
+	kbdev->pm.mmu_irq_mask = 0;
+	kbdev->pm.job_irq_mask = 0;
+
 	atomic_set(&kbdev->pm.gpu_in_desired_state, MALI_TRUE);
 
 	callbacks = (kbase_pm_callback_conf *) kbasep_get_config_value(kbdev, kbdev->config_attributes, KBASE_CONFIG_ATTR_POWER_MANAGEMENT_CALLBACKS);
@@ -137,8 +141,8 @@ mali_error kbase_pm_powerup(kbase_device *kbdev)
 	KBASE_DEBUG_ASSERT(kbdev != NULL);
 	/* A suspend won't happen during startup/insmod */
 	KBASE_DEBUG_ASSERT(!kbase_pm_is_suspending(kbdev));
-
-	ret = kbase_pm_init_hw(kbdev);
+	/* Power up the GPU, don't enable IRQs as we are not ready to receive them. */
+	ret = kbase_pm_init_hw(kbdev, MALI_FALSE );
 	if (ret != MALI_ERROR_NONE)
 		return ret;
 
@@ -164,6 +168,10 @@ mali_error kbase_pm_powerup(kbase_device *kbdev)
 	kbdev->pm.new_policy = NULL;
 	kbdev->pm.current_policy = policy_list[0];
 	KBASE_TRACE_ADD(kbdev, PM_CURRENT_POLICY_INIT, NULL, NULL, 0u, kbdev->pm.current_policy->id);
+
+	/* We are ready to receive IRQ's now as power policy is set up, so enable them now. */
+	kbase_pm_enable_interrupts(kbdev);
+
 	kbdev->pm.current_policy->init(kbdev);
 
 	kbase_pm_send_event(kbdev, KBASE_PM_EVENT_POLICY_INIT);

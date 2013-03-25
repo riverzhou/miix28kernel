@@ -693,24 +693,27 @@ STATIC void kbasep_js_runpool_evict_next_jobs(kbase_device *kbdev, kbase_context
 		slot = &kbdev->jm_slots[js];
 		tail = kbasep_jm_peek_idx_submit_slot(slot, slot->submitted_nr - 1);
 
+		KBASE_TIMELINE_TRY_SOFT_STOP(kctx, js, 1);
 		/* Clearing job from next registers */
 		kbase_reg_write(kbdev, JOB_SLOT_REG(js, JSn_COMMAND_NEXT), JSn_COMMAND_NOP, NULL);
 
 		/* Check to see if we did remove a job from the next registers */
 		if (kbase_reg_read(kbdev, JOB_SLOT_REG(js, JSn_HEAD_NEXT_LO), NULL) != 0 || kbase_reg_read(kbdev, JOB_SLOT_REG(js, JSn_HEAD_NEXT_HI), NULL) != 0) {
 			/* The job was successfully cleared from the next registers, requeue it */
-			slot->submitted_nr--;
+			kbase_jd_atom *dequeued_katom = kbasep_jm_dequeue_tail_submit_slot(slot);
+			KBASE_DEBUG_ASSERT(dequeued_katom == tail);
 
 			/* Set the next registers to NULL */
 			kbase_reg_write(kbdev, JOB_SLOT_REG(js, JSn_HEAD_NEXT_LO), 0, NULL);
 			kbase_reg_write(kbdev, JOB_SLOT_REG(js, JSn_HEAD_NEXT_HI), 0, NULL);
 
-			tail->event_code = BASE_JD_EVENT_REMOVED_FROM_NEXT;
+			KBASE_TRACE_ADD_SLOT(kbdev, JM_SLOT_EVICT, dequeued_katom->kctx, dequeued_katom, dequeued_katom->jc, js);
 
-			/* Complete the job, indicate that it took no time, and start_new_jobs==MALI_FALSE */
-			kbase_jd_done(tail, js, NULL, MALI_FALSE);
+			/* Complete the job, indicate that it took no time, and don't start
+			 * new atoms */
+			kbase_jd_done(dequeued_katom, js, NULL, KBASE_JS_ATOM_DONE_EVICTED_FROM_NEXT);
 		}
-
+		KBASE_TIMELINE_TRY_SOFT_STOP(kctx, js, 0);
 	}
 	spin_unlock_irqrestore(&js_devdata->runpool_irq.lock, flags);
 }
@@ -1940,7 +1943,9 @@ void kbasep_js_release_privileged_ctx(kbase_device *kbdev, kbase_context *kctx)
 	kbasep_js_runpool_release_ctx(kbdev, kctx);
 }
 
-void kbasep_js_job_done_slot_irq(kbase_jd_atom *katom, int slot_nr, ktime_t *end_timestamp, mali_bool start_new_jobs)
+void kbasep_js_job_done_slot_irq(kbase_jd_atom *katom, int slot_nr,
+                                 ktime_t *end_timestamp,
+                                 kbasep_js_atom_done_code done_code)
 {
 	kbase_device *kbdev;
 	kbasep_js_policy *js_policy;
@@ -1995,7 +2000,7 @@ void kbasep_js_job_done_slot_irq(kbase_jd_atom *katom, int slot_nr, ktime_t *end
 	if (kbasep_js_policy_should_remove_ctx(js_policy, parent_ctx) != MALI_FALSE)
 		kbasep_js_clear_submit_allowed(js_devdata, parent_ctx);
 
-	if (start_new_jobs != MALI_FALSE) {
+	if (done_code & KBASE_JS_ATOM_DONE_START_NEW_ATOMS) {
 		/* Submit a new job (if there is one) to help keep the GPU's HEAD and NEXT registers full */
 		KBASE_TRACE_ADD_SLOT(kbdev, JS_JOB_DONE_TRY_RUN_NEXT_JOB, parent_ctx, katom, katom->jc, slot_nr);
 

@@ -106,7 +106,7 @@ static void kbase_job_hw_submit(kbase_device *kbdev, kbase_jd_atom *katom, int j
 	kbase_trace_mali_job_slots_event(GATOR_MAKE_EVENT(GATOR_JOB_SLOT_START, js), kctx);
 #endif				/* CONFIG_MALI_GATOR_SUPPORT */
 
-	KBASE_TIMELINE_ATOMS_SUBMITTED(kctx, js, atomic_add_return(1, &kctx->timeline.jm_atoms_submitted[js]));
+	kbase_timeline_job_slot_submit(kbdev, kctx, katom, js);
 
 	kbase_reg_write(kbdev, JOB_SLOT_REG(js, JSn_COMMAND_NEXT), JSn_COMMAND_START, katom->kctx);
 }
@@ -182,14 +182,14 @@ void kbase_job_done_slot(kbase_device *kbdev, int s, u32 completion_code, u64 jo
 
 	kbase_device_trace_register_access(kctx, REG_WRITE, JOB_CONTROL_REG(JOB_IRQ_CLEAR), 1 << s);
 
-	/* Complete the job, with start_new_jobs = MALI_TRUE
+	/* Complete the job, and start new ones
 	 *
 	 * Also defer remaining work onto the workqueue:
 	 * - Re-queue Soft-stopped jobs
 	 * - For any other jobs, queue the job back into the dependency system
 	 * - Schedule out the parent context if necessary, and schedule a new one in.
 	 */
-	kbase_jd_done(katom, s, end_timestamp, MALI_TRUE);
+	kbase_jd_done(katom, s, end_timestamp, KBASE_JS_ATOM_DONE_START_NEW_ATOMS);
 }
 
 /**
@@ -563,6 +563,8 @@ static void kbasep_job_slot_soft_or_hard_stop(kbase_device *kbdev, kbase_context
 	lockdep_assert_held(&js_devdata->runpool_irq.lock);
 
 	jobs_submitted = kbasep_jm_nr_jobs_submitted(slot);
+
+	KBASE_TIMELINE_TRY_SOFT_STOP(kctx, js, 1);
 	KBASE_TRACE_ADD_SLOT_INFO(kbdev, JM_SLOT_SOFT_OR_HARD_STOP, kctx, NULL, 0u, js, jobs_submitted);
 
 	if (jobs_submitted > JM_SLOT_MAX_JOB_SUBMIT_REGS)
@@ -607,10 +609,8 @@ static void kbasep_job_slot_soft_or_hard_stop(kbase_device *kbdev, kbase_context
 
 					KBASE_TRACE_ADD_SLOT(kbdev, JM_SLOT_EVICT, dequeued_katom->kctx, dequeued_katom, dequeued_katom->jc, js);
 
-					dequeued_katom->event_code = BASE_JD_EVENT_REMOVED_FROM_NEXT;
-					/* Complete the job, indicate it took no time, but require start_new_jobs == MALI_FALSE
-					 * to prevent this slot being resubmitted to until we've dropped the lock */
-					kbase_jd_done(dequeued_katom, js, NULL, MALI_FALSE);
+					/* Complete the job, indicate it took no time, but don't submit any more at this point */
+					kbase_jd_done(dequeued_katom, js, NULL, KBASE_JS_ATOM_DONE_EVICTED_FROM_NEXT);
 				} else {
 					/* The job transitioned into the current registers before we managed to evict it,
 					 * in this case we fall back to soft/hard-stopping the job */
@@ -661,10 +661,8 @@ static void kbasep_job_slot_soft_or_hard_stop(kbase_device *kbdev, kbase_context
 
 					KBASE_TRACE_ADD_SLOT(kbdev, JM_SLOT_EVICT, dequeued_katom->kctx, dequeued_katom, dequeued_katom->jc, js);
 
-					dequeued_katom->event_code = BASE_JD_EVENT_REMOVED_FROM_NEXT;
-					/* Complete the job, indicate it took no time, but require start_new_jobs == MALI_FALSE
-					 * to prevent this slot being resubmitted to until we've dropped the lock */
-					kbase_jd_done(dequeued_katom, js, NULL, MALI_FALSE);
+					/* Complete the job, indicate it took no time, but don't submit any more at this point */
+					kbase_jd_done(dequeued_katom, js, NULL, KBASE_JS_ATOM_DONE_EVICTED_FROM_NEXT);
 				} else {
 					/* We missed the job, that means the job we're interested in left the hardware before
 					 * we managed to do anything, so we can proceed to the next job */
@@ -680,6 +678,8 @@ static void kbasep_job_slot_soft_or_hard_stop(kbase_device *kbdev, kbase_context
 			 */
 		}
 	}
+
+	KBASE_TIMELINE_TRY_SOFT_STOP(kctx, js, 0);
 }
 
 void kbase_job_kill_jobs_from_context(kbase_context *kctx)
@@ -965,7 +965,7 @@ void kbasep_reset_timeout_worker(struct work_struct *data)
 
 	/* Reset the GPU */
 	kbase_pm_power_transitioning(kbdev);
-	kbase_pm_init_hw(kbdev);
+	kbase_pm_init_hw(kbdev, MALI_TRUE);
 	/* IRQs were re-enabled by kbase_pm_init_hw */
 
 	kbase_pm_power_transitioning(kbdev);
