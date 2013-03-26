@@ -47,16 +47,6 @@ extern "C" {
  */
 
 /**
- * @brief UK major version
- */
-#define MALI_MODULE_UK_MAJOR 0
-
-/**
- * @brief UK minor version
- */
-#define MALI_MODULE_UK_MINOR 0
-
-/**
  * These are identifiers for kernel-side drivers implementing a UK interface, aka UKK clients. The
  * UK module maps this to an OS specific device name, e.g. "gpu_base" -> "GPU0:". Specify this
  * identifier to select a UKK client to the uku_open() function.

@@ -1076,7 +1076,8 @@ static void jd_cancel_worker(struct work_struct *data)
  * The caller must hold kbasep_js_device_data::runpool_irq::lock
  *
  */
-void kbase_jd_done(kbase_jd_atom *katom, int slot_nr, ktime_t *end_timestamp, mali_bool start_new_jobs)
+void kbase_jd_done(kbase_jd_atom *katom, int slot_nr, ktime_t *end_timestamp,
+                   kbasep_js_atom_done_code done_code)
 {
 	kbase_context *kctx;
 	kbase_device *kbdev;
@@ -1086,11 +1087,14 @@ void kbase_jd_done(kbase_jd_atom *katom, int slot_nr, ktime_t *end_timestamp, ma
 	kbdev = kctx->kbdev;
 	KBASE_DEBUG_ASSERT(kbdev);
 
-	KBASE_TIMELINE_ATOMS_SUBMITTED(kctx, slot_nr, atomic_sub_return(1, &kctx->timeline.jm_atoms_submitted[slot_nr]));
+	if (done_code & KBASE_JS_ATOM_DONE_EVICTED_FROM_NEXT)
+		katom->event_code = BASE_JD_EVENT_REMOVED_FROM_NEXT;
+
+	kbase_timeline_job_slot_done(kbdev, kctx, katom, slot_nr, done_code);
 
 	KBASE_TRACE_ADD(kbdev, JD_DONE, kctx, katom, katom->jc, 0);
 
-	kbasep_js_job_done_slot_irq(katom, slot_nr, end_timestamp, start_new_jobs);
+	kbasep_js_job_done_slot_irq(katom, slot_nr, end_timestamp, done_code);
 
 	katom->slot_nr = slot_nr;
 

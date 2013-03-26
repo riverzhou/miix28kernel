@@ -165,6 +165,11 @@ mali_error kbase_device_init(kbase_device * const kbdev)
 	mutex_init(&kbdev->cacheclean_lock);
 	atomic_set(&kbdev->keep_gpu_powered_count, 0);
 
+#ifdef CONFIG_MALI_TRACE_TIMELINE
+	for (i = 0; i < BASE_JM_SUBMIT_SLOTS; ++i)
+		kbdev->timeline.slot_atoms_submitted[i] = 0;
+#endif /* CONFIG_MALI_TRACE_TIMELINE */
+
 	kbase_debug_assert_register_hook(&kbasep_trace_hook_wrapper, kbdev);
 
 #ifdef CONFIG_MALI_PLATFORM_CONFIG_VEXPRESS
@@ -449,7 +454,7 @@ void kbasep_trace_add(kbase_device *kbdev, kbase_trace_code code, void *ctx, kba
 		trace_msg->katom = MALI_FALSE;
 	} else {
 		trace_msg->katom = MALI_TRUE;
-		trace_msg->atom_number = katom - &katom->kctx->jctx.atoms[0];
+		trace_msg->atom_number = kbase_jd_atom_id(katom->kctx, katom);
 		trace_msg->atom_udata[0] = katom->udata.blob[0];
 		trace_msg->atom_udata[1] = katom->udata.blob[1];
 	}

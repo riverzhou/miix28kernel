@@ -521,12 +521,12 @@ void kbasep_js_release_privileged_ctx(kbase_device *kbdev, kbase_context *kctx);
  * -# Releases resources held by the atom
  * -# if \a end_timestamp != NULL, updates the runpool's notion of time spent by a running ctx
  * -# determines whether a context should be marked for scheduling out
- * -# if start_new_jobs is true, tries to submit the next job on the slot
+ * -# examines done_code to determine whether to submit the next job on the slot
  * (picking from all ctxs in the runpool)
  *
  * In addition, if submission didn't happen (the submit-from-IRQ function
- * failed or start_new_jobs == MALI_FALSE), then this sets a message on katom
- * that submission needs to be retried from the worker thread.
+ * failed or done_code didn't specify to start new jobs), then this sets a
+ * message on katom that submission needs to be retried from the worker thread.
  *
  * Normally, the time calculated from end_timestamp is rounded up to the
  * minimum time precision. Therefore, to ensure the job is recorded as not
@@ -542,7 +542,9 @@ void kbasep_js_release_privileged_ctx(kbase_device *kbdev, kbase_context *kctx);
  * The following locking conditions are made on the caller:
  * - it must hold kbasep_js_device_data::runpoool_irq::lock
  */
-void kbasep_js_job_done_slot_irq(kbase_jd_atom *katom, int slot_nr, ktime_t *end_timestamp, mali_bool start_new_jobs);
+void kbasep_js_job_done_slot_irq(kbase_jd_atom *katom, int slot_nr,
+                                 ktime_t *end_timestamp,
+                                 kbasep_js_atom_done_code done_code);
 
 /**
  * @brief Try to submit the next job on each slot

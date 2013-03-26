@@ -53,16 +53,18 @@ TRACE_EVENT(mali_timeline_atoms_in_flight,
 				__entry->count)
 );
 
-TRACE_EVENT(mali_timeline_atoms_submitted,
+TRACE_EVENT(mali_timeline_gpu_slot_active,
 
 	TP_PROTO(u64 ts_sec,
 		u32 ts_nsec,
+		int event_type,
 		int tgid,
 		int js,
 		int count),
 
 	TP_ARGS(ts_sec,
 		ts_nsec,
+		event_type,
 		tgid,
 		js,
 		count),
@@ -70,6 +72,7 @@ TRACE_EVENT(mali_timeline_atoms_submitted,
 	TP_STRUCT__entry(
 			__field(u64, ts_sec)
 			__field(u32, ts_nsec)
+			__field(int, event_type)
 			__field(int, tgid)
 			__field(int, js)
 			__field(int, count)
@@ -78,12 +81,13 @@ TRACE_EVENT(mali_timeline_atoms_submitted,
 	TP_fast_assign(
 		__entry->ts_sec = ts_sec;
 		__entry->ts_nsec = ts_nsec;
+		__entry->event_type = event_type;
 		__entry->tgid = tgid;
 		__entry->js = js;
 		__entry->count = count;
 	),
 
-	TP_printk("%i,%i.%.9i,%i,%i,%i", SW_SET_GPU_SLOT_ACTIVE,
+	TP_printk("%i,%i.%.9i,%i,%i,%i", __entry->event_type,
 				(int)__entry->ts_sec,
 				(int)__entry->ts_nsec,
 				__entry->tgid,
@@ -121,7 +125,51 @@ TRACE_EVENT(mali_timeline_gpu_power_active,
 	                   (int)__entry->ts_sec,
 	                   (int)__entry->ts_nsec,
 	                   __entry->active)
+
 );
+
+TRACE_EVENT(mali_timeline_slot_atom,
+
+	TP_PROTO(u64 ts_sec,
+		u32 ts_nsec,
+		int event_type,
+		int tgid,
+		int js,
+		int atom_id),
+
+	TP_ARGS(ts_sec,
+		ts_nsec,
+		event_type,
+		tgid,
+		js,
+		atom_id),
+
+	TP_STRUCT__entry(
+			__field(u64, ts_sec)
+			__field(u32, ts_nsec)
+			__field(int, event_type)
+			__field(int, tgid)
+			__field(int, js)
+			__field(int, atom_id)
+	),
+
+	TP_fast_assign(
+		__entry->ts_sec = ts_sec;
+		__entry->ts_nsec = ts_nsec;
+		__entry->event_type = event_type;
+		__entry->tgid = tgid;
+		__entry->js = js;
+		__entry->atom_id = atom_id;
+	),
+
+	TP_printk("%i,%i.%.9i,%i,%i,%i", __entry->event_type,
+				(int)__entry->ts_sec,
+				(int)__entry->ts_nsec,
+				__entry->tgid,
+				__entry->js,
+				__entry->atom_id)
+);
+
 #endif				/* _MALI_TIMELINE_H */
 
 #undef TRACE_INCLUDE_PATH

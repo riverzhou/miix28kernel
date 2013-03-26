@@ -357,10 +357,16 @@ typedef struct kbase_pm_device_data {
 
 	/** Set to true when the GPU is powered and register accesses are possible, false otherwise */
 	mali_bool gpu_powered;
-	/** Spinlock that must be held when writing gpu_powered */
+
+	/** IRQ masks to allow filtering of spurious IRQs received before the driver can handle them */
+	u32 gpu_irq_mask;
+	u32 mmu_irq_mask;
+	u32 job_irq_mask;
+
+	/** Spinlock that must be held when writing gpu_powered and irq masks */
 	spinlock_t gpu_powered_lock;
 
-	/* Time in milliseconds between each dvfs sample */
+	/** Time in milliseconds between each dvfs sample */
 
 	u32 platform_dvfs_frequency;
 
@@ -598,10 +604,12 @@ void kbase_pm_disable_interrupts(struct kbase_device *kbdev);
  * the device so that it is in a known state before the device is used.
  *
  * @param kbdev        The kbase device structure for the device (must be a valid pointer)
+ * @param enable_irqs  When set to MALI_TRUE gpu irqs will be enabled after this call, else
+ *                     they will be left disabled.
  *
  * @return MALI_ERROR_NONE if the device is supported and successfully reset.
  */
-mali_error kbase_pm_init_hw(struct kbase_device *kbdev);
+mali_error kbase_pm_init_hw(struct kbase_device *kbdev, mali_bool enable_irqs );
 
 /** Inform the power management system that the power state of the device is transitioning.
  *
