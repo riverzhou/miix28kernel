@@ -1,6 +1,6 @@
 /*
  *
- * (C) COPYRIGHT 2010-2012 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2010-2013 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the GNU General Public License version 2
  * as published by the Free Software Foundation, and any use by you of this program is subject to the terms of such GNU licence.
@@ -47,9 +47,24 @@ static u64 lock_region(kbase_device *kbdev, u64 pfn, u32 num_pages);
 
 static inline void page_table_entry_set( kbase_device * kbdev, u64 * pte, u64 phy )
 {
-	asm	volatile(	"strd %[phy], [%[pte]]\n\t"
-					:
-					:[phy] "r" (phy), [pte] "r" (pte));
+	/*
+	 *
+	 * In order to prevent the compiler keeping cached copies of memory, we have to explicitly
+	 * say that we have updated memory.
+	 *
+	 * Note: We could manually move the data ourselves into R0 and R1 by specifying
+	 * register variables that are explicitly given registers assignments, the down side of
+	 * this is that we have to assume cpu endianess.  To avoid this we can use the ldrd to read the
+	 * data from memory into R0 and R1 which will respect the cpu endianess, we then use strd to
+	 * make the 64 bit assignment to the page table entry.
+	 *
+	 */
+
+	asm	volatile("ldrd r0, r1, [%[ptemp]]\n\t"
+				"strd r0, r1, [%[pte]]\n\t"
+				: "=m" (*pte)
+				: [ptemp] "r" (&phy), [pte] "r" (pte), "m" (phy)
+				: "r0", "r1" );
 }
 
 static void ksync_kern_vrange_gpu(phys_addr_t paddr, void *vaddr, size_t size)

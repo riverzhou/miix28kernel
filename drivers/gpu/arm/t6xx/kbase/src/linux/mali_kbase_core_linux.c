@@ -1,6 +1,6 @@
 /*
  *
- * (C) COPYRIGHT 2010-2012 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2010-2013 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the GNU General Public License version 2
  * as published by the Free Software Foundation, and any use by you of this program is subject to the terms of such GNU licence.
@@ -24,13 +24,13 @@
 #include <kbase/src/linux/mali_kbase_config_linux.h>
 #ifdef CONFIG_MALI_NO_MALI
 #include "mali_kbase_model_linux.h"
-#endif				/* CONFIG_MALI_NO_MALI */
+#endif /* CONFIG_MALI_NO_MALI */
 
 #ifdef CONFIG_KDS
 #include <linux/kds.h>
 #include <linux/anon_inodes.h>
 #include <linux/syscalls.h>
-#endif				/* CONFIG_KDS */
+#endif /* CONFIG_KDS */
 
 #include <linux/module.h>
 #include <linux/init.h>
@@ -50,7 +50,7 @@
 #include <kbase/src/common/mali_kbase_hw.h>
 #ifdef CONFIG_SYNC
 #include <kbase/src/linux/mali_kbase_sync.h>
-#endif				/* CONFIG_SYNC */
+#endif /* CONFIG_SYNC */
 
 #ifdef CONFIG_MACH_MANTA
 #include <plat/devs.h>
@@ -67,7 +67,7 @@ struct kbase_irq_table {
 #if MALI_UNIT_TEST
 kbase_exported_test_data shared_kernel_test_data;
 EXPORT_SYMBOL(shared_kernel_test_data);
-#endif				/* MALI_UNIT_TEST */
+#endif /* MALI_UNIT_TEST */
 
 #define KBASE_DRV_NAME "mali"
 
@@ -156,7 +156,7 @@ mali_error kbasep_kds_allocate_resource_list_data(kbase_context *kctx, base_exte
 		case BASE_TMEM_IMPORT_TYPE_UMP:
 			kds_res = ump_dd_kds_resource_get(reg->imported_metadata.ump_handle);
 			break;
-#endif				/* defined(CONFIG_UMP) && defined(CONFIG_KDS) */
+#endif /* defined(CONFIG_UMP) && defined(CONFIG_KDS) */
 		default:
 			break;
 		}
@@ -189,12 +189,12 @@ mali_bool kbasep_validate_kbase_pointer(kbase_pointer *p)
 		if (p->compat_value == 0)
 			return MALI_FALSE;
 	} else {
-#endif				/* CONFIG_COMPAT */
+#endif /* CONFIG_COMPAT */
 		if (NULL == p->value)
 			return MALI_FALSE;
 #ifdef CONFIG_COMPAT
 	}
-#endif				/* CONFIG_COMPAT */
+#endif /* CONFIG_COMPAT */
 	return MALI_TRUE;
 }
 
@@ -225,12 +225,12 @@ mali_error kbase_external_buffer_lock(kbase_context *kctx, kbase_uk_ext_buff_kds
 			ext_res_user = args->external_resource.compat_value;
 			file_descriptor_user = args->file_descriptor.compat_value;
 		} else {
-#endif				/* CONFIG_COMPAT */
+#endif /* CONFIG_COMPAT */
 			ext_res_user = args->external_resource.value;
 			file_descriptor_user = args->file_descriptor.value;
 #ifdef CONFIG_COMPAT
 		}
-#endif				/* CONFIG_COMPAT */
+#endif /* CONFIG_COMPAT */
 
 		/* Copy the external resources to lock from user space */
 		if (0 == copy_from_user(ext_res_copy, ext_res_user, ext_resource_size)) {
@@ -290,7 +290,7 @@ mali_error kbase_external_buffer_lock(kbase_context *kctx, kbase_uk_ext_buff_kds
 	}
 	return return_error;
 }
-#endif				/* CONFIG_KDS */
+#endif /* CONFIG_KDS */
 
 static mali_error kbase_dispatch(kbase_context *kctx, void * const args, u32 args_size)
 {
@@ -383,11 +383,11 @@ static mali_error kbase_dispatch(kbase_context *kctx, void * const args, u32 arg
 			if (is_compat_task()) {
 				phandle = tmem_import->phandle.compat_value;
 			} else {
-#endif				/* CONFIG_COMPAT */
+#endif /* CONFIG_COMPAT */
 				phandle = tmem_import->phandle.value;
 #ifdef CONFIG_COMPAT
 			}
-#endif				/* CONFIG_COMPAT */
+#endif /* CONFIG_COMPAT */
 
 			/* code should be in kbase_tmem_import and its helpers, but uk dropped its get_user abstraction */
 			switch (tmem_import->type) {
@@ -395,7 +395,7 @@ static mali_error kbase_dispatch(kbase_context *kctx, void * const args, u32 arg
 			case BASE_TMEM_IMPORT_TYPE_UMP:
 				get_user(handle, phandle);
 				break;
-#endif				/* CONFIG_UMP */
+#endif /* CONFIG_UMP */
 			case BASE_TMEM_IMPORT_TYPE_UMM:
 				get_user(handle, phandle);
 				break;
@@ -640,9 +640,9 @@ static mali_error kbase_dispatch(kbase_context *kctx, void * const args, u32 arg
 			}
 
 			ukh->ret = kbase_stream_create(screate->name, &screate->fd);
-#else
+#else /* CONFIG_SYNC */
 			ukh->ret = MALI_ERROR_FUNCTION_FAILED;
-#endif
+#endif /* CONFIG_SYNC */
 			break;
 		}
 	case KBASE_FUNC_FENCE_VALIDATE:
@@ -653,7 +653,7 @@ static mali_error kbase_dispatch(kbase_context *kctx, void * const args, u32 arg
 				goto bad_size;
 
 			ukh->ret = kbase_fence_validate(fence_validate->fd);
-#endif				/* CONFIG_SYNC */
+#endif /* CONFIG_SYNC */
 			break;
 		}
 
@@ -661,7 +661,7 @@ static mali_error kbase_dispatch(kbase_context *kctx, void * const args, u32 arg
 		{
 #ifdef CONFIG_KDS
 			ukh->ret = kbase_external_buffer_lock(kctx, (kbase_uk_ext_buff_kds_data *) args, args_size);
-#endif				/* CONFIG_KDS */
+#endif /* CONFIG_KDS */
 			break;
 		}
 
@@ -674,7 +674,7 @@ static mali_error kbase_dispatch(kbase_context *kctx, void * const args, u32 arg
 			shared_kernel_test_data.kctx.value = kctx;
 			shared_kernel_test_data.mm.value = (void *)current->mm;
 			ukh->ret = MALI_ERROR_NONE;
-#endif				/* MALI_UNIT_TEST */
+#endif /* MALI_UNIT_TEST */
 			break;
 		}
 
@@ -688,7 +688,7 @@ static mali_error kbase_dispatch(kbase_context *kctx, void * const args, u32 arg
 			ukh->ret = job_atom_inject_error(&params);
 			spin_unlock_irqrestore(&kbdev->osdev.reg_op_lock, flags);
 			/*mutex unlock */
-#endif				/* CONFIG_MALI_ERROR_INJECT */
+#endif /* CONFIG_MALI_ERROR_INJECT */
 			break;
 		}
 
@@ -702,7 +702,7 @@ static mali_error kbase_dispatch(kbase_context *kctx, void * const args, u32 arg
 			ukh->ret = midg_model_control(kbdev->osdev.model, &params);
 			spin_unlock_irqrestore(&kbdev->osdev.reg_op_lock, flags);
 			/*mutex unlock */
-#endif				/* CONFIG_MALI_NO_MALI */
+#endif /* CONFIG_MALI_NO_MALI */
 			break;
 		}
 
@@ -992,7 +992,7 @@ static irqreturn_t kbase_job_irq_handler(int irq, void *data)
 	if ( val && kbdev->pm.job_irq_mask == 0)
 		dev_dbg(kbdev->osdev.dev, "%s: irq %d irqstatus 0x%x before driver is ready\n",
 				__func__, irq, val );
-#endif
+#endif /* CONFIG_MALI_DEBUG */
 
 	/* Prevent IRQs from reaching the driver if we have not enabled them, this is to prevent
 	 * spurious IRQs being processed before the driver is ready to receive them.
@@ -1034,7 +1034,7 @@ static irqreturn_t kbase_mmu_irq_handler(int irq, void *data)
 	if ( val && kbdev->pm.mmu_irq_mask == 0)
 		dev_dbg(kbdev->osdev.dev, "%s: irq %d irqstatus 0x%x before driver is ready\n",
 				__func__, irq, val );
-#endif
+#endif /* CONFIG_MALI_DEBUG */
 
 	/* Prevent IRQs from reaching the driver if we have not enabled them, this is to prevent
 	 * spurious IRQs being processed before the driver is ready to receive them.
@@ -1074,7 +1074,7 @@ static irqreturn_t kbase_gpu_irq_handler(int irq, void *data)
 	if ( val && kbdev->pm.gpu_irq_mask == 0)
 		dev_dbg(kbdev->osdev.dev, "%s: irq %d irqstatus 0x%x before driver is ready\n",
 				__func__, irq, val );
-#endif
+#endif /* CONFIG_MALI_DEBUG */
 
 	/* Prevent IRQs from reaching the driver if we have not enabled them, this is to prevent
 	 * spurious IRQs being processed before the driver is ready to receive them.
@@ -1132,7 +1132,7 @@ static mali_error kbase_set_custom_irq_handler(kbase_device *kbdev, irq_handler_
 		dev_err(osdev->dev, "Can't request interrupt %d (index %d)\n", osdev->irqs[irq_type].irq, irq_type);
 #ifdef CONFIG_SPARSE_IRQ
 		dev_err(osdev->dev, "You have CONFIG_SPARSE_IRQ support enabled - is the interrupt number correct for this configuration?\n");
-#endif				/* CONFIG_SPARSE_IRQ */
+#endif /* CONFIG_SPARSE_IRQ */
 	}
 
 	return result;
@@ -1333,7 +1333,7 @@ static mali_error kbasep_common_test_interrupt_handlers(kbase_device * const kbd
 	return err;
 
 }
-#endif				/* CONFIG_MALI_DEBUG */
+#endif /* CONFIG_MALI_DEBUG */
 
 static int kbase_install_interrupts(kbase_device *kbdev)
 {
@@ -1350,7 +1350,7 @@ static int kbase_install_interrupts(kbase_device *kbdev)
 			dev_err(osdev->dev, "Can't request interrupt %d (index %d)\n", osdev->irqs[i].irq, i);
 #ifdef CONFIG_SPARSE_IRQ
 			dev_err(osdev->dev, "You have CONFIG_SPARSE_IRQ support enabled - is the interrupt number correct for this configuration?\n");
-#endif				/* CONFIG_SPARSE_IRQ */
+#endif /* CONFIG_SPARSE_IRQ */
 			goto release;
 		}
 	}
@@ -1388,7 +1388,7 @@ void kbase_synchronize_irqs(kbase_device *kbdev)
 	}
 }
 
-#endif				/* CONFIG_MALI_NO_MALI */
+#endif /* CONFIG_MALI_NO_MALI */
 
 /** Show callback for the @c gpu_memory sysfs file.
  *
@@ -1656,7 +1656,7 @@ static ssize_t set_split(struct device *dev, struct device_attribute *attr, cons
  * configuration.
  */
 DEVICE_ATTR(sc_split, S_IRUGO|S_IWUSR, show_split, set_split);
-#endif
+#endif /* CONFIG_MALI_DEBUG_SHADER_SPLIT_FS */
 
 
 #if MALI_CUSTOMER_RELEASE == 0
@@ -1800,7 +1800,7 @@ static ssize_t show_js_timeouts(struct device *dev, struct device_attribute *att
  * KBASE_CONFIG_ATTR_JS_RESET_TICKS_NSS.
  */
 DEVICE_ATTR(js_timeouts, S_IRUGO | S_IWUSR, show_js_timeouts, set_js_timeouts);
-#endif				/* MALI_CUSTOMER_RELEASE == 0 */
+#endif /* MALI_CUSTOMER_RELEASE == 0 */
 
 #ifdef CONFIG_MALI_DEBUG
 static ssize_t set_js_softstop_always(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
@@ -1851,7 +1851,7 @@ static ssize_t show_js_softstop_always(struct device *dev, struct device_attribu
  * (see CL t6xx_stress_1 unit-test as an example whereby this feature is used.)
  */
 DEVICE_ATTR(js_softstop_always, S_IRUGO | S_IWUSR, show_js_softstop_always, set_js_softstop_always);
-#endif				/* CONFIG_MALI_DEBUG */
+#endif /* CONFIG_MALI_DEBUG */
 
 #ifdef CONFIG_MALI_DEBUG
 typedef void (kbasep_debug_command_func) (kbase_device *);
@@ -1953,7 +1953,7 @@ static ssize_t issue_debug(struct device *dev, struct device_attribute *attr, co
  * Writing to it with one of those commands will issue said command.
  */
 DEVICE_ATTR(debug_command, S_IRUGO | S_IWUSR, show_debug, issue_debug);
-#endif				/* CONFIG_MALI_DEBUG */
+#endif /* CONFIG_MALI_DEBUG */
 
 #ifdef CONFIG_MALI_TRACE_TIMELINE
 /** The sysfs file @c timeline_defs.
@@ -1961,8 +1961,18 @@ DEVICE_ATTR(debug_command, S_IRUGO | S_IWUSR, show_debug, issue_debug);
  * This provides formatting for the timeline trace system.
  */
 DEVICE_ATTR(timeline_defs, S_IRUGO, show_timeline_defs, NULL);
-#endif
+#endif /* CONFIG_MALI_TRACE_TIMELINE */
 
+#ifdef CONFIG_MALI_NO_MALI
+static int kbase_common_reg_map(kbase_device *kbdev)
+{
+	return 0;
+}
+static void kbase_common_reg_unmap(kbase_device * const kbdev)
+{
+	return;
+}
+#else /* CONFIG_MALI_NO_MALI */
 static int kbase_common_reg_map(kbase_device *kbdev)
 {
 	struct kbase_os_device *osdev = &kbdev->osdev;
@@ -1999,6 +2009,7 @@ static void kbase_common_reg_unmap(kbase_device * const kbdev)
 	release_resource(osdev->reg_res);
 	kfree(osdev->reg_res);
 }
+#endif /* CONFIG_MALI_NO_MALI */
 
 static int kbase_common_device_init(kbase_device *kbdev)
 {
@@ -2015,17 +2026,17 @@ static int kbase_common_device_init(kbase_device *kbdev)
 		    , inited_js_softstop = (1u << 6)
 #if MALI_CUSTOMER_RELEASE == 0
 		    , inited_js_timeouts = (1u << 7)
-#endif
+#endif /* MALI_CUSTOMER_RELEASE == 0 */
 		    /* BASE_HW_ISSUE_8401 */
 		    , inited_workaround = (1u << 8)
 		    , inited_pm_runtime_init = (1u << 9)
 		    , inited_gpu_memory = (1u << 10)
 #ifdef CONFIG_MALI_DEBUG_SHADER_SPLIT_FS
 		,inited_sc_split        = (1u << 11)
-#endif
+#endif /* CONFIG_MALI_DEBUG_SHADER_SPLIT_FS */
 #ifdef CONFIG_MALI_TRACE_TIMELINE
 		,inited_timeline = (1u << 12)
-#endif
+#endif /* CONFIG_MALI_TRACE_LINE */
 	};
 
 	int inited = 0;
@@ -2101,7 +2112,7 @@ static int kbase_common_device_init(kbase_device *kbdev)
 	}
 
 	inited |= inited_sc_split;
-#endif 
+#endif  /* CONFIG_MALI_DEBUG_SHADER_SPLIT_FS */
 
 	if (device_create_file(osdev->dev, &dev_attr_gpu_memory)) {
 		dev_err(osdev->dev, "Couldn't create gpu_memory sysfs file\n");
@@ -2121,7 +2132,7 @@ static int kbase_common_device_init(kbase_device *kbdev)
 		goto out_partial;
 	}
 	inited |= inited_js_softstop;
-#endif				/* CONFIG_MALI_DEBUG */
+#endif /* CONFIG_MALI_DEBUG */
 
 #if MALI_CUSTOMER_RELEASE == 0
 	if (device_create_file(osdev->dev, &dev_attr_js_timeouts)) {
@@ -2129,7 +2140,7 @@ static int kbase_common_device_init(kbase_device *kbdev)
 		goto out_partial;
 	}
 	inited |= inited_js_timeouts;
-#endif				/* MALI_CUSTOMER_RELEASE */
+#endif /* MALI_CUSTOMER_RELEASE */
 
 #ifdef CONFIG_MALI_TRACE_TIMELINE
 	if (device_create_file(osdev->dev, &dev_attr_timeline_defs)) {
@@ -2137,7 +2148,7 @@ static int kbase_common_device_init(kbase_device *kbdev)
 		goto out_partial;
 	}
 	inited |= inited_timeline;
-#endif				/* MALI_CUSTOMER_RELEASE */
+#endif /* MALI_CUSTOMER_RELEASE */
 
 	if (kbase_hw_has_issue(kbdev, BASE_HW_ISSUE_8401)) {
 		if (MALI_ERROR_NONE != kbasep_8401_workaround_init(kbdev))
@@ -2155,8 +2166,8 @@ static int kbase_common_device_init(kbase_device *kbdev)
 			err = -EINVAL;
 			goto out_partial;
 		}
-#endif				/* CONFIG_MALI_NO_MALI */
-#endif				/* CONFIG_MALI_DEBUG */
+#endif /* CONFIG_MALI_NO_MALI */
+#endif /* CONFIG_MALI_DEBUG */
 
 		/* intialise the kctx list */
 		mutex_init(&kbdev->kctx_list_lock);
@@ -2172,11 +2183,11 @@ static int kbase_common_device_init(kbase_device *kbdev)
 #ifdef CONFIG_MALI_TRACE_TIMELINE
 	if (inited & inited_timeline)
 		device_remove_file(kbdev->osdev.dev, &dev_attr_timeline_defs);
-#endif
+#endif /* CONFIG_MALI_TRACE_TIMELINE */
 #if MALI_CUSTOMER_RELEASE == 0
 	if (inited & inited_js_timeouts)
 		device_remove_file(kbdev->osdev.dev, &dev_attr_js_timeouts);
-#endif
+#endif /* MALI_CUSTOMER_RELEASE */
 #ifdef CONFIG_MALI_DEBUG
 	if (inited & inited_js_softstop)
 		device_remove_file(kbdev->osdev.dev, &dev_attr_js_softstop_always);
@@ -2184,7 +2195,7 @@ static int kbase_common_device_init(kbase_device *kbdev)
 	if (inited & inited_debug)
 		device_remove_file(kbdev->osdev.dev, &dev_attr_debug_command);
 
-#endif				/* CONFIG_MALI_DEBUG */
+#endif /* CONFIG_MALI_DEBUG */
 	if (inited & inited_gpu_memory)
 		device_remove_file(kbdev->osdev.dev, &dev_attr_gpu_memory);
 
@@ -2193,7 +2204,7 @@ static int kbase_common_device_init(kbase_device *kbdev)
 	{
 		device_remove_file(kbdev->osdev.dev, &dev_attr_sc_split);
 	}
-#endif
+#endif /* CONFIG_MALI_DEBUG_SHADER_SPLIT_FS */
 
 	if (inited & inited_js)
 		kbasep_js_devdata_halt(kbdev);
@@ -2250,7 +2261,7 @@ static int kbase_platform_device_probe(struct platform_device *pdev)
 	struct mali_base_gpu_core_props *core_props;
 #ifdef CONFIG_MALI_NO_MALI
 	mali_error mali_err;
-#endif				/* CONFIG_MALI_NO_MALI */
+#endif /* CONFIG_MALI_NO_MALI */
 
 	kbdev = kbase_device_alloc();
 	if (!kbdev) {
@@ -2265,7 +2276,7 @@ static int kbase_platform_device_probe(struct platform_device *pdev)
 		err = -ENOMEM;
 		goto out_midg;
 	}
-#endif				/* CONFIG_MALI_NO_MALI */
+#endif /* CONFIG_MALI_NO_MALI */
 
 	osdev = &kbdev->osdev;
 	osdev->dev = &pdev->dev;
@@ -2321,7 +2332,7 @@ static int kbase_platform_device_probe(struct platform_device *pdev)
 	}
 #ifdef CONFIG_UMP
 	kbdev->memdev.ump_device_id = kbasep_get_config_value(kbdev, platform_data, KBASE_CONFIG_ATTR_UMP_DEVICE);
-#endif				/* CONFIG_UMP */
+#endif /* CONFIG_UMP */
 
 	kbdev->memdev.per_process_memory_limit = kbasep_get_config_value(kbdev, platform_data, KBASE_CONFIG_ATTR_MEMORY_PER_PROCESS_LIMIT);
 
@@ -2346,7 +2357,7 @@ static int kbase_platform_device_probe(struct platform_device *pdev)
 #ifdef CONFIG_MALI_NO_MALI
 	midg_device_destroy(kbdev);
  out_midg:
-#endif				/* CONFIG_MALI_NO_MALI */
+#endif /* CONFIG_MALI_NO_MALI */
 	kbase_device_free(kbdev);
  out:
 	return err;
@@ -2365,17 +2376,17 @@ static int kbase_common_device_remove(struct kbase_device *kbdev)
 
 #ifdef CONFIG_MALI_TRACE_TIMELINE
 	device_remove_file(kbdev->osdev.dev, &dev_attr_timeline_defs);
-#endif
+#endif /* CONFIG_MALI_TRACE_TIMELINE */
 
 #ifdef CONFIG_MALI_DEBUG
 	device_remove_file(kbdev->osdev.dev, &dev_attr_js_softstop_always);
 	device_remove_file(kbdev->osdev.dev, &dev_attr_debug_command);
-#endif				/* CONFIG_MALI_DEBUG */
+#endif /* CONFIG_MALI_DEBUG */
 	device_remove_file(kbdev->osdev.dev, &dev_attr_gpu_memory);
 
 #ifdef CONFIG_MALI_DEBUG_SHADER_SPLIT_FS
 	device_remove_file(kbdev->osdev.dev, &dev_attr_sc_split);
-#endif
+#endif /* CONFIG_MALI_DEBUG_SHADER_SPLIT_FS */
 
 	kbasep_js_devdata_halt(kbdev);
 	kbase_job_slot_halt(kbdev);
@@ -2399,7 +2410,7 @@ static int kbase_common_device_remove(struct kbase_device *kbdev)
 	kbase_device_term(kbdev);
 #ifdef CONFIG_MALI_NO_MALI
 	midg_device_destroy(kbdev);
-#endif				/* CONFIG_MALI_NO_MALI */
+#endif /* CONFIG_MALI_NO_MALI */
 	kbase_device_free(kbdev);
 
 	return 0;
@@ -2476,7 +2487,7 @@ static int kbase_device_runtime_suspend(struct device *dev)
 	}
 	return 0;
 }
-#endif				/* CONFIG_PM_RUNTIME */
+#endif /* CONFIG_PM_RUNTIME */
 
 /** Runtime resume callback from the OS.
  *
@@ -2502,7 +2513,7 @@ int kbase_device_runtime_resume(struct device *dev)
 	}
 	return ret;
 }
-#endif				/* CONFIG_PM_RUNTIME */
+#endif /* CONFIG_PM_RUNTIME */
 
 /** Runtime idle callback from the OS.
  *
@@ -2520,7 +2531,7 @@ static int kbase_device_runtime_idle(struct device *dev)
 	/* Avoid pm_runtime_suspend being called */
 	return 1;
 }
-#endif				/* CONFIG_PM_RUNTIME */
+#endif /* CONFIG_PM_RUNTIME */
 
 /** The power management operations for the platform driver.
  */
@@ -2531,7 +2542,7 @@ static const struct dev_pm_ops kbase_pm_ops = {
 	.runtime_suspend = kbase_device_runtime_suspend,
 	.runtime_resume = kbase_device_runtime_resume,
 	.runtime_idle = kbase_device_runtime_idle,
-#endif				/* CONFIG_PM_RUNTIME */
+#endif /* CONFIG_PM_RUNTIME */
 };
 
 static struct platform_driver kbase_platform_driver = {
@@ -2546,7 +2557,7 @@ static struct platform_driver kbase_platform_driver = {
 
 #ifdef CONFIG_MALI_PLATFORM_FAKE
 static struct platform_device *mali_device;
-#endif				/* CONFIG_MALI_PLATFORM_FAKE */
+#endif /* CONFIG_MALI_PLATFORM_FAKE */
 
 static int __init kbase_driver_init(void)
 {
@@ -2589,8 +2600,8 @@ static int __init kbase_driver_init(void)
 		mali_device = NULL;
 		return err;
 	}
-#endif				/* CONFIG_CONFIG_MACH_MANTA */
-#endif				/* CONFIG_MALI_PLATFORM_FAKE */
+#endif /* CONFIG_CONFIG_MACH_MANTA */
+#endif /* CONFIG_MALI_PLATFORM_FAKE */
 	err = platform_driver_register(&kbase_platform_driver);
 	if (err)
 		return err;
@@ -2604,7 +2615,7 @@ static void __exit kbase_driver_exit(void)
 #ifdef CONFIG_MALI_PLATFORM_FAKE
 	if (mali_device)
 		platform_device_unregister(mali_device);
-#endif				/* CONFIG_MALI_PLATFORM_FAKE */
+#endif /* CONFIG_MALI_PLATFORM_FAKE */
 }
 
 module_init(kbase_driver_init);
@@ -2657,4 +2668,4 @@ void kbase_trace_mali_total_alloc_pages_change(long long int event)
 {
 	trace_mali_total_alloc_pages_change(event);
 }
-#endif				/* CONFIG_MALI_GATOR_SUPPORT */
+#endif /* CONFIG_MALI_GATOR_SUPPORT */

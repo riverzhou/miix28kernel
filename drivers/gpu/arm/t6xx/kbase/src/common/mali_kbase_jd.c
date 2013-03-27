@@ -1,6 +1,6 @@
 /*
  *
- * (C) COPYRIGHT 2010-2012 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2010-2013 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the GNU General Public License version 2
  * as published by the Free Software Foundation, and any use by you of this program is subject to the terms of such GNU licence.
@@ -540,6 +540,7 @@ KBASE_EXPORT_TEST_API(jd_resolve_dep)
 mali_bool jd_done_nolock(kbase_jd_atom *katom)
 {
 	struct kbase_context *kctx = katom->kctx;
+	kbase_device *kbdev = kctx->kbdev;
 	struct list_head completed_jobs;
 	struct list_head runnable_jobs;
 	mali_bool need_to_try_schedule_context = MALI_FALSE;
@@ -556,6 +557,21 @@ mali_bool jd_done_nolock(kbase_jd_atom *katom)
 		if (katom->dep_atom[i]) {
 			list_del(&katom->dep_item[i]);
 			katom->dep_atom[i] = NULL;
+		}
+	}
+
+	/* With PRLAM-10817 the last tile of a fragment job being soft-stopped can fail with
+	 * BASE_JD_EVENT_TILE_RANGE_FAULT.
+	 *
+	 * So here if the fragment job failed with TILE_RANGE_FAULT and it has been soft-stopped, then we promote the
+	 * error code to BASE_JD_EVENT_DONE
+	 */
+
+	if ( kbase_hw_has_issue(kbdev, BASE_HW_ISSUE_10817) && katom->event_code == BASE_JD_EVENT_TILE_RANGE_FAULT ) {
+		if ( ( katom->core_req & BASE_JD_REQ_FS ) && katom->been_soft_stoppped ) {
+			/* Promote the failure to job done */
+			katom->event_code = BASE_JD_EVENT_DONE;
+			katom->been_soft_stoppped = MALI_FALSE;
 		}
 	}
 
@@ -665,6 +681,8 @@ static mali_bool jd_submit_atom(kbase_context *kctx, const base_jd_atom_v2 *user
 	katom->coreref_state = KBASE_ATOM_COREREF_STATE_NO_CORES_REQUESTED;
 	katom->core_req = core_req;
 	katom->nice_prio = user_atom->prio;
+	katom->been_soft_stoppped = MALI_FALSE;
+
 #ifdef CONFIG_KDS
 	/* Start by assuming that the KDS dependencies are satisfied,
 	 * kbase_jd_pre_external_resources will correct this if there are dependencies */
