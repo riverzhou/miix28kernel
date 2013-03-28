@@ -1,4 +1,4 @@
-linux-nexus4 (3.4.0-0.1) precise; urgency=low
+linux-nexus4 (3.4.0-0.1) raring; urgency=low
 
   * Initial revision based on git://phablet.ubuntu.com/CyanogenMod/lge-kernel-mako.git phablet-10.1
 
