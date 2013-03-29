@@ -732,9 +732,6 @@ irqreturn_t hdmi_irq_handler_ext(int irq, void *dev_data)
 
 static void hdmi_hpd_changed(struct hdmi_device *hdev, int state)
 {
-	struct device *dev = hdev->dev;
-	struct platform_device *pdev = to_platform_device(dev);
-	struct s5p_hdmi_platdata *pdata = pdev->dev.platform_data;
 	u32 preset;
 	int ret;
 
@@ -756,6 +753,7 @@ static void hdmi_hpd_changed(struct hdmi_device *hdev, int state)
 	}
 
 	switch_set_state(&hdev->hpd_switch, state);
+	switch_set_state(&hdev->hpd_audio_switch, state ? !hdev->dvi_mode : 0);
 
 	dev_info(hdev->dev, "%s\n", state ? "plugged" : "unplugged");
 }
@@ -896,6 +894,8 @@ static int __devinit hdmi_probe(struct platform_device *pdev)
 
 	hdmi_dev->hpd_switch.name = "hdmi";
 	switch_dev_register(&hdmi_dev->hpd_switch);
+	hdmi_dev->hpd_audio_switch.name = "hdmi_audio";
+	switch_dev_register(&hdmi_dev->hpd_audio_switch);
 
 	ret = request_irq(hdmi_dev->int_irq, hdmi_irq_handler,
 			0, "hdmi-int", hdmi_dev);
@@ -984,6 +984,7 @@ static int __devexit hdmi_remove(struct platform_device *pdev)
 	free_irq(hdmi_dev->ext_irq, hdmi_dev);
 	free_irq(hdmi_dev->int_irq, hdmi_dev);
 	switch_dev_unregister(&hdmi_dev->hpd_switch);
+	switch_dev_unregister(&hdmi_dev->hpd_audio_switch);
 	iounmap(hdmi_dev->regs);
 	hdmi_resources_cleanup(hdmi_dev);
 	flush_workqueue(hdmi_dev->hdcp_wq);
