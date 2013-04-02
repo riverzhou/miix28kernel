@@ -1,6 +1,6 @@
 /*
  *
- * (C) COPYRIGHT 2010-2012 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2010-2013 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the GNU General Public License version 2
  * as published by the Free Software Foundation, and any use by you of this program is subject to the terms of such GNU licence.
@@ -408,8 +408,9 @@ static mali_bool kbasep_hard_stop_allowed(kbase_device *kbdev, u16 core_reqs)
 	return hard_stops_allowed;
 }
 
-static void kbasep_job_slot_soft_or_hard_stop_do_action(kbase_device *kbdev, int js, u32 action, u16 core_reqs, kbase_context *kctx)
+static void kbasep_job_slot_soft_or_hard_stop_do_action(kbase_device *kbdev, int js, u32 action, u16 core_reqs, kbase_jd_atom * target_katom )
 {
+	kbase_context *kctx = target_katom->kctx;
 #if KBASE_TRACE_ENABLE
 	u32 status_reg_before;
 	u64 job_in_head_before;
@@ -429,6 +430,9 @@ static void kbasep_job_slot_soft_or_hard_stop_do_action(kbase_device *kbdev, int
 #endif				/* CONFIG_MALI_DEBUG */
 			return;
 		}
+
+		/* We are about to issue a soft stop, so mark the atom as having been soft stopped */
+		target_katom->been_soft_stoppped = MALI_TRUE;
 	}
 
 	if (action == JSn_COMMAND_HARD_STOP) {
@@ -488,6 +492,8 @@ static void kbasep_job_slot_soft_or_hard_stop_do_action(kbase_device *kbdev, int
 	}
 
 	kbase_reg_write(kbdev, JOB_SLOT_REG(js, JSn_COMMAND), action, kctx);
+
+
 
 #if KBASE_TRACE_ENABLE
 	status_reg_after = kbase_reg_read(kbdev, JOB_SLOT_REG(js, JSn_STATUS), NULL);
@@ -590,7 +596,7 @@ static void kbasep_job_slot_soft_or_hard_stop(kbase_device *kbdev, kbase_context
 		if (JM_JOB_IS_CURRENT_JOB_INDEX(jobs_submitted - i)) {
 			/* The last job in the slot, check if there is a job in the next register */
 			if (kbase_reg_read(kbdev, JOB_SLOT_REG(js, JSn_COMMAND_NEXT), NULL) == 0) {
-				kbasep_job_slot_soft_or_hard_stop_do_action(kbdev, js, action, core_reqs, katom->kctx);
+				kbasep_job_slot_soft_or_hard_stop_do_action(kbdev, js, action, core_reqs, katom);
 			} else {
 				/* The job is in the next registers */
 				beenthere("clearing job from next registers on slot %d", js);
@@ -615,7 +621,7 @@ static void kbasep_job_slot_soft_or_hard_stop(kbase_device *kbdev, kbase_context
 					/* The job transitioned into the current registers before we managed to evict it,
 					 * in this case we fall back to soft/hard-stopping the job */
 					beenthere("missed job in next register, soft/hard-stopping slot %d", js);
-					kbasep_job_slot_soft_or_hard_stop_do_action(kbdev, js, action, core_reqs, katom->kctx);
+					kbasep_job_slot_soft_or_hard_stop_do_action(kbdev, js, action, core_reqs, katom);
 				}
 			}
 		} else if (JM_JOB_IS_NEXT_JOB_INDEX(jobs_submitted - i)) {
@@ -671,7 +677,7 @@ static void kbasep_job_slot_soft_or_hard_stop(kbase_device *kbdev, kbase_context
 
 				/* Next is now free, so we can soft/hard-stop the slot */
 				beenthere("soft/hard-stopped slot %d (there was a job in next which was successfully cleared)\n", js);
-				kbasep_job_slot_soft_or_hard_stop_do_action(kbdev, js, action, core_reqs, katom->kctx);
+				kbasep_job_slot_soft_or_hard_stop_do_action(kbdev, js, action, core_reqs, katom);
 			}
 			/* If there was no job in the next registers, then the job we were
 			 * interested in has finished, so we need not take any action

@@ -41,7 +41,7 @@ config MALI_T6XX_RT_PM
 	depends on PM_RUNTIME
 	default n
 	help
-	  Choose this option to enable runtime power management on vithar DDK.
+	  Choose this option to enable runtime power management on MALI T6XX DDK.
 
 config MALI_T6XX_ENABLE_TRACE
        bool "Enable kbase tracing"

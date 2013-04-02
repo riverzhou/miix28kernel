@@ -1,6 +1,6 @@
 /*
  *
- * (C) COPYRIGHT 2012 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2012-2013 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the GNU General Public License version 2
  * as published by the Free Software Foundation, and any use by you of this program is subject to the terms of such GNU licence.
@@ -144,6 +144,9 @@ typedef enum base_hw_issue {
 	/* RA DCD load request to SDC returns invalid load ignore causing colour buffer mismatch */
 	BASE_HW_ISSUE_10327,
 
+	/* Occlusion query result may be updated prematurely when fragment shader alters coverage */
+	BASE_HW_ISSUE_10410,
+
 	/* MAG / MIN filter selection happens after image descriptor clamps were applied */
 	BASE_HW_ISSUE_10472,
 
@@ -161,6 +164,9 @@ typedef enum base_hw_issue {
 	
 	/* sometimes HW doesn't invalidate cached VPDs when it has to */
 	BASE_HW_ISSUE_10684,
+
+	/* Soft-stopping fragment jobs might fail with TILE_RANGE_FAULT */
+	BASE_HW_ISSUE_10817,
 
 	/* Intermittent missing interrupt on job completion */
 	BASE_HW_ISSUE_10883,
@@ -212,6 +218,7 @@ static const base_hw_issue base_hw_issues_t60x_r0p0_15dev0[] = {
 	BASE_HW_ISSUE_9435,
 	BASE_HW_ISSUE_9510,
 	BASE_HW_ISSUE_9630,
+	BASE_HW_ISSUE_10410,
 	BASE_HW_ISSUE_10472,
 	BASE_HW_ISSUE_10632,
 	BASE_HW_ISSUE_10649,
@@ -239,6 +246,7 @@ static const base_hw_issue base_hw_issues_t60x_r0p0_eac[] = {
 	BASE_HW_ISSUE_9423,
 	BASE_HW_ISSUE_9435,
 	BASE_HW_ISSUE_9510,
+	BASE_HW_ISSUE_10410,
 	BASE_HW_ISSUE_10472,
 	BASE_HW_ISSUE_10632,
 	BASE_HW_ISSUE_10649,
@@ -265,6 +273,7 @@ static const base_hw_issue base_hw_issues_t60x_r0p1[] = {
 	BASE_HW_ISSUE_9275,
 	BASE_HW_ISSUE_9435,
 	BASE_HW_ISSUE_9510,
+	BASE_HW_ISSUE_10410,
 	BASE_HW_ISSUE_10472,
 	BASE_HW_ISSUE_10632,
 	BASE_HW_ISSUE_10649,
@@ -291,6 +300,7 @@ static const base_hw_issue base_hw_issues_t65x_r0p1[] = {
 	BASE_HW_ISSUE_9275,
 	BASE_HW_ISSUE_9435,
 	BASE_HW_ISSUE_9510,
+	BASE_HW_ISSUE_10410,
 	BASE_HW_ISSUE_10472,
 	BASE_HW_ISSUE_10632,
 	BASE_HW_ISSUE_10649,
@@ -310,12 +320,14 @@ static const base_hw_issue base_hw_issues_t62x_r0p0[] = {
 	BASE_HW_ISSUE_9435,
 	BASE_HW_ISSUE_10127,
 	BASE_HW_ISSUE_10327,
+	BASE_HW_ISSUE_10410,
 	BASE_HW_ISSUE_10472,
 	BASE_HW_ISSUE_10632,
 	BASE_HW_ISSUE_10649,
 	BASE_HW_ISSUE_10676,
 	BASE_HW_ISSUE_10682,
 	BASE_HW_ISSUE_10684,
+	BASE_HW_ISSUE_10817,
 	BASE_HW_ISSUE_10883,
 	BASE_HW_ISSUE_10931,
 	/* List of hardware issues must end with BASE_HW_ISSUE_END */
@@ -329,12 +341,14 @@ static const base_hw_issue base_hw_issues_t67x_r0p0[] = {
 	BASE_HW_ISSUE_9435,
 	BASE_HW_ISSUE_10127,
 	BASE_HW_ISSUE_10327,
+	BASE_HW_ISSUE_10410,
 	BASE_HW_ISSUE_10472,
 	BASE_HW_ISSUE_10632,
 	BASE_HW_ISSUE_10649,
 	BASE_HW_ISSUE_10676,
 	BASE_HW_ISSUE_10682,
 	BASE_HW_ISSUE_10684,
+	BASE_HW_ISSUE_10817,
 	BASE_HW_ISSUE_10883,
 	BASE_HW_ISSUE_10931,
 	/* List of hardware issues must end with BASE_HW_ISSUE_END */
@@ -349,12 +363,14 @@ static const base_hw_issue base_hw_issues_t62x_r0p1[] = {
 	BASE_HW_ISSUE_9435,
 	BASE_HW_ISSUE_10127,
 	BASE_HW_ISSUE_10327,
+	BASE_HW_ISSUE_10410,
 	BASE_HW_ISSUE_10472,
 	BASE_HW_ISSUE_10632,
 	BASE_HW_ISSUE_10649,
 	BASE_HW_ISSUE_10676,
 	BASE_HW_ISSUE_10682,
 	BASE_HW_ISSUE_10684,
+	BASE_HW_ISSUE_10817,
 	BASE_HW_ISSUE_10883,
 	BASE_HW_ISSUE_10931,
 	/* List of hardware issues must end with BASE_HW_ISSUE_END */
@@ -369,12 +385,14 @@ static const base_hw_issue base_hw_issues_t67x_r0p1[] = {
 	BASE_HW_ISSUE_9435,
 	BASE_HW_ISSUE_10127,
 	BASE_HW_ISSUE_10327,
+	BASE_HW_ISSUE_10410,
 	BASE_HW_ISSUE_10472,
 	BASE_HW_ISSUE_10632,
 	BASE_HW_ISSUE_10649,
 	BASE_HW_ISSUE_10676,
 	BASE_HW_ISSUE_10682,
 	BASE_HW_ISSUE_10684,
+	BASE_HW_ISSUE_10817,
 	BASE_HW_ISSUE_10883,
 	BASE_HW_ISSUE_10931,
 	/* List of hardware issues must end with BASE_HW_ISSUE_END */
@@ -390,6 +408,7 @@ static const base_hw_issue base_hw_issues_t62x_r1p0[] = {
 	BASE_HW_ISSUE_10472,
 	BASE_HW_ISSUE_10649,
 	BASE_HW_ISSUE_10684,
+	BASE_HW_ISSUE_10817,
 	BASE_HW_ISSUE_10883,
 	BASE_HW_ISSUE_10931,
 	/* List of hardware issues must end with BASE_HW_ISSUE_END */
@@ -405,6 +424,7 @@ static const base_hw_issue base_hw_issues_t67x_r1p0[] = {
 	BASE_HW_ISSUE_10472,
 	BASE_HW_ISSUE_10649,
 	BASE_HW_ISSUE_10684,
+	BASE_HW_ISSUE_10817,
 	BASE_HW_ISSUE_10883,
 	BASE_HW_ISSUE_10931,
 	/* List of hardware issues must end with BASE_HW_ISSUE_END */

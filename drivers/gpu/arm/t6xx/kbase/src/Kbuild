@@ -146,13 +146,14 @@ ifeq ($(CONFIG_MALI_PLATFORM_PANDA),y)
 endif
 
 ifeq ($(CONFIG_MALI_PLATFORM_THIRDPARTY),y)
-# remove begin and end quotes from the Kconfig string type
 ifeq ($(CONFIG_MALI_T6XX),m)
+# remove begin and end quotes from the Kconfig string type
     platform_name := $(shell echo $(CONFIG_MALI_PLATFORM_THIRDPARTY_NAME))
-    SRC += platform/$(platform_name)/mali_kbase_config_$(platform_name).c
-else
-	obj-$(CONFIG_MALI_T6XX) += platform/
-endif 
+    MALI_PLATFORM_THIRDPARTY_DIR := platform/$(platform_name)
+    include  $(src)/platform/$(platform_name)/Kbuild
+else ifeq ($(CONFIG_MALI_T6XX),y)  
+    obj-$(CONFIG_MALI_T6XX) += platform/
+endif
 endif
 
 # Tell the Linux build system from which .o file to create the kernel module
@@ -160,3 +161,5 @@ obj-$(CONFIG_MALI_T6XX) += mali_kbase.o
 
 # Tell the Linux build system to enable building of our .c files
 mali_kbase-y := $(SRC:.c=.o)
+
+
