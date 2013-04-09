@@ -24,6 +24,8 @@
 
 #include <linux/mfd/wm8994/registers.h>
 
+#include <plat/adc.h>
+
 #include <sound/jack.h>
 #include <sound/pcm.h>
 #include <sound/pcm_params.h>
@@ -35,11 +37,22 @@
 #define MCLK1_FREQ	24000000
 #define MCLK2_FREQ	32768
 
+#define EAR_ADC_CHANNEL		7
+#define ADC_HEADPHONE_3POLE	0x4BA
+#define ADC_HEADSET_4POLE	0xED8
+/* HEADPHONE: [2] - <3 ohm, [1] - Valid, [0] - Mic Accessory is present */
+#define STATUS_HEADPHONE_3POLE	0x7
+/* HEADSET: [10] - >475 ohm, [1] - Valid, [0] - Mic Accessory is present */
+#define STATUS_HEADSET_4POLE	0x403
+#define ADC_MIC_TEST_NUM	10
+#define ADC_MIC_WAIT_US		10000
+
 struct manta_wm1811 {
 	struct clk *clk;
 	unsigned int pll_out;
 	unsigned int prev_pll_out;
 	struct snd_soc_jack jack;
+	struct s3c_adc_client *adc_client;
 };
 
 static const struct snd_kcontrol_new manta_controls[] = {
@@ -399,6 +412,43 @@ static struct snd_soc_dai_driver manta_ext_dai[] = {
 	},
 };
 
+static struct platform_device android_device_ear = {
+	.name = "android-ear",
+	.id = -1,
+};
+
+static void manta_mic_id(void *data, u16 status)
+{
+	struct snd_soc_codec *codec = data;
+	struct manta_wm1811 *machine =
+				snd_soc_card_get_drvdata(codec->card);
+	int sum = -1;
+	int count = 0;
+	int ret;
+	int i;
+
+	status = STATUS_HEADPHONE_3POLE;
+	if (machine->adc_client) {
+		for (i = 0; i < ADC_MIC_TEST_NUM; i++) {
+			usleep_range(ADC_MIC_WAIT_US, ADC_MIC_WAIT_US);
+			ret = s3c_adc_read(machine->adc_client,
+					   EAR_ADC_CHANNEL);
+			if (ret >= 0) {
+				sum += ret;
+				count++;
+			}
+		}
+		if (count > 0)
+			sum = (sum + 1) / count;
+	}
+	if (sum < 0)
+		pr_err("Error reading ADC line\n");
+	else if (sum > ADC_HEADPHONE_3POLE && sum <= ADC_HEADSET_4POLE)
+		status = STATUS_HEADSET_4POLE;
+
+	wm8958_mic_id(data, status);
+}
+
 static int manta_late_probe(struct snd_soc_card *card)
 {
 	struct snd_soc_codec *codec = card->rtd[0].codec;
@@ -479,7 +529,21 @@ static int manta_late_probe(struct snd_soc_card *card)
 	if (ret < 0)
 		dev_err(codec->dev, "Failed to set KEY_VOLUMEDOWN: %d\n", ret);
 
-	wm8958_mic_detect(codec, &machine->jack, NULL, NULL, NULL, NULL);
+	/* certain manta revisions must use SoC ADC mic detection */
+	if (exynos5_manta_get_revision() >= MANTA_REV_DOGFOOD05) {
+		machine->adc_client =
+			s3c_adc_register(&android_device_ear, NULL, NULL, 0);
+		if (IS_ERR(machine->adc_client)) {
+			dev_err(codec->dev, "Failed to set ADC client: %ld\n",
+				PTR_ERR(machine->adc_client));
+			machine->adc_client = NULL;
+		}
+		wm8958_mic_detect(codec, &machine->jack,
+					NULL, NULL, manta_mic_id, codec);
+	} else {
+		wm8958_mic_detect(codec, &machine->jack,
+					NULL, NULL, NULL, NULL);
+	}
 
 	return 0;
 }
@@ -594,6 +658,8 @@ static int __devexit snd_manta_remove(struct platform_device *pdev)
 {
 	struct manta_wm1811 *machine = snd_soc_card_get_drvdata(&manta);
 
+	if (machine->adc_client)
+		s3c_adc_release(machine->adc_client);
 	snd_soc_unregister_card(&manta);
 	clk_disable(machine->clk);
 	clk_put(machine->clk);

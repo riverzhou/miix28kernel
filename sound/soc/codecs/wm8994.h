@@ -55,6 +55,8 @@ int wm8958_aif_ev(struct snd_soc_dapm_widget *w,
 
 void wm8958_dsp2_init(struct snd_soc_codec *codec);
 
+void wm8958_mic_id(void *data, u16 status);
+
 struct wm8994_micdet {
 	struct snd_soc_jack *jack;
 	bool detecting;

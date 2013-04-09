@@ -3485,7 +3485,7 @@ static void wm8958_open_circuit_work(struct work_struct *work)
 	mutex_unlock(&wm8994->accdet_lock);
 }
 
-static void wm8958_mic_id(void *data, u16 status)
+void wm8958_mic_id(void *data, u16 status)
 {
 	struct snd_soc_codec *codec = data;
 	struct wm8994_priv *wm8994 = snd_soc_codec_get_drvdata(codec);
