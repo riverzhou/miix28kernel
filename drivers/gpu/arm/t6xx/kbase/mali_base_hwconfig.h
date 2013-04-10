@@ -150,6 +150,9 @@ typedef enum base_hw_issue {
 	/* MAG / MIN filter selection happens after image descriptor clamps were applied */
 	BASE_HW_ISSUE_10472,
 
+	/* GPU interprets sampler and image descriptor pointer array sizes as one bigger than they are defined in midg structures */
+	BASE_HW_ISSUE_10487,
+
 	/* LD_SPECIAL instruction reads incorrect RAW tile buffer value when internal tib format is R10G10B10A2 */
 	BASE_HW_ISSUE_10632,
 
@@ -220,6 +223,7 @@ static const base_hw_issue base_hw_issues_t60x_r0p0_15dev0[] = {
 	BASE_HW_ISSUE_9630,
 	BASE_HW_ISSUE_10410,
 	BASE_HW_ISSUE_10472,
+	BASE_HW_ISSUE_10487,
 	BASE_HW_ISSUE_10632,
 	BASE_HW_ISSUE_10649,
 	BASE_HW_ISSUE_10676,
@@ -248,6 +252,7 @@ static const base_hw_issue base_hw_issues_t60x_r0p0_eac[] = {
 	BASE_HW_ISSUE_9510,
 	BASE_HW_ISSUE_10410,
 	BASE_HW_ISSUE_10472,
+	BASE_HW_ISSUE_10487,
 	BASE_HW_ISSUE_10632,
 	BASE_HW_ISSUE_10649,
 	BASE_HW_ISSUE_10676,
@@ -275,6 +280,7 @@ static const base_hw_issue base_hw_issues_t60x_r0p1[] = {
 	BASE_HW_ISSUE_9510,
 	BASE_HW_ISSUE_10410,
 	BASE_HW_ISSUE_10472,
+	BASE_HW_ISSUE_10487,
 	BASE_HW_ISSUE_10632,
 	BASE_HW_ISSUE_10649,
 	BASE_HW_ISSUE_10676,
@@ -302,6 +308,7 @@ static const base_hw_issue base_hw_issues_t65x_r0p1[] = {
 	BASE_HW_ISSUE_9510,
 	BASE_HW_ISSUE_10410,
 	BASE_HW_ISSUE_10472,
+	BASE_HW_ISSUE_10487,
 	BASE_HW_ISSUE_10632,
 	BASE_HW_ISSUE_10649,
 	BASE_HW_ISSUE_10676,
@@ -322,6 +329,7 @@ static const base_hw_issue base_hw_issues_t62x_r0p0[] = {
 	BASE_HW_ISSUE_10327,
 	BASE_HW_ISSUE_10410,
 	BASE_HW_ISSUE_10472,
+	BASE_HW_ISSUE_10487,
 	BASE_HW_ISSUE_10632,
 	BASE_HW_ISSUE_10649,
 	BASE_HW_ISSUE_10676,
@@ -343,6 +351,7 @@ static const base_hw_issue base_hw_issues_t67x_r0p0[] = {
 	BASE_HW_ISSUE_10327,
 	BASE_HW_ISSUE_10410,
 	BASE_HW_ISSUE_10472,
+	BASE_HW_ISSUE_10487,
 	BASE_HW_ISSUE_10632,
 	BASE_HW_ISSUE_10649,
 	BASE_HW_ISSUE_10676,
@@ -365,6 +374,7 @@ static const base_hw_issue base_hw_issues_t62x_r0p1[] = {
 	BASE_HW_ISSUE_10327,
 	BASE_HW_ISSUE_10410,
 	BASE_HW_ISSUE_10472,
+	BASE_HW_ISSUE_10487,
 	BASE_HW_ISSUE_10632,
 	BASE_HW_ISSUE_10649,
 	BASE_HW_ISSUE_10676,
@@ -387,6 +397,7 @@ static const base_hw_issue base_hw_issues_t67x_r0p1[] = {
 	BASE_HW_ISSUE_10327,
 	BASE_HW_ISSUE_10410,
 	BASE_HW_ISSUE_10472,
+	BASE_HW_ISSUE_10487,
 	BASE_HW_ISSUE_10632,
 	BASE_HW_ISSUE_10649,
 	BASE_HW_ISSUE_10676,

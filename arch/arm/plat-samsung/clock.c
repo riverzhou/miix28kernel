@@ -495,7 +495,10 @@ static const struct file_operations clock_tree_fops = {
 static int clock_rate_show(void *data, u64 *val)
 {
 	struct clk *c = data;
-	*val = clk_get_rate(c);
+	unsigned long flags;
+	spin_lock_irqsave(&clocks_lock, flags);
+	*val = c->usage ? clk_get_rate(c) : 0;
+	spin_unlock_irqrestore(&clocks_lock, flags);
 	return 0;
 }
 DEFINE_SIMPLE_ATTRIBUTE(clock_rate_fops, clock_rate_show, NULL, "%llu\n");
