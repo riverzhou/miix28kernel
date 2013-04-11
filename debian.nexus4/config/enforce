@@ -49,7 +49,7 @@ value CONFIG_LOCALVERSION_AUTO n
 
 # provide framebuffer console form the start
 # UbuntuSpec:foundations-m-grub2-boot-framebuffer
-value CONFIG_FRAMEBUFFER_CONSOLE y
+#value CONFIG_FRAMEBUFFER_CONSOLE y
 
 # GRUB changes will rely on built in vesafb on x86,
 # UbuntuSpec:foundations-m-grub2-boot-framebuffer
