@@ -144,8 +144,6 @@ struct device;
 struct mmc_async_req {
 	/* active mmc request */
 	struct mmc_request	*mrq;
-	struct mmc_request      *__mrq;
-	bool                    __cond;
 	/*
 	 * Check error status of completed mmc request.
 	 * Returns 0 if success otherwise non zero.

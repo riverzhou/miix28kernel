@@ -166,7 +166,6 @@ int mmc_init_queue(struct mmc_queue *mq, struct mmc_card *card,
 	int ret;
 	struct mmc_queue_req *mqrq_cur = &mq->mqrq[0];
 	struct mmc_queue_req *mqrq_prev = &mq->mqrq[1];
-	struct mmc_queue_req *mqrq_hdr = &mq->mqrq[2];
 
 	if (mmc_dev(host)->dma_mask && *mmc_dev(host)->dma_mask)
 		limit = *mmc_dev(host)->dma_mask;
@@ -178,15 +177,12 @@ int mmc_init_queue(struct mmc_queue *mq, struct mmc_card *card,
 
 	memset(&mq->mqrq_cur, 0, sizeof(mq->mqrq_cur));
 	memset(&mq->mqrq_prev, 0, sizeof(mq->mqrq_prev));
-	memset(&mq->mqrq_hdr, 0, sizeof(mq->mqrq_hdr));
 
 	INIT_LIST_HEAD(&mqrq_cur->packed_list);
 	INIT_LIST_HEAD(&mqrq_prev->packed_list);
-	INIT_LIST_HEAD(&mqrq_hdr->packed_list);
 
 	mq->mqrq_cur = mqrq_cur;
 	mq->mqrq_prev = mqrq_prev;
-	mq->mqrq_hdr = mqrq_hdr;
 	mq->queue->queuedata = mq;
 
 	blk_queue_prep_rq(mq->queue, mmc_prep_request);
@@ -222,21 +218,9 @@ int mmc_init_queue(struct mmc_queue *mq, struct mmc_card *card,
 				kfree(mqrq_cur->bounce_buf);
 				mqrq_cur->bounce_buf = NULL;
 			}
-
-			mqrq_hdr->bounce_buf = kmalloc(bouncesz, GFP_KERNEL);
-			if (!mqrq_hdr->bounce_buf) {
-				printk(KERN_WARNING "%s: unable to "
-						"allocate bounce hdr buffer\n",
-						mmc_card_name(card));
-				kfree(mqrq_cur->bounce_buf);
-				mqrq_cur->bounce_buf = NULL;
-				kfree(mqrq_prev->bounce_buf);
-				mqrq_prev->bounce_buf = NULL;
-			}
 		}
 
-		if (mqrq_cur->bounce_buf && mqrq_prev->bounce_buf &&
-				mqrq_hdr->bounce_buf) {
+		if (mqrq_cur->bounce_buf && mqrq_prev->bounce_buf) {
 			blk_queue_bounce_limit(mq->queue, BLK_BOUNCE_ANY);
 			blk_queue_max_hw_sectors(mq->queue, bouncesz / 512);
 			blk_queue_max_segments(mq->queue, bouncesz / 512);
@@ -259,21 +243,11 @@ int mmc_init_queue(struct mmc_queue *mq, struct mmc_card *card,
 				mmc_alloc_sg(bouncesz / 512, &ret);
 			if (ret)
 				goto cleanup_queue;
-
-			mqrq_hdr->sg = mmc_alloc_sg(1, &ret);
-			if (ret)
-				goto cleanup_queue;
-
-			mqrq_hdr->bounce_sg =
-				mmc_alloc_sg(bouncesz / 512, &ret);
-			if (ret)
-				goto cleanup_queue;
 		}
 	}
 #endif
 
-	if (!mqrq_cur->bounce_buf && !mqrq_prev->bounce_buf &&
-			!mqrq_hdr->bounce_buf) {
+	if (!mqrq_cur->bounce_buf && !mqrq_prev->bounce_buf) {
 		blk_queue_bounce_limit(mq->queue, limit);
 		blk_queue_max_hw_sectors(mq->queue,
 			min(host->max_blk_count, host->max_req_size / 512));
@@ -284,11 +258,8 @@ int mmc_init_queue(struct mmc_queue *mq, struct mmc_card *card,
 		if (ret)
 			goto cleanup_queue;
 
-		mqrq_prev->sg = mmc_alloc_sg(host->max_segs, &ret);
-		if (ret)
-			goto cleanup_queue;
 
-		mqrq_hdr->sg = mmc_alloc_sg(host->max_segs, &ret);
+		mqrq_prev->sg = mmc_alloc_sg(host->max_segs, &ret);
 		if (ret)
 			goto cleanup_queue;
 	}
@@ -309,8 +280,6 @@ int mmc_init_queue(struct mmc_queue *mq, struct mmc_card *card,
 	mqrq_cur->bounce_sg = NULL;
 	kfree(mqrq_prev->bounce_sg);
 	mqrq_prev->bounce_sg = NULL;
-	kfree(mqrq_hdr->bounce_sg);
-	mqrq_hdr->bounce_sg = NULL;
 
  cleanup_queue:
 	kfree(mqrq_cur->sg);
@@ -323,11 +292,6 @@ int mmc_init_queue(struct mmc_queue *mq, struct mmc_card *card,
 	kfree(mqrq_prev->bounce_buf);
 	mqrq_prev->bounce_buf = NULL;
 
-	kfree(mqrq_hdr->sg);
-	mqrq_hdr->sg = NULL;
-	kfree(mqrq_hdr->bounce_buf);
-	mqrq_hdr->bounce_buf = NULL;
-
 	blk_cleanup_queue(mq->queue);
 	return ret;
 }
@@ -338,7 +302,6 @@ void mmc_cleanup_queue(struct mmc_queue *mq)
 	unsigned long flags;
 	struct mmc_queue_req *mqrq_cur = mq->mqrq_cur;
 	struct mmc_queue_req *mqrq_prev = mq->mqrq_prev;
-	struct mmc_queue_req *mqrq_hdr = mq->mqrq_hdr;
 
 	/* Make sure the queue isn't suspended, as that will deadlock */
 	mmc_queue_resume(mq);
@@ -368,15 +331,6 @@ void mmc_cleanup_queue(struct mmc_queue *mq)
 	mqrq_prev->sg = NULL;
 
 	kfree(mqrq_prev->bounce_buf);
-	mqrq_prev->bounce_buf = NULL;
-
-	kfree(mqrq_hdr->bounce_sg);
-	mqrq_prev->bounce_sg = NULL;
-
-	kfree(mqrq_hdr->sg);
-	mqrq_prev->sg = NULL;
-
-	kfree(mqrq_hdr->bounce_buf);
 	mqrq_prev->bounce_buf = NULL;
 
 	mq->card = NULL;
@@ -436,15 +390,11 @@ static unsigned int mmc_queue_packed_map_sg(struct mmc_queue *mq,
 	struct request *req;
 	enum mmc_packed_sg_flag sg_flag = mqrq->packed_sg_flag;
 
-	if (sg_flag == MMC_PACKED_HDR_SG || sg_flag == MMC_PACKED_WR_SG) {
+	if (sg_flag == MMC_PACKED_WR_SG) {
 		__sg = sg;
 		sg_set_buf(__sg, mqrq->packed_cmd_hdr,
 				sizeof(mqrq->packed_cmd_hdr));
 		sg_len++;
-		if (sg_flag == MMC_PACKED_HDR_SG) {
-			sg_mark_end(__sg);
-			return sg_len;
-		}
 		__sg->page_link &= ~0x02;
 	}
 
@@ -503,8 +453,7 @@ void mmc_queue_bounce_pre(struct mmc_queue_req *mqrq)
 	if (!mqrq->bounce_buf)
 		return;
 
-	if (rq_data_dir(mqrq->req) != WRITE &&
-			mqrq->packed_cmd != MMC_PACKED_WR_HDR)
+	if (rq_data_dir(mqrq->req) != WRITE)
 		return;
 
 	sg_copy_to_buffer(mqrq->bounce_sg, mqrq->bounce_sg_len,
