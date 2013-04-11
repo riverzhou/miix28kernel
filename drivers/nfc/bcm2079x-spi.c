@@ -51,7 +51,7 @@
 
 #ifndef STREAM_TO_U16
 #define STREAM_TO_U16(var16, p)	{(var16) = ((u16)(*((u8 *)p+1)) + \
-				((u8)(*((u8 *)p) << 8))); }
+				((u16)(*((u8 *)p) << 8))); }
 #endif
 
 #define STATE_HIGH		1
