@@ -627,6 +627,61 @@ mali_bool jd_done_nolock(kbase_jd_atom *katom)
 
 KBASE_EXPORT_TEST_API(jd_done_nolock)
 
+#ifdef CONFIG_GPU_TRACEPOINTS
+enum {
+	CORE_REQ_DEP_ONLY,
+	CORE_REQ_SOFT,
+	CORE_REQ_COMPUTE,
+	CORE_REQ_FRAGMENT,
+	CORE_REQ_VERTEX,
+	CORE_REQ_TILER,
+	CORE_REQ_FRAGMENT_VERTEX,
+	CORE_REQ_FRAGMENT_VERTEX_TILER,
+	CORE_REQ_FRAGMENT_TILER,
+	CORE_REQ_VERTEX_TILER,
+	CORE_REQ_UNKNOWN
+};
+static const char * const core_req_strings[] = {
+	"Dependency Only Job",
+	"Soft Job",
+	"Compute Shader Job",
+	"Fragment Shader Job",
+	"Vertex/Geometry Shader Job",
+	"Tiler Job",
+	"Fragment Shader + Vertex/Geometry Shader Job",
+	"Fragment Shader + Vertex/Geometry Shader Job + Tiler Job",
+	"Fragment Shader + Tiler Job",
+	"Vertex/Geometry Shader Job + Tiler Job",
+	"Unknown Job"
+};
+static const char *kbasep_map_core_reqs_to_string(base_jd_core_req core_req)
+{
+	if (core_req & BASE_JD_REQ_SOFT_JOB)
+		return core_req_strings[CORE_REQ_SOFT];
+	if (core_req & BASE_JD_REQ_ONLY_COMPUTE)
+		return core_req_strings[CORE_REQ_COMPUTE];
+	switch (core_req & (BASE_JD_REQ_FS | BASE_JD_REQ_CS | BASE_JD_REQ_T)) {
+	case BASE_JD_REQ_DEP:
+		return core_req_strings[CORE_REQ_DEP_ONLY];
+	case BASE_JD_REQ_FS:
+		return core_req_strings[CORE_REQ_FRAGMENT];
+	case BASE_JD_REQ_CS:
+		return core_req_strings[CORE_REQ_VERTEX];
+	case BASE_JD_REQ_T:
+		return core_req_strings[CORE_REQ_TILER];
+	case (BASE_JD_REQ_FS | BASE_JD_REQ_CS):
+		return core_req_strings[CORE_REQ_FRAGMENT_VERTEX];
+	case (BASE_JD_REQ_FS | BASE_JD_REQ_T):
+		return core_req_strings[CORE_REQ_FRAGMENT_TILER];
+	case (BASE_JD_REQ_CS | BASE_JD_REQ_T):
+		return core_req_strings[CORE_REQ_VERTEX_TILER];
+	case (BASE_JD_REQ_FS | BASE_JD_REQ_CS | BASE_JD_REQ_T):
+		return core_req_strings[CORE_REQ_FRAGMENT_VERTEX_TILER];
+	}
+	return core_req_strings[CORE_REQ_UNKNOWN];
+}
+#endif
+
 static mali_bool jd_submit_atom(kbase_context *kctx, const base_jd_atom_v2 *user_atom)
 {
 	kbase_jd_context *jctx = &kctx->jctx;
@@ -787,6 +842,11 @@ static mali_bool jd_submit_atom(kbase_context *kctx, const base_jd_atom_v2 *user
 			goto out;
 		}
 	}
+
+#ifdef CONFIG_GPU_TRACEPOINTS
+	katom->work_id = atomic_inc_return(&jctx->work_id);
+	trace_gpu_job_enqueue((u32)kctx, katom->work_id, kbasep_map_core_reqs_to_string(katom->core_req));
+#endif
 
 	if (queued) {
 		ret = MALI_FALSE;

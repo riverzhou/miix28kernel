@@ -51,7 +51,9 @@
 
 #include "mali_kbase_cpuprops.h"
 #include "mali_kbase_gpuprops.h"
-
+#ifdef CONFIG_GPU_TRACEPOINTS
+#include <trace/events/gpu.h>
+#endif
 /**
  * @page page_base_kernel_main Kernel-side Base (KBase) APIs
  *

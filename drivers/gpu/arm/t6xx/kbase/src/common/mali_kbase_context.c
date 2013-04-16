@@ -93,7 +93,9 @@ kbase_context *kbase_create_context(kbase_device *kbdev)
 	/* Make sure page 0 is not used... */
 	if (kbase_region_tracker_init(kctx))
 		goto free_osctx;
-
+#ifdef CONFIG_GPU_TRACEPOINTS
+	atomic_set(&kctx->jctx.work_id, 0);
+#endif
 #ifdef CONFIG_MALI_TRACE_TIMELINE
 	atomic_set(&kctx->timeline.jd_atoms_in_flight, 0);
 #endif

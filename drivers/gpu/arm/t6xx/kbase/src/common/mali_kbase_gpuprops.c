@@ -81,16 +81,6 @@ STATIC void kbase_gpuprops_dump_registers(kbase_device *kbdev, kbase_gpuprops_re
 	/* Fill regdump with the content of the relevant registers */
 	regdump->gpu_id = kbase_os_reg_read(kbdev, GPU_CONTROL_REG(GPU_ID));
 
-#ifdef CONFIG_MALI_REMAP_ID
-	/* T75X DM1 bitfile reports GPU ID differently - see SKRYMIR-481 */
-	if (regdump->gpu_id == GPU_ID_MAKE(GPU_ID_PI_T62X, 0, 0, 1)) {
-		KBASE_DEBUG_PRINT_RAW(KBASE_CORE,
-		    "WARNING: T75X DM1 bitfile currently reports itself as a T620 r0p0 status 1.\n"
-		    "         Driver is patched to consider this to be a T75X r0p0 status 0.\n");
-		regdump->gpu_id = GPU_ID_MAKE(GPU_ID_PI_T75X, 0, 0, 0);
-	}
-#endif
-
 	regdump->l2_features = kbase_os_reg_read(kbdev, GPU_CONTROL_REG(L2_FEATURES));
 	regdump->l3_features = kbase_os_reg_read(kbdev, GPU_CONTROL_REG(L3_FEATURES));
 	regdump->tiler_features = kbase_os_reg_read(kbdev, GPU_CONTROL_REG(TILER_FEATURES));

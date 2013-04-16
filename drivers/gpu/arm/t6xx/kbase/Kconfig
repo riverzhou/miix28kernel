@@ -157,4 +157,11 @@ config MALI_SYSTEM_TRACE
 	  minimal overhead when not in use. Enable only if you know what
 	  you are doing.
 
+config MALI_GPU_TRACEPOINTS
+	bool "Enable GPU tracepoints"
+	depends on MALI_T6XX && ANDROID
+	select GPU_TRACEPOINTS
+	help
+	  Enables GPU tracepoints using Android trace event definitions.
+
 source "drivers/gpu/arm/t6xx/kbase/src/platform/Kconfig"
