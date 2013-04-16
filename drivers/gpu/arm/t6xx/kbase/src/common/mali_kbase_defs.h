@@ -245,7 +245,9 @@ struct kbase_jd_atom {
 
 	wait_queue_head_t completed;
 	kbase_jd_atom_state status;
-
+#ifdef CONFIG_GPU_TRACEPOINTS
+	int work_id;
+#endif
 	/* Assigned after atom is completed. Used to check whether PRLAM-10676 workaround should be applied */
 	int slot_nr;
 	mali_bool been_soft_stoppped;
@@ -303,7 +305,9 @@ typedef struct kbase_jd_context {
 #ifdef CONFIG_KDS
 	struct kds_callback kds_cb;
 #endif				/* CONFIG_KDS */
-
+#ifdef CONFIG_GPU_TRACEPOINTS
+	atomic_t work_id;
+#endif
 } kbase_jd_context;
 
 typedef struct kbase_jm_slot {

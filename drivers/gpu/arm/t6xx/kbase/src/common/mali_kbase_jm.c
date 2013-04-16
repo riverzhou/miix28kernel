@@ -37,6 +37,14 @@ u64 mali_js2_affinity_mask = 0xFFFFFFFFFFFFFFFFULL;
 
 static void kbasep_try_reset_gpu_early(kbase_device *kbdev);
 
+#ifdef CONFIG_GPU_TRACEPOINTS
+static char *kbasep_make_job_slot_string(int js, char *js_string)
+{
+	sprintf(js_string, "job_slot_%i", js);
+	return js_string;
+}
+#endif
+
 static void kbase_job_hw_submit(kbase_device *kbdev, kbase_jd_atom *katom, int js)
 {
 	kbase_context *kctx;
@@ -105,7 +113,13 @@ static void kbase_job_hw_submit(kbase_device *kbdev, kbase_jd_atom *katom, int j
 #ifdef CONFIG_MALI_GATOR_SUPPORT
 	kbase_trace_mali_job_slots_event(GATOR_MAKE_EVENT(GATOR_JOB_SLOT_START, js), kctx);
 #endif				/* CONFIG_MALI_GATOR_SUPPORT */
-
+#ifdef CONFIG_GPU_TRACEPOINTS
+	{
+		char js_string[16];
+		trace_gpu_sched_switch(kbasep_make_job_slot_string(js, js_string), ktime_to_ns(katom->start_timestamp), (u32)katom->kctx, 0, katom->work_id);
+		kbdev->jm_slots[js].last_context = katom->kctx;
+	}
+#endif
 	kbase_timeline_job_slot_submit(kbdev, kctx, katom, js);
 
 	kbase_reg_write(kbdev, JOB_SLOT_REG(js, JSn_COMMAND_NEXT), JSn_COMMAND_START, katom->kctx);
@@ -372,6 +386,19 @@ void kbase_job_done(kbase_device *kbdev, u32 done)
 		} while (finished & (1 << i));
 
 		kbasep_job_slot_update_head_start_timestamp(kbdev, slot, end_timestamp);
+#ifdef CONFIG_GPU_TRACEPOINTS
+		if (kbasep_jm_nr_jobs_submitted(slot) != 0) {
+			kbase_jd_atom *katom;
+			char js_string[16];
+			katom = kbasep_jm_peek_idx_submit_slot(slot, 0);	/* The atom in the HEAD */
+			trace_gpu_sched_switch(kbasep_make_job_slot_string(i, js_string), ktime_to_ns(katom->start_timestamp), (u32)katom->kctx, 0, katom->work_id);
+			slot->last_context = katom->kctx;
+		} else {
+			char js_string[16];
+			trace_gpu_sched_switch(kbasep_make_job_slot_string(i, js_string), ktime_to_ns(ktime_get()), 0, 0, 0);
+			slot->last_context = 0;
+		}
+#endif
 	}
 	spin_unlock_irqrestore(&js_devdata->runpool_irq.lock, flags);
 
