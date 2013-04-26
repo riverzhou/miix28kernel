@@ -186,6 +186,7 @@ static void exynos4_mct_comp0_start(enum clock_event_mode mode,
 {
 	unsigned int tcon;
 	cycle_t comp_cycle;
+	unsigned long flags;
 
 	tcon = __raw_readl(EXYNOS4_MCT_G_TCON);
 
@@ -193,6 +194,12 @@ static void exynos4_mct_comp0_start(enum clock_event_mode mode,
 		tcon |= MCT_G_TCON_COMP0_AUTO_INC;
 		exynos4_mct_write(cycles, EXYNOS4_MCT_G_COMP0_ADD_INCR);
 	}
+
+	/*
+	 * Turn off interrupts to make sure the timer is fully programmed
+	 * before it is scheduled to fire.
+	 */
+	local_irq_save(flags);
 
 	comp_cycle = exynos4_frc_read(&mct_frc) + cycles;
 	exynos4_mct_write((u32)comp_cycle, EXYNOS4_MCT_G_COMP0_L);
@@ -202,6 +209,8 @@ static void exynos4_mct_comp0_start(enum clock_event_mode mode,
 
 	tcon |= MCT_G_TCON_COMP0_ENABLE;
 	exynos4_mct_write(tcon , EXYNOS4_MCT_G_TCON);
+
+	local_irq_restore(flags);
 }
 
 static int exynos4_comp_set_next_event(unsigned long cycles,
@@ -265,7 +274,7 @@ static void exynos4_clockevent_init(void)
 	mct_comp_device.max_delta_ns =
 		clockevent_delta2ns(0xffffffff, &mct_comp_device);
 	mct_comp_device.min_delta_ns =
-		clockevent_delta2ns(0xf, &mct_comp_device);
+		clockevent_delta2ns(0xff, &mct_comp_device);
 	mct_comp_device.cpumask = cpumask_of(0);
 	clockevents_register_device(&mct_comp_device);
 
