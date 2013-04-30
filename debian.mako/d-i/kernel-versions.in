@@ -1,4 +1,4 @@
 # arch	version		flavour		installedname			suffix	bdep
-armhf	PKGVER-ABINUM	nexus4	PKGVER-ABINUM-nexus4	-
+armhf	PKGVER-ABINUM	mako	PKGVER-ABINUM-mako	-
 # Ports
 # arch	version		flavour		installedname			suffix	bdep
