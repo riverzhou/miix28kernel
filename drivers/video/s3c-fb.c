@@ -1480,16 +1480,11 @@ int s3c_fb_set_vsync_int(struct fb_info *info,
 #ifdef CONFIG_ION_EXYNOS
 static unsigned int s3c_fb_map_ion_handle(struct s3c_fb *sfb,
 		struct s3c_dma_buf_data *dma, struct ion_handle *ion_handle,
-		int fd)
+		struct dma_buf *buf)
 {
 	dma->fence = NULL;
 
-	dma->dma_buf = dma_buf_get(fd);
-	if (IS_ERR_OR_NULL(dma->dma_buf)) {
-		dev_err(sfb->dev, "dma_buf_get() failed: %ld\n",
-				PTR_ERR(dma->dma_buf));
-		goto err_share_dma_buf;
-	}
+	dma->dma_buf = buf;
 
 	dma->attachment = dma_buf_attach(dma->dma_buf, sfb->dev);
 	if (IS_ERR_OR_NULL(dma->attachment)) {
@@ -1522,8 +1517,6 @@ err_iovmm_map:
 err_buf_map_attachment:
 	dma_buf_detach(dma->dma_buf, dma->attachment);
 err_buf_map_attach:
-	dma_buf_put(dma->dma_buf);
-err_share_dma_buf:
 	return 0;
 }
 
@@ -1730,6 +1723,7 @@ static int s3c_fb_set_win_buffer(struct s3c_fb *sfb, struct s3c_fb_win *win,
 {
 	struct ion_handle *handle;
 	struct fb_var_screeninfo prev_var = win->fbinfo->var;
+	struct dma_buf *buf;
 	struct s3c_dma_buf_data dma_buf_data;
 	unsigned short win_no = win->index;
 	int ret;
@@ -1808,13 +1802,23 @@ static int s3c_fb_set_win_buffer(struct s3c_fb *sfb, struct s3c_fb_win *win,
 		goto err_invalid;
 	}
 
+	buf = dma_buf_get(win_config->fd);
+	if (IS_ERR_OR_NULL(buf)) {
+		dev_err(sfb->dev, "dma_buf_get() failed: %ld\n",
+				PTR_ERR(buf));
+		ret = PTR_ERR(buf);
+		goto err_buf_get;
+	}
+
 	buf_size = s3c_fb_map_ion_handle(sfb, &dma_buf_data, handle,
-			win_config->fd);
+			buf);
 	if (!buf_size) {
 		ret = -ENOMEM;
-		ion_free(sfb->fb_ion_client, handle);
-		goto err_invalid;
+		goto err_map;
 	}
+
+	handle = NULL;
+	buf = NULL;
 
 	if (win_config->fence_fd >= 0) {
 		dma_buf_data.fence = sync_fence_fdget(win_config->fence_fd);
@@ -1903,6 +1907,12 @@ static int s3c_fb_set_win_buffer(struct s3c_fb *sfb, struct s3c_fb_win *win,
 
 err_offset:
 	s3c_fb_free_dma_buf(sfb, &dma_buf_data);
+err_map:
+	if (buf)
+		dma_buf_put(buf);
+err_buf_get:
+	if (handle)
+		ion_free(sfb->fb_ion_client, handle);
 err_invalid:
 	win->fbinfo->var = prev_var;
 	return ret;
@@ -2369,9 +2379,8 @@ static int __devinit s3c_fb_alloc_memory(struct s3c_fb *sfb,
 	struct fb_info *fbi = win->fbinfo;
 	struct ion_handle *handle;
 	dma_addr_t map_dma;
-	int fd;
+	struct dma_buf *buf;
 	unsigned int ret;
-	struct file *file;
 
 	dev_dbg(sfb->dev, "allocating memory for display\n");
 
@@ -2399,13 +2408,13 @@ static int __devinit s3c_fb_alloc_memory(struct s3c_fb *sfb,
 		return -ENOMEM;
 	}
 
-	fd = ion_share_dma_buf_fd(sfb->fb_ion_client, handle);
-	if (fd < 0) {
+	buf = ion_share_dma_buf(sfb->fb_ion_client, handle);
+	if (IS_ERR_OR_NULL(buf)) {
 		dev_err(sfb->dev, "ion_share_dma_buf() failed\n");
 		goto err_share_dma_buf;
 	}
 
-	ret = s3c_fb_map_ion_handle(sfb, &win->dma_buf_data, handle, fd);
+	ret = s3c_fb_map_ion_handle(sfb, &win->dma_buf_data, handle, buf);
 	if (!ret)
 		goto err_map;
 	map_dma = win->dma_buf_data.dma_addr;
@@ -2426,9 +2435,7 @@ static int __devinit s3c_fb_alloc_memory(struct s3c_fb *sfb,
 
 #ifdef CONFIG_ION_EXYNOS
 err_map:
-	file = fget(fd);
-	fput(file);
-	fput(file);
+	dma_buf_put(buf);
 err_share_dma_buf:
 	ion_free(sfb->fb_ion_client, handle);
 	return -ENOMEM;
