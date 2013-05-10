@@ -1,7 +1,7 @@
 #! /usr/bin/perl
-#                              -*- Mode: Perl -*-
-# image.prerm ---
-# Author           : root ( root@melkor.pilgrim.umass.edu )
+#                              -*- Mode: Perl -*- 
+# image.prerm --- 
+# Author           : root ( root@melkor.pilgrim.umass.edu ) 
 # Created On       : Fri May 17 03:28:59 1996
 # Created On Node  : melkor.pilgrim.umass.edu
 # Last Modified By : Manoj Srivastava
@@ -9,13 +9,13 @@
 # Last Machine Used: glaurung.internal.golden-gryphon.com
 # Update Count     : 85
 # Status           : Unknown, Use with caution!
-# HISTORY          :
-# Description      :
-#
+# HISTORY          : 
+# Description      : 
+# 
 #
 #    $Id: image.prerm,v 1.22 2003/10/07 16:24:20 srivasta Exp $
 #
-#
+# 
 #use strict;
 
 $|=1;
@@ -47,7 +47,7 @@ my $kernel_arch       = "=B";
 my $ramdisk           = "/usr/sbin/update-initramfs";
 my $package_name    = "linux-image-$version";
 
-my $Loader          = "NoLOADER"; #
+my $Loader          = "NoLOADER"; # 
 $Loader             = "LILO"     if $loader =~ /^lilo/io;
 $Loader             = "SILO"     if $loader =~ /^silo/io;
 $Loader             = "QUIK"     if $loader =~ /^quik/io;
@@ -272,7 +272,7 @@ if (-x "$prerm_hook") {
 }
 if (-d "/etc/kernel/prerm.d") {
   print STDERR "Examining /etc/kernel/prerm.d.\n";
-  system ("run-parts --verbose --exit-on-error --arg=$version " .
+  system ("run-parts --verbose --exit-on-error --arg=$version " . 
           "--arg=$realimageloc$kimage-$version /etc/kernel/prerm.d") &&
             die "Failed to process /etc/kernel/prerm.d";
 }
@@ -305,3 +305,8 @@ sub success () {
 &success();
 exit 0;
 __END__
+
+
+
+
+

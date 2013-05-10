@@ -8,12 +8,11 @@ Build-Depends-Indep: xmlto, docbook-utils, ghostscript, transfig, bzip2, sharuti
 Build-Conflicts: findutils (= 4.4.1-1ubuntu1)
 Vcs-Git: git://kernel.ubuntu.com/ubuntu/ubuntu-saucy.git manta
 
-Package: linux-headers-PKGVER-ABINUM
+Package: SRCPKGNAME-headers-PKGVER-ABINUM
 Architecture: armhf
 Section: devel
 Priority: optional
 Depends: ${misc:Depends}, coreutils | fileutils (>= 4.0)
-#Provides: SRCPKGNAME-headers, SRCPKGNAME-headers-2.6
 Description: Header files related to Linux kernel version PKGVER
  This package provides kernel header files for version PKGVER, for sites
  that want the latest kernel headers. Please read
