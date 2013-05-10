@@ -12,17 +12,19 @@ if [ ! -f MAINTAINERS ] || [ ! -f Makefile ]; then
 fi
 
 mode=${1:?"Usage: $0 [oldconfig|editconfig]"}
+yes=0
 case "$mode" in
-    oldconfig)  ;; # All is good
-    defaultconfig)  ;; # All is good
-    editconfig) ;; # All is good
-    genconfig)  ;; # All is good
+    update*configs)  mode='silentoldconfig' ;;
+    default*configs) mode='oldconfig'; yes=1 ;;
+    edit*configs)    ;; # All is good
+    gen*configs)     mode='genconfigs' ;; # All is good
+    dump*configs)    mode='config'; yes=1 ;;
     *) echo "$0 called with invalid mode" 1>&2
        exit 1 ;;
 esac
 kerneldir="`pwd`"
 confdir="$kerneldir/${DEBIAN}/config"
-sharedconfdir="$kerneldir/debian.nexus4/config"
+sharedconfdir="$kerneldir/debian.master/config"
 variant="$2"
 
 . $DEBIAN/etc/kernelconfig
@@ -32,7 +34,7 @@ common_conf="$confdir/config.common.$family"
 tmpdir=`mktemp -d`
 mkdir "$tmpdir/CONFIGS"
 
-if [ "$mode" = "genconfig" ]; then
+if [ "$mode" = "genconfigs" ]; then
 	keep=1
 	mode="oldconfig"
 	test -d CONFIGS || mkdir CONFIGS
@@ -44,12 +46,12 @@ for arch in $archs; do
 
 	# Map debian archs to kernel archs
 	case "$arch" in
-		amd64)	kernarch="x86_64"	;;
-		lpia)   kernarch="x86" 		;;
-		sparc)	kernarch="sparc64"	;;
-		armel)	kernarch="arm"		;;
-		armhf)	kernarch="arm"		;;
-		*)	kernarch="$arch"	;;
+		ppc64)		kernarch="powerpc"	;;
+		amd64)		kernarch="x86_64"	;;
+		lpia)		kernarch="x86" 		;;
+		sparc)		kernarch="sparc64"	;;
+		armel|armhf)	kernarch="arm"		;;
+		*)		kernarch="$arch"	;;
 	esac
 
 	archconfdir=$confdir/$arch
@@ -84,20 +86,12 @@ for arch in $archs; do
 			cat "$fullconf" > build/.config
 			# Call oldconfig or menuconfig
 			case "$mode" in
-			    oldconfig)
-				# Weed out incorrect config parameters
-				echo "* Run silentoldconfig on $arch/$config ..."
-				make O=`pwd`/build ARCH=$kernarch silentoldconfig ;;
-			    defaultconfig)
-				# Weed out incorrect config parameters
-				echo "* Run oldconfig on $arch/$config ..."
-				make O=`pwd`/build ARCH=$kernarch oldconfig ;;
-			    editconfig)
+			    editconfigs)
 				# Interactively edit config parameters
 				while : ; do
 					echo -n "Do you want to edit config: $arch/$config? [Y/n] "
 					read choice
-
+					
 					case "$choice" in
 					y* | Y* | "" )
 						make O=`pwd`/build ARCH=$kernarch menuconfig
@@ -109,8 +103,13 @@ for arch in $archs; do
 					esac
 				done
 				;;
-			    *)  # Bad!
-				exit 1 ;;
+			    *)
+				echo "* Run $mode (yes=$yes) on $arch/$config ..."
+				if [ "$yes" -eq 1 ]; then
+					yes "" | make O=`pwd`/build ARCH=$kernarch "$mode"
+				else
+					make O=`pwd`/build ARCH=$kernarch "$mode"
+				fi ;;
 			esac
 			cat build/.config > $archconfdir/$config
 			cat build/.config > "$tmpdir/CONFIGS/$arch-$config"
@@ -128,7 +127,7 @@ for arch in $archs; do
 	# Can we make this more robust by avoiding $tmpdir completely?
 	# This approach was used for now because I didn't want to change
 	# splitconfig.pl
-	(cd $archconfdir; $bindir/splitconfig.pl; mv config.common \
+	(cd $archconfdir; $bindir/splitconfig.pl config.flavour.*; mv config.common \
 	 config.common.$arch; cp config.common.$arch $tmpdir)
 done
 
@@ -136,7 +135,7 @@ rm -f $common_conf
 
 # Now run splitconfig.pl on all the config.common.<arch> copied to
 # $tmpdir
-(cd $tmpdir; $bindir/splitconfig.pl)
+(cd $tmpdir; $bindir/splitconfig.pl *)
 (
 	cd $confdir;
 	rm -f *-full
@@ -155,9 +154,10 @@ for arch in $archs; do
 	archconfdir=$confdir/$arch
 	flavourconfigs=$(cd $archconfdir && ls config.flavour.*)
 	for config in $flavourconfigs; do
+		flavour="${config##*.}"
 		if [ -f $archconfdir/$config ]; then
 			fullconf="$tmpdir/CONFIGS/$arch-$config"
-			"$bindir/../config-check" "$fullconf" "$arch" "$config" "$sharedconfdir" "0" || let "fail=$fail+1"
+			"$bindir/../config-check" "$fullconf" "$arch" "$flavour" "$sharedconfdir" "0" || let "fail=$fail+1"
 		fi
 	done
 done
@@ -169,3 +169,4 @@ if [ "$fail" != 0 ]; then
 fi
 
 rm -rf build
+

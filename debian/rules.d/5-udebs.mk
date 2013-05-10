@@ -1,11 +1,13 @@
 # Do udebs if not disabled in the arch-specific makefile
-binary-udebs: binary-debs debian/control
+binary-udebs: binary-debs
+	@echo Debug: $@
 ifeq ($(disable_d_i),)
 	@$(MAKE) --no-print-directory -f $(DROOT)/rules DEBIAN=$(DEBIAN) \
 		do-binary-udebs
 endif
 
-do-binary-udebs:
+do-binary-udebs: debian/control
+	@echo Debug: $@
 	dh_testdir
 	dh_testroot
 
@@ -16,6 +18,10 @@ do-binary-udebs:
 	for i in $$imagelist; do \
 	  dpkg -x $$(ls ../linux-image-$$i\_$(release)-$(revision)_${arch}.deb) \
 		debian/d-i-${arch}; \
+	  if [ -f ../linux-image-extra-$$i\_$(release)-$(revision)_${arch}.deb ] ; then \
+	    dpkg -x ../linux-image-extra-$$i\_$(release)-$(revision)_${arch}.deb \
+		  debian/d-i-${arch}; \
+	  fi; \
 	  /sbin/depmod -b debian/d-i-${arch} $$i; \
 	done
 
@@ -26,13 +32,13 @@ do-binary-udebs:
 	export SOURCEDIR=$(CURDIR)/debian/d-i-${arch} && \
 	  cd $(builddir) && \
 	  kernel-wedge install-files && \
-	  kernel-wedge check || true
+	  kernel-wedge check
 
         # Build just the udebs
 	dilist=$$(dh_listpackages -s | grep "\-di$$") && \
 	[ -z "$dilist" ] || \
 	for i in $$dilist; do \
 	  dh_fixperms -p$$i; \
-	  dh_gencontrol -p$$i; \
+	  $(lockme) dh_gencontrol -p$$i; \
 	  dh_builddeb -p$$i; \
 	done

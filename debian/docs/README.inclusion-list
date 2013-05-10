@@ -22,7 +22,7 @@ order to continue to keep the minimal number of modules.
 A module inclusion list is applied on a per-flavour basis. For example,
 debian.<BRANCH>/control.d/${flavour}.inclusion-list. For example, the
 config for virtual is very close to server and generic, but the inclusion list
-causes the virtual package to be constructed with _only_ the modules described
+causes the virtual package to be constructed with _only_ the modules described 
 in the inclusion list.
 
 The inclusion list format is a simple bash regular expression list of files. For example,

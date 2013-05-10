@@ -215,7 +215,7 @@ sub changelog_input {
 				$pstate++;
 			}
 		}
-
+	
 		else {
 			die "invalid parse state $pstate";
 		}
@@ -223,7 +223,7 @@ sub changelog_input {
 
 	foreach $entry (@reverts) {
 		add_entry($entry);
-	}
+	}	
 }
 
 &changelog_input;

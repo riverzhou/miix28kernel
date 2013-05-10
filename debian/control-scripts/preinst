@@ -90,6 +90,15 @@ die "Pre inst Internal error. Aborting." unless $version;
 exit 0 if $ARGV[0] =~ /abort-upgrade/;
 exit 1 unless $ARGV[0] =~ /(install|upgrade)/;
 
+$arch = `uname -i`;
+if ($arch =~ m/86/) {
+	system ("grep -q ' pae ' /proc/cpuinfo");
+	if ($?) {
+			print STDERR "This kernel does not support a non-PAE CPU.\n";
+			exit 1;
+	}
+}
+
 # remove multiple leading slashes; make sure there is at least one.
 $realimageloc  =~ s|^/*|/|o;
 $realimageloc  =~ s|/+|/|o;
@@ -163,7 +172,7 @@ sub find_initrd_tool {
   my $version = shift;
   my @ramdisks =
     grep {
-      my $args =
+      my $args = 
         "$_ " .
           "--supported-host-version=$hostversion " .
             "--supported-target-version=$version " .
@@ -302,3 +311,5 @@ print STDERR "Done.\n";
 exit 0;
 
 __END__
+
+

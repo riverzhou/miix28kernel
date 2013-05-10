@@ -4,12 +4,13 @@
 src_pkg_name=$(shell sed -n '1s/^\(.*\) (.*).*$$/\1/p' $(DEBIAN)/changelog)
 
 # Get some version info
-series := maverick
 release := $(shell sed -n '1s/^$(src_pkg_name).*(\(.*\)-.*).*$$/\1/p' $(DEBIAN)/changelog)
 revisions := $(shell sed -n 's/^$(src_pkg_name)\ .*($(release)-\(.*\)).*$$/\1/p' $(DEBIAN)/changelog | tac)
 revision ?= $(word $(words $(revisions)),$(revisions))
 prev_revisions := $(filter-out $(revision),0.0 $(revisions))
 prev_revision := $(word $(words $(prev_revisions)),$(prev_revisions))
+
+prev_fullver ?= $(shell dpkg-parsechangelog -l$(DEBIAN)/changelog -o1 -c1 | sed -ne 's/^Version: *//p')
 
 family=ubuntu
 
@@ -22,16 +23,6 @@ family=ubuntu
 # image, or rebuild the entire set of Ubuntu packages using custom patches
 # or configs.
 AUTOBUILD=
-
-#
-# This is a way to support some external variables. A good example is
-# a local setup for ccache and distcc See LOCAL_ENV_CC and
-# LOCAL_ENV_DISTCC_HOSTS in the definition of kmake.
-# For example:
-#      LOCAL_ENV_CC="ccache distcc"
-#      LOCAL_ENV_DISTCC_HOSTS="localhost 10.0.2.5 10.0.2.221"
-#
--include $(CURDIR)/../.$(series)-env
 
 ifneq ($(AUTOBUILD),)
 skipabi		= true
@@ -51,7 +42,7 @@ ubuntu_log_opts += --print-shas
 endif
 
 # Get the kernels own extra version to be added to the release signature.
-extraversion=$(shell awk '/EXTRAVERSION =/ { print $$3 }' <Makefile)
+raw_kernelversion=$(shell make kernelversion)
 
 #
 # full_build -- are we doing a full buildd style build
@@ -79,17 +70,48 @@ ifneq ($(full_build),false)
   uploadnum	:= $(uploadnum)-Ubuntu
 endif
 
-# We force the sublevel to be exactly what we want. The actual source may
-# be an in development git tree. We want to force it here instead of
-# committing changes to the top level Makefile
-SUBLEVEL	:= $(shell echo $(release) | awk -F. '{print $$3}')
+# XXX: linux-libc-dev got bumped to -803.N inadvertantly by a ti-omap4 upload
+#      shift our version higher for this package only.  Ensure this only
+#      occurs for the v2.6.35 kernel so that we do not propogate this into
+#      any other series.
+raw_uploadnum	:= $(shell echo $(revision) | sed -e 's/.*\.//')
+libc_dev_version :=
+ifeq ($(DEBIAN),debian.master)
+ifeq ($(release),2.6.35)
+libc_dev_version := -v$(release)-$(shell expr "$(abinum)" + 1000).$(raw_uploadnum)
+endif
+endif
 
-arch		:= $(shell dpkg-architecture -qDEB_HOST_ARCH)
+DEB_HOST_MULTIARCH = $(shell dpkg-architecture -qDEB_HOST_MULTIARCH)
+DEB_HOST_GNU_TYPE  = $(shell dpkg-architecture -qDEB_HOST_GNU_TYPE)
+DEB_BUILD_GNU_TYPE = $(shell dpkg-architecture -qDEB_BUILD_GNU_TYPE)
+DEB_HOST_ARCH = $(shell dpkg-architecture -qDEB_HOST_ARCH)
+DEB_BUILD_ARCH = $(shell dpkg-architecture -qDEB_BUILD_ARCH)
+
+#
+# Detect invocations of the form 'fakeroot debian/rules binary arch=armhf'
+# within an x86'en schroot. This only gets you part of the way since the
+# packaging phase fails, but you can at least compile the kernel quickly.
+#
+arch := $(DEB_HOST_ARCH)
+ifneq ($(arch),$(DEB_HOST_ARCH))
+	CROSS_COMPILE ?= $(shell dpkg-architecture -a$(arch) -qDEB_HOST_GNU_TYPE -f 2>/dev/null)-
+endif
+
+#
+# Detect invocations of the form 'dpkg-buildpackage -B -aarmhf' within
+# an x86'en schroot. This is the only way to build all of the packages
+# (except for tools).
+#
+ifneq ($(DEB_BUILD_GNU_TYPE),$(DEB_HOST_GNU_TYPE))
+	CROSS_COMPILE ?= $(DEB_HOST_GNU_TYPE)-
+endif
+
 abidir		:= $(CURDIR)/$(DEBIAN)/abi/$(release)-$(revision)/$(arch)
 prev_abidir	:= $(CURDIR)/$(DEBIAN)/abi/$(release)-$(prev_revision)/$(arch)
 commonconfdir	:= $(CURDIR)/$(DEBIAN)/config
 archconfdir	:= $(CURDIR)/$(DEBIAN)/config/$(arch)
-sharedconfdir	:= $(CURDIR)/$(DEBIAN)/config
+sharedconfdir	:= $(CURDIR)/debian.master/config
 builddir	:= $(CURDIR)/debian/build
 stampdir	:= $(CURDIR)/debian/stamps
 
@@ -99,7 +121,10 @@ stampdir	:= $(CURDIR)/debian/stamps
 # assumption that the binary package always starts with linux-image will never change.
 #
 bin_pkg_name=linux-image-$(abi_release)
+extra_pkg_name=linux-image-extra-$(abi_release)
 hdrs_pkg_name=linux-headers-$(abi_release)
+indep_hdrs_pkg_name=$(src_pkg_name)-headers-$(abi_release)
+
 #
 # The generation of content in the doc package depends on both 'AUTOBUILD=' and
 # 'do_doc_package_content=true'. There are usually build errors during the development
@@ -134,9 +159,14 @@ do_full_source=false
 
 # build tools
 ifneq ($(wildcard $(CURDIR)/tools),)
-do_tools?=true
+	ifeq ($(do_tools),)
+		ifneq ($(DEB_BUILD_GNU_TYPE),$(DEB_HOST_GNU_TYPE))
+			do_tools=false
+		endif
+	endif
+	do_tools?=true
 else
-do_tools?=false
+	do_tools?=false
 endif
 tools_pkg_name=$(src_pkg_name)-tools-$(abi_release)
 tools_common_pkg_name=$(src_pkg_name)-tools-common
@@ -179,10 +209,22 @@ conc_level		= -j$(CONCURRENCY_LEVEL)
 
 # target_flavour is filled in for each step
 kmake = make ARCH=$(build_arch) \
-	EXTRAVERSION=-$(abinum)-$(target_flavour) \
-	CONFIG_DEBUG_SECTION_MISMATCH=y SUBLEVEL=$(SUBLEVEL) \
+	CROSS_COMPILE=$(CROSS_COMPILE) \
+	KERNELVERSION=$(abi_release)-$(target_flavour) \
+	CONFIG_DEBUG_SECTION_MISMATCH=y \
 	KBUILD_BUILD_VERSION="$(uploadnum)" \
 	LOCALVERSION= localver-extra=
 ifneq ($(LOCAL_ENV_CC),)
 kmake += CC=$(LOCAL_ENV_CC) DISTCC_HOSTS=$(LOCAL_ENV_DISTCC_HOSTS)
 endif
+
+# Locking is required in parallel builds to prevent loss of contents
+# of the debian/files.
+lockme_file = $(CURDIR)/debian/.LOCK
+lockme_cmd = flock -w 60
+lockme = $(lockme_cmd) $(lockme_file)
+
+# Checks if a var is overriden by the custom rules. Called with var and
+# flavour as arguments.
+custom_override = \
+ $(shell if [ -n "$($(1)_$(2))" ]; then echo "$($(1)_$(2))"; else echo "$($(1))"; fi)

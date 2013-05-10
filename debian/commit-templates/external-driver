@@ -11,9 +11,9 @@
 #
 # to the commit, and you can remove all other tags (except UBUNTU:).
 #
-UBUNTU:
+UBUNTU: 
 
-ExternalDriver:
+ExternalDriver: 
 Description:
 Url:
 Mask:
