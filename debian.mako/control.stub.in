@@ -8,7 +8,7 @@ Build-Depends-Indep: xmlto, docbook-utils, ghostscript, transfig, bzip2, sharuti
 Build-Conflicts: findutils (= 4.4.1-1ubuntu1)
 Vcs-Git: git://kernel.ubuntu.com/ubuntu/ubuntu-nexus7.git
 
-Package: linux-headers-PKGVER-ABINUM
+Package: SRCPKGNAME-headers-PKGVER-ABINUM
 Architecture: armhf
 Section: devel
 Priority: optional
