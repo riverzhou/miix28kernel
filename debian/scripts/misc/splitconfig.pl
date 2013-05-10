@@ -5,9 +5,7 @@
 
 print "Reading config's ...\n";
 
-opendir(DIR, ".");
-
-while (defined($config = readdir(DIR))) {
+for $config (@ARGV) {
 	# Only config.*
 	next if $config !~ /^config\..*/;
 	# Nothing that is disabled, or remnant
@@ -32,8 +30,6 @@ while (defined($config = readdir(DIR))) {
 
 	print "done.\n";
 }
-
-closedir(DIR);
 
 print "\n";
 

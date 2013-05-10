@@ -5,17 +5,33 @@
 # The includsion list format must be a bash regular expression.
 #
 # usage: $0 ROOT INCLUSION_LIST
-# example: $0 debian/build/build-virtual debian.linaro/control.d/virtual.inclusion-list
-ROOT=$1
-ILIST=$2
+# example: $0 debian/build/build-virtual \
+#       debian/build/build-virtual-ALL debian/build/build-virtual \
+#	debian.master/control.d/virtual.inclusion-list
+master=0
+if [ "$1" = "--master" ]; then
+	master=1
+	shift
+fi
 
-NROOT=${ROOT}.new
+ROOT=$1
+NROOT=$2
+ILIST=$3
 
 #
 # Prep a destination directory.
 #
 mkdir -p ${NROOT}
-rsync -a --exclude="*.ko" ${ROOT}/ ${NROOT}
+
+# Copy over the framework...
+if  [ "$master" -eq 1 ]; then
+	(cd ${ROOT}; find . ! -name "*.ko" -type f) | \
+	while read f
+	do
+		mkdir -p ${NROOT}/`dirname $f`
+		mv ${ROOT}/$f ${NROOT}/$f
+	done
+fi
 
 cat ${ILIST} |while read i
 do
@@ -27,24 +43,18 @@ do
 		(cd ${ROOT}; eval find "${i}" -name "*.ko") |while read f
 		do
 			mkdir -p ${NROOT}/`dirname $f`
-			cp ${ROOT}/$f ${NROOT}/$f
+			mv ${ROOT}/$f ${NROOT}/$f
 		done
 	else
 		if [ -f "${ROOT}/$i" ]
 		then
 			mkdir -p ${NROOT}/`dirname $i`
-			cp ${ROOT}/$i ${NROOT}/$i
+			mv ${ROOT}/$i ${NROOT}/$i
 		else
 			echo Warning: Could not find ${ROOT}/$i
 		fi
 	fi
 
 done
-
-#
-# Cleanup
-#
-rm -rf ${ROOT}
-mv ${NROOT} ${ROOT}
 
 exit 0

@@ -39,39 +39,14 @@ help:
 printdebian:
 	@echo "$(DEBIAN)"
 
-updateconfigs:
+updateconfigs defaultconfigs editconfigs genconfigs dumpconfigs:
 	dh_testdir;
-	$(SHELL) $(DROOT)/scripts/misc/kernelconfig oldconfig
+	$(SHELL) $(DROOT)/scripts/misc/kernelconfig $@
 	rm -rf build
 
-defaultconfigs:
+updateportsconfigs defaultportsconfigs editportsconfigs genportsconfigs askconfigs:
 	dh_testdir;
-	yes "" | $(SHELL) $(DROOT)/scripts/misc/kernelconfig defaultconfig
-	rm -rf build
-
-editconfigs:
-	dh_testdir
-	$(SHELL) $(DROOT)/scripts/misc/kernelconfig editconfig
-	rm -rf build
-
-genconfigs:
-	dh_testdir
-	$(SHELL) $(DROOT)/scripts/misc/kernelconfig genconfig
-	rm -rf build
-
-updateportsconfigs:
-	dh_testdir;
-	$(SHELL) $(DROOT)/scripts/misc/kernelconfig oldconfig ports
-	rm -rf build
-
-editportsconfigs:
-	dh_testdir
-	$(SHELL) $(DROOT)/scripts/misc/kernelconfig editconfig ports
-	rm -rf build
-
-genportsconfigs:
-	dh_testdir
-	$(SHELL) $(DROOT)/scripts/misc/kernelconfig genconfig ports
+	$(SHELL) $(DROOT)/scripts/misc/kernelconfig $@ ports
 	rm -rf build
 
 printenv:
@@ -90,9 +65,6 @@ printenv:
 	@echo "skipmodule        = $(skipmodule)"
 	@echo "skipdbg           = $(skipdbg)"
 	@echo "ubuntu_log_opts   = $(ubuntu_log_opts)"
-ifneq ($(SUBLEVEL),)
-	@echo "SUBLEVEL          = $(SUBLEVEL)"
-endif
 	@echo "CONCURRENCY_LEVEL = $(CONCURRENCY_LEVEL)"
 	@echo "bin package name  = $(bin_pkg_name)"
 	@echo "hdr package name  = $(hdrs_pkg_name)"
@@ -108,15 +80,22 @@ endif
 	@echo "do_full_source            = $(do_full_source)"
 	@echo "do_tools                  = $(do_tools)"
 	@echo "full_build                = $(full_build)"
+	@echo "libc_dev_version		 = $(libc_dev_version)"
+	@echo "DEB_HOST_GNU_TYPE         = $(DEB_HOST_GNU_TYPE)"
+	@echo "DEB_BUILD_GNU_TYPE        = $(DEB_BUILD_GNU_TYPE)"
+	@echo "DEB_HOST_ARCH             = $(DEB_HOST_ARCH)"
+	@echo "DEB_BUILD_ARCH            = $(DEB_BUILD_ARCH)"
+	@echo "arch                      = $(arch)"
+	@echo "kmake                     = $(kmake)"
 
 printchanges:
 	@baseCommit=$$(git log --pretty=format:'%H %s' | \
-		awk '/UBUNTU: '".*Ubuntu.*-$(release)-$(prev_revision)"'$$/ { print $$1; exit }'); \
+		awk '/UBUNTU: '".*Ubuntu-$(prev_fullver)"'$$/ { print $$1; exit }'); \
 		git log "$$baseCommit"..HEAD | \
 		perl -w -f $(DROOT)/scripts/misc/git-ubuntu-log $(ubuntu_log_opts)
 
 insertchanges:
-	@perl -w -f $(DROOT)/scripts/misc/insert-changes.pl $(DROOT) $(DEBIAN)
+	@perl -w -f $(DROOT)/scripts/misc/insert-changes.pl $(DROOT) $(DEBIAN) 
 
 diffupstream:
 	@git diff-tree -p refs/remotes/linux-2.6/master..HEAD $(shell ls | grep -vE '^(ubuntu|$(DEBIAN)|\.git.*)')
@@ -137,3 +116,4 @@ startnewrelease:
 		$(DEBIAN)/changelog.new ; \
 	cat $(DEBIAN)/changelog >> $(DEBIAN)/changelog.new; \
 	mv $(DEBIAN)/changelog.new $(DEBIAN)/changelog
+
