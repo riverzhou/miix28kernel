@@ -46,5 +46,4 @@ lttng-ring-buffer-metadata-mmap-client
 lttng-statedump
 lttng-tracer
 lttng-types
-s3c_udc_otg
 scsi_wait_scan
