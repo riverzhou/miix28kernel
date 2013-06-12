@@ -2512,16 +2512,19 @@ int pm8921_bms_get_percent_charge(void)
 }
 EXPORT_SYMBOL_GPL(pm8921_bms_get_percent_charge);
 
-int pm8921_bms_get_rbatt(void)
-{
-	int batt_temp, rc;
-	struct pm8xxx_adc_chan_result result;
-	struct pm8921_soc_params raw;
+struct get_params_value {
+	int batt_temp;
+	int rbatt;
 	int fcc_uah;
 	int unusable_charge_uah;
 	int remaining_charge_uah;
 	int cc_uah;
-	int rbatt;
+};
+static int get_params(struct get_params_value *ret)
+{
+	int rc;
+	struct pm8xxx_adc_chan_result result;
+	struct pm8921_soc_params raw;
 	int iavg_ua;
 	int delta_time_s;
 
@@ -2538,46 +2541,58 @@ int pm8921_bms_get_rbatt(void)
 	}
 	pr_debug("batt_temp phy = %lld meas = 0x%llx\n", result.physical,
 						result.measurement);
-	batt_temp = (int)result.physical;
+	ret->batt_temp = (int)result.physical;
 
 	mutex_lock(&the_chip->last_ocv_uv_mutex);
 
 	read_soc_params_raw(the_chip, &raw);
 
-	calculate_soc_params(the_chip, &raw, batt_temp, last_chargecycles,
-						&fcc_uah,
-						&unusable_charge_uah,
-						&remaining_charge_uah,
-						&cc_uah,
-						&rbatt,
+	calculate_soc_params(the_chip, &raw, ret->batt_temp, last_chargecycles,
+						&ret->fcc_uah,
+						&ret->unusable_charge_uah,
+						&ret->remaining_charge_uah,
+						&ret->cc_uah,
+						&ret->rbatt,
 						&iavg_ua,
 						&delta_time_s);
 	mutex_unlock(&the_chip->last_ocv_uv_mutex);
 
-	return rbatt;
+	return 0;
+}
+
+#define GET_PARAM(x)			\
+{					\
+	int rc;				\
+	struct get_params_value ret;	\
+					\
+	rc = get_params(&ret);		\
+	if (rc < 0)			\
+		return rc;		\
+					\
+	return (x);			\
+}
+
+int pm8921_bms_get_rbatt(void)
+{
+	GET_PARAM(ret.rbatt);
 }
 EXPORT_SYMBOL_GPL(pm8921_bms_get_rbatt);
 
+int pm8921_bms_get_ccc(void)
+{
+	GET_PARAM(ret.fcc_uah - ret.cc_uah);
+}
+EXPORT_SYMBOL_GPL(pm8921_bms_get_ccc);
+
+int pm8921_bms_get_ecc(void)
+{
+	GET_PARAM(ret.unusable_charge_uah);
+}
+EXPORT_SYMBOL_GPL(pm8921_bms_get_ecc);
+
 int pm8921_bms_get_fcc(void)
 {
-	int batt_temp, rc;
-	struct pm8xxx_adc_chan_result result;
-
-	if (!the_chip) {
-		pr_err("called before initialization\n");
-		return -EINVAL;
-	}
-
-	rc = pm8xxx_adc_read(the_chip->batt_temp_channel, &result);
-	if (rc) {
-		pr_err("error reading adc channel = %d, rc = %d\n",
-					the_chip->batt_temp_channel, rc);
-		return rc;
-	}
-	pr_debug("batt_temp phy = %lld meas = 0x%llx", result.physical,
-						result.measurement);
-	batt_temp = (int)result.physical;
-	return calculate_fcc_uah(the_chip, batt_temp, last_chargecycles);
+	GET_PARAM(ret.fcc_uah)
 }
 EXPORT_SYMBOL_GPL(pm8921_bms_get_fcc);
 

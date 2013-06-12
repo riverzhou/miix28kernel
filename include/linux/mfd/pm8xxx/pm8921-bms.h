@@ -214,6 +214,14 @@ int pm8921_bms_get_simultaneous_battery_voltage_and_current(int *ibat_ua,
  */
 int pm8921_bms_get_rbatt(void);
 /**
+ * pm8921_bms_get_ccc - function to get the battery current charge in mAh.
+ */
+int pm8921_bms_get_ccc(void);
+/**
+ * pm8921_bms_get_ecc - function to get the battery empty charge in mAh.
+ */
+int pm8921_bms_get_ecc(void);
+/**
  * pm8921_bms_invalidate_shutdown_soc - function to notify the bms driver that
  *					the battery was replaced between reboot
  *					and so it should not use the shutdown
@@ -255,6 +263,13 @@ static inline int pm8921_bms_get_rbatt(void)
 {
 	return -EINVAL;
 }
+static inline int pm8921_bms_get_ccc(void)
+{
+	return -EINVAL;
+}
+static inline int pm8921_bms_get_lcc(void)
+{
+	return -EINVAL;
 static inline void pm8921_bms_invalidate_shutdown_soc(void)
 {
 }
