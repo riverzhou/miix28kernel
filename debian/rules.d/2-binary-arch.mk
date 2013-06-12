@@ -531,6 +531,7 @@ endif
 binary-arch-deps-$(do_libc_dev_package) += binary-arch-headers
 ifneq ($(do_common_headers_indep),true)
 binary-arch-deps-$(do_flavour_header_package) += binary-headers
+binary-arch-deps-$(do_flavour_header_package) += common-tools
 endif
 binary-arch: $(binary-arch-deps-true)
 	@echo Debug: $@
