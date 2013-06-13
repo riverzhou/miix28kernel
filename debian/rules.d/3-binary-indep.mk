@@ -141,6 +141,17 @@ binary-headers: install-headers
 	dh_md5sums -p$(indep_hdrpkg)
 	dh_builddeb -p$(indep_hdrpkg)
 
+common-tools: install-indep
+	@echo Debug: $@
+	dh_installchangelogs -p$(tools_common_pkg_name)
+	dh_installdocs -p$(tools_common_pkg_name)
+	dh_compress -p$(tools_common_pkg_name)
+	dh_fixperms -p$(tools_common_pkg_name)
+	dh_installdeb -p$(tools_common_pkg_name)
+	$(lockme) dh_gencontrol -p$(tools_common_pkg_name)
+	dh_md5sums -p$(tools_common_pkg_name)
+	dh_builddeb -p$(tools_common_pkg_name)
+
 binary-indep: install-indep
 	@echo Debug: $@
 
