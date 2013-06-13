@@ -138,6 +138,8 @@ static void __init goldfish_reserve(void)
 static void __init goldfish_map_io(void)
 {
 	iotable_init(goldfish_io_desc, ARRAY_SIZE(goldfish_io_desc));
+	// alloc memory for DMA, used for fb
+	init_consistent_dma_size(SZ_4M);
     GOLDFISH_READY = 1;
 }
 
