@@ -1,14 +1,19 @@
-/* drivers/gpu/t6xx/kbase/src/platform/manta/mali_kbase_platform.c
+/*
  *
- * Copyright 2011 by S.LSI. Samsung Electronics Inc.
- * San#24, Nongseo-Dong, Giheung-Gu, Yongin, Korea
+ * (C) COPYRIGHT ARM Limited. All rights reserved.
  *
- * Samsung SoC Mali-T604 platform-dependent codes
+ * This program is free software and is provided to you under the terms of the
+ * GNU General Public License version 2 as published by the Free Software
+ * Foundation, and any use by you of this program is subject to the terms
+ * of such GNU licence.
  *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software FoundatIon.
+ * A copy of the licence is included with the program, and can also be obtained
+ * from Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
+ * Boston, MA  02110-1301, USA.
+ *
  */
+
+
 
 /**
  * @file mali_kbase_platform.c
@@ -724,7 +729,7 @@ static ssize_t show_upper_lock_dvfs(struct device *dev, struct device_attribute 
 	struct kbase_device *kbdev;
 	ssize_t ret = 0;
 #ifdef CONFIG_MALI_T6XX_DVFS
-	unsigned int locked_level = -1;
+	int locked_level = -1;
 #endif
 
 	kbdev = dev_get_drvdata(dev);
@@ -797,7 +802,7 @@ static ssize_t show_under_lock_dvfs(struct device *dev, struct device_attribute 
 	struct kbase_device *kbdev;
 	ssize_t ret = 0;
 #ifdef CONFIG_MALI_T6XX_DVFS
-	unsigned int locked_level = -1;
+	int locked_level = -1;
 #endif
 
 	kbdev = dev_get_drvdata(dev);

@@ -2,11 +2,14 @@
  *
  * (C) COPYRIGHT 2012-2013 ARM Limited. All rights reserved.
  *
- * This program is free software and is provided to you under the terms of the GNU General Public License version 2
- * as published by the Free Software Foundation, and any use by you of this program is subject to the terms of such GNU licence.
+ * This program is free software and is provided to you under the terms of the
+ * GNU General Public License version 2 as published by the Free Software
+ * Foundation, and any use by you of this program is subject to the terms
+ * of such GNU licence.
  *
- * A copy of the licence is included with the program, and can also be obtained from Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ * A copy of the licence is included with the program, and can also be obtained
+ * from Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
+ * Boston, MA  02110-1301, USA.
  *
  */
 
@@ -64,8 +67,11 @@ mali_error kbase_hw_set_issues_mask(kbase_device *kbdev)
 	case GPU_ID_MAKE(GPU_ID_PI_T67X, 1, 0, 1):
 		issues = base_hw_issues_t67x_r1p0;
 		break;
-	case GPU_ID_MAKE(GPU_ID_PI_T75X, 0, 0, 0):
-		issues = base_hw_issues_t75x_r0p0;
+	case GPU_ID_MAKE(GPU_ID_PI_T76X, 0, 0, 0):
+		issues = base_hw_issues_t76x_r0p0;
+		break;
+	case GPU_ID_MAKE(GPU_ID_PI_T72X, 0, 0, 0):
+		issues = base_hw_issues_t72x_r0p0;
 		break;
 	default:
 		KBASE_DEBUG_PRINT_ERROR(KBASE_CORE, "Unknown GPU ID %x", gpu_id);

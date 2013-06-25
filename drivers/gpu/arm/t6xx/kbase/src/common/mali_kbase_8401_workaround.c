@@ -2,11 +2,14 @@
  *
  * (C) COPYRIGHT 2011-2013 ARM Limited. All rights reserved.
  *
- * This program is free software and is provided to you under the terms of the GNU General Public License version 2
- * as published by the Free Software Foundation, and any use by you of this program is subject to the terms of such GNU licence.
+ * This program is free software and is provided to you under the terms of the
+ * GNU General Public License version 2 as published by the Free Software
+ * Foundation, and any use by you of this program is subject to the terms
+ * of such GNU licence.
  *
- * A copy of the licence is included with the program, and can also be obtained from Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ * A copy of the licence is included with the program, and can also be obtained
+ * from Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
+ * Boston, MA  02110-1301, USA.
  *
  */
 
@@ -266,6 +269,8 @@ mali_error kbasep_8401_workaround_init(kbase_device * const kbdev)
 	}
 
 	/* Insert pages to the gpu mmu. */
+	kbase_gpu_vm_lock(workaround_kctx);
+
 	kbase_mmu_insert_pages(workaround_kctx,
 			       /* vpfn = page number */
 			       (u64) WORKAROUND_PAGE_OFFSET,
@@ -275,6 +280,8 @@ mali_error kbasep_8401_workaround_init(kbase_device * const kbdev)
 			       KBASE_8401_WORKAROUND_COMPUTEJOB_COUNT,
 			       /* flags */
 			       KBASE_REG_GPU_RD | KBASE_REG_CPU_RD | KBASE_REG_CPU_WR | KBASE_REG_GPU_WR);
+
+	kbase_gpu_vm_unlock(workaround_kctx);
 
 	kbdev->workaround_kctx = workaround_kctx;
 	return MALI_ERROR_NONE;
