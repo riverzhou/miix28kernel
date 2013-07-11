@@ -32,6 +32,9 @@
 #define MFC_MAX_BUFFERS		32
 #define MFC_MAX_REF_BUFS	2
 #define MFC_FRAME_PLANES	2
+#define MFC_MAX_PLANES		3
+#define MFC_MAX_DPBS		32
+#define MFC_INFO_INIT_FD	-1
 
 #define MFC_NUM_CONTEXTS	5
 /* Interrupt timeout */
@@ -219,6 +222,9 @@ struct s5p_mfc_dev {
 	struct video_device	*vfd_dec;
 	struct video_device	*vfd_enc;
 	struct platform_device	*plat_dev;
+#ifdef CONFIG_ION_EXYNOS
+	struct ion_client	*mfc_ion_client;
+#endif
 
 	void __iomem		*regs_base;
 	int			irq;
@@ -487,6 +493,21 @@ struct s5p_mfc_codec_ops {
 	(((c)->c_ops->op) ?					\
 		((c)->c_ops->op(args)) : 0)
 
+struct stored_dpb_info {
+	int fd[MFC_MAX_PLANES];
+};
+
+struct dec_dpb_ref_info {
+	int index;
+	struct stored_dpb_info dpb[MFC_MAX_DPBS];
+};
+
+struct mfc_user_shared_handle {
+	int fd;
+	struct ion_handle *ion_handle;
+	void *virt;
+};
+
 struct s5p_mfc_dec {
 	int total_dpb_count;
 
@@ -521,6 +542,16 @@ struct s5p_mfc_dec {
 
 	/* For 6.x */
 	int remained;
+
+	int is_dynamic_dpb;
+	unsigned int dynamic_set;
+	unsigned int dynamic_used;
+	struct list_head ref_queue;
+	unsigned int ref_queue_cnt;
+	struct dec_dpb_ref_info *ref_info;
+	int assigned_fd[MFC_MAX_DPBS];
+	struct mfc_user_shared_handle sh_handle;
+
 };
 
 struct s5p_mfc_enc {
@@ -661,6 +692,10 @@ struct s5p_mfc_fmt {
 	u32 type;
 	u32 num_planes;
 };
+
+#ifdef CONFIG_ION_EXYNOS
+extern struct ion_device *ion_exynos;
+#endif
 
 #if defined(CONFIG_EXYNOS_MFC_V5)
 #include "regs-mfc-v5.h"
