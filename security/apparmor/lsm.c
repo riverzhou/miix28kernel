@@ -1212,7 +1212,7 @@ module_param_named(paranoid_load, aa_g_paranoid_load, aabool,
 
 /* Boot time disable flag */
 static bool apparmor_enabled = CONFIG_SECURITY_APPARMOR_BOOTPARAM_VALUE;
-module_param_named(enabled, apparmor_enabled, aabool, S_IRUGO);
+module_param_named(enabled, apparmor_enabled, bool, S_IRUGO);
 
 /* Boot time to set use of default or unconfined as initial profile */
 bool aa_g_unconfined_init = CONFIG_SECURITY_APPARMOR_UNCONFINED_INIT;
