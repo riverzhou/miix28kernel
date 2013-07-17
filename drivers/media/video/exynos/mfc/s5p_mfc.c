@@ -758,6 +758,12 @@ static irqreturn_t s5p_mfc_irq(int irq, void *priv)
 		wake_up_ctx(ctx, reason, err);
 		goto irq_cleanup_hw;
 		break;
+	case S5P_FIMV_R2H_CMD_DPB_FLUSH_RET:
+		ctx->state = MFCINST_ABORT;
+		clear_work_bit(ctx);
+		wake_up_ctx(ctx, reason, err);
+		goto irq_cleanup_hw;
+		break;
 	case S5P_FIMV_R2H_CMD_INIT_BUFFERS_RET:
 		s5p_mfc_clear_int_flags();
 		ctx->int_type = reason;

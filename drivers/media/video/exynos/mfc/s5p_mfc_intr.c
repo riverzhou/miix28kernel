@@ -57,11 +57,15 @@ void s5p_mfc_clean_dev_int_flags(struct s5p_mfc_dev *dev)
 int s5p_mfc_wait_for_done_ctx(struct s5p_mfc_ctx *ctx, int command)
 {
 	int ret;
+	unsigned int time_out = MFC_INT_TIMEOUT;
+
+	if (command == S5P_FIMV_R2H_CMD_DPB_FLUSH_RET)
+		time_out = MFC_BW_TIMEOUT;
 
 	ret = wait_event_timeout(ctx->queue,
 				(ctx->int_cond && (ctx->int_type == command
 			|| ctx->int_type == S5P_FIMV_R2H_CMD_ERR_RET)),
-					msecs_to_jiffies(MFC_INT_TIMEOUT));
+					msecs_to_jiffies(time_out));
 	if (ret == 0) {
 		mfc_err("Interrupt (ctx->int_type:%d, command:%d) timed out.\n",
 							ctx->int_type, command);

@@ -1740,6 +1740,19 @@ static inline int s5p_mfc_run_init_enc_buffers(struct s5p_mfc_ctx *ctx)
 	return ret;
 }
 
+static inline int s5p_mfc_dec_dpb_flush(struct s5p_mfc_ctx *ctx)
+{
+	struct s5p_mfc_dev *dev = ctx->dev;
+
+	dev->curr_ctx = ctx->num;
+	s5p_mfc_clean_ctx_int_flags(ctx);
+
+	WRITEL(ctx->inst_no, S5P_FIMV_INSTANCE_ID);
+	s5p_mfc_cmd_host2risc(S5P_FIMV_H2R_CMD_FLUSH, NULL);
+
+	return 0;
+}
+
 static inline int s5p_mfc_ctx_ready(struct s5p_mfc_ctx *ctx)
 {
 	if (ctx->type == MFCINST_DECODER)
@@ -1830,6 +1843,9 @@ void s5p_mfc_try_run(struct s5p_mfc_dev *dev)
 			ctx->capture_state = QUEUE_FREE;
 			mfc_debug(2, "Will re-init the codec`.\n");
 			s5p_mfc_run_init_dec(ctx);
+			break;
+		case MFCINST_DPB_FLUSHING:
+			ret = s5p_mfc_dec_dpb_flush(ctx);
 			break;
 		default:
 			ret = -EAGAIN;
