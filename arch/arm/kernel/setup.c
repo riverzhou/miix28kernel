@@ -565,6 +565,17 @@ static int __init early_mem(char *p)
 	char *endp;
 
 	/*
+	 * Allow the user to reset any previous settings
+	 * such as might be specified unconditionally by
+	 * the bootloader.  Adding ! as a prefix triggers
+	 * this reset.
+	 */
+	if (p && p[0] == '!') {
+		p++;
+		usermem = 0;
+	}
+
+	/*
 	 * If the user specifies memory size, we
 	 * blow away any automatically generated
 	 * size.
