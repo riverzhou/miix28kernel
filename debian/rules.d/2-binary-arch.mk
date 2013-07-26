@@ -47,6 +47,7 @@ install-%: pkgdir_ex = $(CURDIR)/debian/$(extra_pkg_name)-$*
 install-%: bindoc = $(pkgdir)/usr/share/doc/$(bin_pkg_name)-$*
 install-%: dbgpkgdir = $(CURDIR)/debian/$(bin_pkg_name)-$*-dbgsym
 install-%: signed = $(CURDIR)/debian/$(bin_pkg_name)-signed
+install-%: toolspkgdir = $(CURDIR)/debian/$(tools_flavour_pkg_name)-$*
 install-%: basepkg = $(hdrs_pkg_name)
 install-%: indeppkg = $(indep_hdrs_pkg_name)
 install-%: kernfile = $(call custom_override,kernel_file,$*)
@@ -284,6 +285,10 @@ endif
 		$(pkgdir)/lib/modules/$(abi_release)-$*
 	rmdir $(pkgdir)/lib/modules/$(abi_release)-$*/_
 
+	# Create the linux-tools version-flavour link
+	install -d $(toolspkgdir)/usr/lib/linux-tools
+	ln -s ../$(src_pkg_name)-tools-$(abi_release) $(toolspkgdir)/usr/lib/linux-tools/$(abi_release)-$*
+
 headers_tmp := $(CURDIR)/debian/tmp-headers
 headers_dir := $(CURDIR)/debian/linux-libc-dev
 
@@ -341,6 +346,7 @@ binary-%: pkgimg_ex = $(extra_pkg_name)-$*
 binary-%: pkghdr = $(hdrs_pkg_name)-$*
 binary-%: dbgpkg = $(bin_pkg_name)-$*-dbgsym
 binary-%: dbgpkgdir = $(CURDIR)/debian/$(bin_pkg_name)-$*-dbgsym
+binary-%: pkgtools = $(tools_flavour_pkg_name)-$*
 binary-%: target_flavour = $*
 binary-%: install-%
 	@echo Debug: $@
@@ -427,6 +433,19 @@ ifneq ($(skipdbg),true)
 	# Now, the package wont get into the archive, but it will get put
 	# into the debug system.
 endif
+
+ifeq ($(do_tools),true)
+	dh_installchangelogs -p$(pkgtools)
+	dh_installdocs -p$(pkgtools)
+	dh_compress -p$(pkgtools)
+	dh_fixperms -p$(pkgtools)
+	dh_shlibdeps -p$(pkgtools)
+	dh_installdeb -p$(pkgtools)
+	$(lockme) dh_gencontrol -p$(pkgtools)
+	dh_md5sums -p$(pkgtools)
+	dh_builddeb -p$(pkgtools)
+endif
+
 ifneq ($(full_build),false)
 	# Clean out this flavours build directory.
 	rm -rf $(builddir)/build-$*
@@ -453,17 +472,25 @@ endif
 $(stampdir)/stamp-build-perarch: $(stampdir)/stamp-prepare-perarch
 	@echo Debug: $@
 ifeq ($(do_tools),true)
+
+	# Allow for multiple installed versions of cpupower and libcpupower.so:
+	# Override LIB_MIN in order to to generate a versioned .so named
+	# libcpupower.so.$(abi_release) and link cpupower with that.
+	make -C $(builddirpa)/tools/power/cpupower \
+		CROSS_COMPILE=$(CROSS_COMPILE) \
+		LIB_MIN=$(abi_release) CPUFREQ_BENCH=false
+
 ifeq ($(do_tools_perf),true)
 	cd $(builddirpa)/tools/perf && \
-		make HAVE_CPLUS_DEMANGLE=1 CROSS_COMPILE=$(CROSS_COMPILE) NO_LIBPYTHON=1 NO_LIBPERL=1 PYTHON=python2.7
+		make prefix=/usr HAVE_CPLUS_DEMANGLE=1 CROSS_COMPILE=$(CROSS_COMPILE) NO_LIBPYTHON=1 NO_LIBPERL=1 PYTHON=python2.7
 endif
-	if [ "$(arch)" = "amd64" ] || [ "$(arch)" = "i386" ]; then \
-		cd $(builddirpa)/tools/power/x86/x86_energy_perf_policy && make CROSS_COMPILE=$(CROSS_COMPILE); \
-		cd $(builddirpa)/tools/power/x86/turbostat && make CROSS_COMPILE=$(CROSS_COMPILE); \
-		if [ "$(do_hyperv)" = "true" ]; then \
-			cd $(builddirpa)/tools/hv && make CROSS_COMPILE=$(CROSS_COMPILE); \
-		fi; \
-	fi
+ifeq ($(do_tools_x86),true)
+	cd $(builddirpa)/tools/power/x86/x86_energy_perf_policy && make CROSS_COMPILE=$(CROSS_COMPILE)
+	cd $(builddirpa)/tools/power/x86/turbostat && make CROSS_COMPILE=$(CROSS_COMPILE)
+endif
+ifeq ($(do_tools_hyperv),true)
+	cd $(builddirpa)/tools/hv && make CROSS_COMPILE=$(CROSS_COMPILE)
+endif
 endif
 	@touch $@
 
@@ -472,22 +499,31 @@ install-perarch: $(stampdir)/stamp-build-perarch
 	@echo Debug: $@
 	# Add the tools.
 ifeq ($(do_tools),true)
-	install -d $(toolspkgdir)/usr/bin
+	install -d $(toolspkgdir)/usr/lib
+	install -d $(toolspkgdir)/usr/lib/$(src_pkg_name)-tools-$(abi_release)
+
+	install -m755 $(builddirpa)/tools/power/cpupower/cpupower \
+		$(toolspkgdir)/usr/lib/$(src_pkg_name)-tools-$(abi_release)
+	# Install only the full versioned libcpupower.so.$(abi_release), not
+	# the usual symlinks to it.
+	install -m644 $(builddirpa)/tools/power/cpupower/libcpupower.so.$(abi_release) \
+		$(toolspkgdir)/usr/lib/
+
 ifeq ($(do_tools_perf),true)
-	install -m755 $(builddirpa)/tools/perf/perf \
-		$(toolspkgdir)/usr/bin/perf_$(abi_release)
+	install -m755 $(builddirpa)/tools/perf/perf $(toolspkgdir)/usr/lib/$(src_pkg_name)-tools-$(abi_release)
 endif
-	if [ "$(arch)" = "amd64" ] || [ "$(arch)" = "i386" ]; then \
-		install -m755 $(builddirpa)/tools/power/x86/x86_energy_perf_policy/x86_energy_perf_policy \
-			$(toolspkgdir)/usr/bin/x86_energy_perf_policy_$(abi_release); \
-		install -m755 $(builddirpa)/tools/power/x86/turbostat/turbostat \
-			$(toolspkgdir)/usr/bin/turbostat_$(abi_release); \
-		if [ "$(do_hyperv)" = "true" ]; then \
-			install -d $(toolspkgdir)/usr/sbin; \
-			install -m755 $(builddirpa)/tools/hv/hv_kvp_daemon \
-				$(toolspkgdir)/usr/sbin/hv_kvp_daemon_$(abi_release); \
-		fi; \
-	fi
+ifeq ($(do_tools_x86),true)
+	install -m755 $(builddirpa)/tools/power/x86/x86_energy_perf_policy/x86_energy_perf_policy \
+		$(toolspkgdir)/usr/lib/$(src_pkg_name)-tools-$(abi_release)
+	install -m755 $(builddirpa)/tools/power/x86/turbostat/turbostat \
+		$(toolspkgdir)/usr/lib/$(src_pkg_name)-tools-$(abi_release)
+endif
+ifeq ($(do_tools_hyperv),true)
+	install -m755 $(builddirpa)/tools/hv/hv_kvp_daemon \
+		$(toolspkgdir)/usr/lib/$(src_pkg_name)-tools-$(abi_release)
+	install -m755 $(builddirpa)/tools/hv/hv_vss_daemon \
+		$(toolspkgdir)/usr/lib/$(src_pkg_name)-tools-$(abi_release)
+endif
 endif
 
 binary-perarch: toolspkg = $(tools_pkg_name)
@@ -532,7 +568,6 @@ endif
 binary-arch-deps-$(do_libc_dev_package) += binary-arch-headers
 ifneq ($(do_common_headers_indep),true)
 binary-arch-deps-$(do_flavour_header_package) += binary-headers
-binary-arch-deps-$(do_flavour_header_package) += common-tools
 endif
 binary-arch: $(binary-arch-deps-true)
 	@echo Debug: $@
