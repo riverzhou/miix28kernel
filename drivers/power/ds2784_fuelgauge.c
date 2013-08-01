@@ -116,7 +116,7 @@ static int ds2784_get_current(struct ds2784_info *di, bool avg, int *ival)
 
 	n = ((di->raw[reg] << 8) | (di->raw[reg+1]));
 
-	*ival = (n * 15625) / 10000 * di->raw[DS2784_REG_RSNSP] / 1000;
+	*ival = (n * 15625) / 10 * di->raw[DS2784_REG_RSNSP] / 1000;
 	return 0;
 }
 
@@ -151,6 +151,32 @@ static int ds2784_get_temperature(struct ds2784_info *di, int *temp_now)
 	pr_debug("%s: temp : %d\n", __func__, di->status.temp_C);
 
 	*temp_now = di->status.temp_C;
+	return 0;
+}
+
+static int ds2784_get_accumulated_current(struct ds2784_info *di, int *acc)
+{
+	short n;
+	int ret;
+
+	if (!di->raw[DS2784_REG_RSNSP]) {
+		ret = ds2784_read(di, di->raw + DS2784_REG_RSNSP,
+				  DS2784_REG_RSNSP, 1);
+		if (ret < 0) {
+			dev_err(di->dev, "error %d reading RSNSP\n", ret);
+			return ret;
+		}
+	}
+
+	ret = ds2784_read(di, di->raw + DS2784_REG_ACCUMULATE_CURR_MSB,
+			  DS2784_REG_ACCUMULATE_CURR_MSB, 2);
+
+	if (ret < 0)
+		return ret;
+
+	n = (di->raw[DS2784_REG_ACCUMULATE_CURR_MSB] << 8) |
+		di->raw[DS2784_REG_ACCUMULATE_CURR_LSB];
+	*acc = n * 6250 * di->raw[DS2784_REG_RSNSP] / 1000;
 	return 0;
 }
 
@@ -193,6 +219,10 @@ static int ds2784_get_property(struct power_supply *psy,
 		ret = ds2784_get_soc(di, &val->intval);
 		break;
 
+	case POWER_SUPPLY_PROP_CHARGE_COUNTER:
+		ret = ds2784_get_accumulated_current(di, &val->intval);
+		break;
+
 	default:
 		ret = -EINVAL;
 	}
@@ -208,6 +238,7 @@ static enum power_supply_property ds2784_props[] = {
 	POWER_SUPPLY_PROP_CURRENT_NOW,
 	POWER_SUPPLY_PROP_CURRENT_AVG,
 	POWER_SUPPLY_PROP_CAPACITY,
+	POWER_SUPPLY_PROP_CHARGE_COUNTER,
 };
 
 static int ds2784_debugfs_show(struct seq_file *s, void *unused)
