@@ -156,7 +156,7 @@ static int ds2784_get_temperature(struct ds2784_info *di, int *temp_now)
 
 static int ds2784_get_accumulated_current(struct ds2784_info *di, int *acc)
 {
-	short n;
+	int n;
 	int ret;
 
 	if (!di->raw[DS2784_REG_RSNSP]) {
@@ -176,7 +176,7 @@ static int ds2784_get_accumulated_current(struct ds2784_info *di, int *acc)
 
 	n = (di->raw[DS2784_REG_ACCUMULATE_CURR_MSB] << 8) |
 		di->raw[DS2784_REG_ACCUMULATE_CURR_LSB];
-	*acc = n * 6250 * di->raw[DS2784_REG_RSNSP] / 1000;
+	*acc = n * 625 / 100 * di->raw[DS2784_REG_RSNSP];
 	return 0;
 }
 
