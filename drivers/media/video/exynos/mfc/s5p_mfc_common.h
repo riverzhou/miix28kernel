@@ -111,6 +111,12 @@ enum s5p_mfc_queue_state {
 	QUEUE_BUFS_MMAPED,
 };
 
+enum mfc_dec_wait_state {
+	WAIT_NONE = 0,
+	WAIT_DECODING,
+	WAIT_INITBUF_DONE,
+};
+
 /**
  * enum s5p_mfc_check_state - The state for user notification
  */
@@ -542,6 +548,7 @@ struct s5p_mfc_dec {
 
 	/* For 6.x */
 	int remained;
+	int cr_left, cr_right, cr_top, cr_bot;
 
 	int is_dynamic_dpb;
 	unsigned int dynamic_set;
@@ -663,6 +670,8 @@ struct s5p_mfc_ctx {
 
 	/* for PPMU monitoring */
 	struct exynos5_bus_int_handle *mfc_int_handle_poll;
+
+	enum mfc_dec_wait_state wait_state;
 };
 
 #define fh_to_mfc_ctx(x)	\

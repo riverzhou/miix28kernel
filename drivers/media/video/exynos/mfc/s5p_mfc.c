@@ -263,7 +263,7 @@ static void s5p_mfc_handle_frame_all_extracted(struct s5p_mfc_ctx *ctx)
 		mfc_debug(2, "Cleaned up buffer: %d\n",
 			  dst_buf->vb.v4l2_buf.index);
 	}
-	if (ctx->state != MFCINST_ABORT)
+	if (ctx->state != MFCINST_ABORT && ctx->state != MFCINST_RES_CHANGE_FLUSH)
 		ctx->state = MFCINST_RUNNING;
 	mfc_debug(2, "After cleanup\n");
 }
@@ -551,24 +551,21 @@ static void s5p_mfc_handle_frame(struct s5p_mfc_ctx *ctx,
 	if (ctx->state == MFCINST_RES_CHANGE_INIT)
 		ctx->state = MFCINST_RES_CHANGE_FLUSH;
 
-	if (res_change) {
-		if (res_change == 1) {
-			mfc_err("Resolution change set to %d\n", res_change);
-			ctx->state = MFCINST_RES_CHANGE_INIT;
+	if (res_change == 1 || res_change == 2) {
+		mfc_err("Resolution change set to %d\n", res_change);
+		ctx->state = MFCINST_RES_CHANGE_INIT;
+		ctx->wait_state = WAIT_DECODING;
+		mfc_debug(2, "Decoding waiting! : %d\n", ctx->wait_state);
 
-			s5p_mfc_clear_int_flags();
-			wake_up_ctx(ctx, reason, err);
-			if (test_and_clear_bit(ctx->num, &dev->hw_lock) == 0)
-				BUG();
+		s5p_mfc_clear_int_flags();
+		wake_up_ctx(ctx, reason, err);
+		if (test_and_clear_bit(ctx->num, &dev->hw_lock) == 0)
+			BUG();
 
-			s5p_mfc_clock_off();
+		s5p_mfc_clock_off();
 
-			queue_work(dev->irq_workqueue, &dev->work_struct);
-			return;
-		} else if (res_change == 2) {
-			/* Resolution decrease is ignored */
-			goto leave_handle_frame;
-		}
+		queue_work(dev->irq_workqueue, &dev->work_struct);
+		return;
 	}
 	if (dec->dpb_flush)
 		dec->dpb_flush = 0;
@@ -832,10 +829,9 @@ static irqreturn_t s5p_mfc_irq(int irq, void *priv)
 				ctx->img_height = s5p_mfc_get_img_height();
 			}
 
-			s5p_mfc_dec_calc_dpb_size(ctx);
-
 			ctx->dpb_count = s5p_mfc_get_dpb_count();
 			dec->internal_dpb = 0;
+			s5p_mfc_dec_store_crop_info(ctx);
 			if (ctx->img_width == 0 || ctx->img_height == 0)
 				ctx->state = MFCINST_ERROR;
 			else
