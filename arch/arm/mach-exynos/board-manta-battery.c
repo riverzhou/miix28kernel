@@ -56,14 +56,6 @@ enum charge_connector {
 	CHARGE_CONNECTOR_MAX,
 };
 
-#define TEMP_HIGH_THRESHOLD	600	/* 60c */
-#define TEMP_HIGH_RECOVERY	420	/* 42c */
-#define TEMP_LOW_RECOVERY	0	/* 0c */
-#define TEMP_LOW_THRESHOLD	-50	/* -5c */
-#define FULL_CHARGING_TIME	(12 * 60 * 60)
-#define	RECHARGING_TIME		(2 * 60 * 60)
-#define RECHARGING_VOLTAGE	(4250 * 1000)
-
 static int manta_bat_last_smb347_status;
 static enum manta_charge_source manta_bat_charge_source[CHARGE_CONNECTOR_MAX];
 static enum charge_connector manta_bat_charge_conn;
@@ -87,33 +79,32 @@ static bool manta_bat_suspended;
 static struct delayed_work redetect_work;
 static struct wake_lock manta_bat_redetect_wl;
 
-#define MONITOR_POLL_INTERVAL (60 * MSEC_PER_SEC)
-static struct timer_list manta_bat_monitor_timer;
-static struct wake_lock	manta_bat_monitor_wake_lock;
-static struct workqueue_struct *manta_bat_monitor_wqueue;
-static struct work_struct manta_bat_monitor_work;
-static struct work_struct manta_bat_chgdetect_work;
 static struct wake_lock manta_bat_chgdetect_wakelock;
-
-static DEFINE_MUTEX(manta_bat_state_lock);
-static enum manta_charge_source manta_bat_selected_charge_source;
-static int manta_bat_temp;
-static int manta_bat_current;
-static unsigned int manta_bat_health = POWER_SUPPLY_HEALTH_GOOD;
-static unsigned int manta_bat_vcell = -1;
-static unsigned int manta_bat_soc = -1;
-static unsigned int manta_bat_charging_status;
-static bool manta_bat_recharging;
-static unsigned long manta_bat_charging_start_time;
-static ktime_t manta_bat_last_poll;
 
 static DEFINE_MUTEX(manta_bat_charger_detect_lock);
 static DEFINE_MUTEX(manta_bat_adc_lock);
 
-static void manta_bat_charge_source_changed(enum manta_charge_source
-					    charge_source);
-static void manta_bat_set_full_status(void);
 static void manta_bat_send_uevent(void);
+
+static char *manta_charge_source_str(enum manta_charge_source charge_source)
+{
+	switch (charge_source) {
+	case MANTA_CHARGE_SOURCE_NONE:
+		return "none";
+	case MANTA_CHARGE_SOURCE_AC_SAMSUNG:
+		return "ac-samsung";
+	case MANTA_CHARGE_SOURCE_AC_OTHER:
+		return "ac-other";
+	case MANTA_CHARGE_SOURCE_USB:
+		return "usb";
+	case MANTA_CHARGE_SOURCE_UNKNOWN:
+		return "unknown";
+	default:
+		break;
+	}
+
+	return "?";
+}
 
 static inline int manta_bat_get_ds2784(void)
 {
@@ -542,6 +533,16 @@ static void exynos5_manta_set_priority(void)
 		       __func__, ret);
 }
 
+static void manta_bat_charge_source_changed(
+	enum manta_charge_source charge_source)
+{
+	pr_info("battery: charge source type was changed: %s\n",
+		manta_charge_source_str(charge_source));
+
+	wake_lock_timeout(&manta_bat_chgdetect_wakelock, HZ * 2);
+	manta_bat_send_uevent();
+}
+
 static void change_charger_status(bool force_dock_redetect,
 				  bool usbin_redetect)
 {
@@ -601,7 +602,7 @@ static void change_charger_status(bool force_dock_redetect,
 
 		if (smb347_status.intval != manta_bat_last_smb347_status) {
 			if (smb347_status.intval == POWER_SUPPLY_STATUS_FULL)
-				manta_bat_set_full_status();
+				manta_bat_send_uevent();
 
 			manta_bat_last_smb347_status = smb347_status.intval;
 		}
@@ -660,12 +661,6 @@ static struct smb347_charger_platform_data smb347_chg_pdata = {
 	.num_supplicants = ARRAY_SIZE(manta_battery_supplicant),
 };
 
-static enum manta_charge_source manta_bat_poll_charge_source(void)
-{
-	change_charger_status(false, false);
-	return manta_bat_charge_source[manta_bat_charge_conn];
-}
-
 static void exynos5_manta_set_mains_current(void)
 {
 	int ret;
@@ -719,65 +714,6 @@ static void manta_bat_set_charging_current(void)
 	exynos5_manta_set_mains_current();
 }
 
-static int manta_bat_get_capacity(void)
-{
-	union power_supply_propval soc;
-	int ret = -ENXIO;
-
-	if (manta_bat_get_ds2784())
-		return ret;
-	ret = manta_bat_ds2784_battery->get_property(
-		manta_bat_ds2784_battery, POWER_SUPPLY_PROP_CAPACITY,
-		&soc);
-	if (ret >= 0)
-		ret = soc.intval;
-	return ret;
-}
-
-static int manta_bat_get_temperature(int *temp_now)
-{
-	union power_supply_propval temp;
-	int ret = -ENXIO;
-
-	if (manta_bat_get_ds2784())
-		return ret;
-	ret = manta_bat_ds2784_battery->get_property(
-		manta_bat_ds2784_battery, POWER_SUPPLY_PROP_TEMP, &temp);
-	if (ret >= 0)
-		*temp_now = temp.intval;
-	return ret;
-}
-
-static int manta_bat_get_voltage_now(void)
-{
-	union power_supply_propval vcell;
-	int ret = -ENXIO;
-
-	if (manta_bat_get_ds2784())
-		return ret;
-	ret = manta_bat_ds2784_battery->get_property(
-		manta_bat_ds2784_battery, POWER_SUPPLY_PROP_VOLTAGE_NOW,
-		&vcell);
-	if (ret >= 0)
-		ret = vcell.intval;
-	return ret;
-}
-
-static int manta_bat_get_current_now(int *i_current)
-{
-	union power_supply_propval inow;
-	int ret = -ENXIO;
-
-	if (manta_bat_get_ds2784())
-		return ret;
-	ret = manta_bat_ds2784_battery->get_property(
-		manta_bat_ds2784_battery, POWER_SUPPLY_PROP_CURRENT_NOW,
-		&inow);
-	if (ret >= 0)
-		*i_current = inow.intval;
-	return ret;
-}
-
 static irqreturn_t ta_int_intr(int irq, void *arg)
 {
 	wake_lock(&manta_bat_chgdetect_wakelock);
@@ -785,27 +721,6 @@ static irqreturn_t ta_int_intr(int irq, void *arg)
 	change_charger_status(false, false);
 	return IRQ_HANDLED;
 }
-
-static char *manta_charge_source_str(enum manta_charge_source charge_source)
-{
-	switch (charge_source) {
-	case MANTA_CHARGE_SOURCE_NONE:
-		return "none";
-	case MANTA_CHARGE_SOURCE_AC_SAMSUNG:
-		return "ac-samsung";
-	case MANTA_CHARGE_SOURCE_AC_OTHER:
-		return "ac-other";
-	case MANTA_CHARGE_SOURCE_USB:
-		return "usb";
-	case MANTA_CHARGE_SOURCE_UNKNOWN:
-		return "unknown";
-	default:
-		break;
-	}
-
-	return "?";
-}
-
 
 static int manta_power_debug_dump(struct seq_file *s, void *unused)
 {
@@ -885,354 +800,63 @@ static void redetect_work_proc(struct work_struct *work)
 }
 
 /*
- * Manta/Samsung charging logic and manta-battery power_supply...
+ * manta-battery power_supply...
  */
-
-static void manta_bat_update_data(void);
-static int manta_bat_enable_charging(bool enable);
-
-static void manta_bat_check_temp(void)
-{
-	int batt_temp = 42; /* 4.2C */
-
-	manta_bat_get_temperature(&batt_temp);
-
-	if (manta_bat_selected_charge_source != MANTA_CHARGE_SOURCE_NONE) {
-		if (batt_temp >= TEMP_HIGH_THRESHOLD) {
-			if (manta_bat_health !=
-			    POWER_SUPPLY_HEALTH_OVERHEAT &&
-			    manta_bat_health !=
-			    POWER_SUPPLY_HEALTH_UNSPEC_FAILURE) {
-				pr_info("battery overheat (%d>=%d), " \
-					"charging unavailable\n",
-					batt_temp,
-					TEMP_HIGH_THRESHOLD);
-				manta_bat_health =
-					POWER_SUPPLY_HEALTH_OVERHEAT;
-			}
-		} else if (batt_temp <= TEMP_HIGH_RECOVERY &&
-			batt_temp >= TEMP_LOW_RECOVERY) {
-			if (manta_bat_health == POWER_SUPPLY_HEALTH_OVERHEAT ||
-			    manta_bat_health == POWER_SUPPLY_HEALTH_COLD) {
-				pr_info("battery recovery (%d,%d~%d),"	\
-					"charging available\n",
-					batt_temp,
-					TEMP_LOW_RECOVERY,
-					TEMP_HIGH_RECOVERY);
-				manta_bat_health =
-					POWER_SUPPLY_HEALTH_GOOD;
-			}
-		} else if (batt_temp <= TEMP_LOW_THRESHOLD) {
-			if (manta_bat_health != POWER_SUPPLY_HEALTH_COLD &&
-			    manta_bat_health !=
-			    POWER_SUPPLY_HEALTH_UNSPEC_FAILURE) {
-				pr_info("battery cold (%d <= %d),"	\
-					"charging unavailable\n",
-					batt_temp,
-					TEMP_LOW_THRESHOLD);
-				manta_bat_health =
-					POWER_SUPPLY_HEALTH_COLD;
-			}
-		}
-	}
-
-	manta_bat_temp = batt_temp;
-}
-
-/*
- * manta_bat_state_lock not held, may call back into
- * manta_bat_charge_source_changed.  Gathering data here can be
- * non-atomic; updating our state based on the data may need to be
- * atomic.
- */
-
-static void manta_bat_update_data(void)
-{
-	int ret;
-	int v;
-
-	manta_bat_selected_charge_source = manta_bat_poll_charge_source();
-	ret = manta_bat_get_voltage_now();
-	manta_bat_vcell = ret >= 0 ? ret : 4242000;
-	ret = manta_bat_get_capacity();
-	manta_bat_soc = ret >= 0 ? ret : 42;
-	ret = manta_bat_get_current_now(&v);
-	if (!ret)
-		manta_bat_current = v;
-	manta_bat_check_temp();
-}
-
-static void manta_bat_set_charge_time(bool enable)
-{
-	if (enable && !manta_bat_charging_start_time) {
-		struct timespec cur_time;
-
-		get_monotonic_boottime(&cur_time);
-		/* record start time for charge timeout timer */
-		manta_bat_charging_start_time = cur_time.tv_sec;
-	} else if (!enable) {
-		/* clear charge timeout timer */
-		manta_bat_charging_start_time = 0;
-	}
-}
 
 static int manta_bat_enable_charging(bool enable)
 {
-	if (enable && (manta_bat_health != POWER_SUPPLY_HEALTH_GOOD)) {
-		manta_bat_charging_status =
-		    POWER_SUPPLY_STATUS_NOT_CHARGING;
-		return -EPERM;
-	}
-
 	if (enable)
 		manta_bat_set_charging_current();
 
 	manta_bat_set_charging_enable(enable);
-	manta_bat_set_charge_time(enable);
-	pr_info("battery: enable=%d charger: %s\n", enable,
-		manta_charge_source_str(manta_bat_selected_charge_source));
 	return 0;
 }
 
-static bool manta_bat_charge_timeout(unsigned long timeout)
+static int manta_bat_set_property(struct power_supply *ps,
+				  enum power_supply_property prop,
+				  const union power_supply_propval *val)
 {
-	struct timespec cur_time;
+	int ret;
 
-	if (!manta_bat_charging_start_time)
-		return 0;
-
-	get_monotonic_boottime(&cur_time);
-	pr_debug("%s: Start time: %ld, End time: %ld, current time: %ld\n",
-		 __func__, manta_bat_charging_start_time,
-		 manta_bat_charging_start_time + timeout,
-		 cur_time.tv_sec);
-	return cur_time.tv_sec >= manta_bat_charging_start_time + timeout;
-}
-
-static void manta_bat_charging_timer(void)
-{
-	if (!manta_bat_charging_start_time &&
-	    manta_bat_charging_status == POWER_SUPPLY_STATUS_CHARGING) {
-		manta_bat_enable_charging(true);
-		manta_bat_recharging = true;
-		pr_debug("%s: charge status charging but timer is expired\n",
-			__func__);
-	} else if (!manta_bat_charging_start_time) {
-		pr_debug("%s: charging_start_time never initialized\n",
-				__func__);
-		return;
-	}
-
-	if (manta_bat_charge_timeout(manta_bat_recharging ?
-				     RECHARGING_TIME : FULL_CHARGING_TIME)) {
-		manta_bat_enable_charging(false);
-		if (manta_bat_vcell >
-		    RECHARGING_VOLTAGE &&
-		    manta_bat_soc == 100)
-			manta_bat_charging_status =
-				POWER_SUPPLY_STATUS_FULL;
-		manta_bat_recharging = false;
-		manta_bat_charging_start_time = 0;
-		pr_info("battery: charging timer expired\n");
-	}
-
-	return;
-}
-
-static void manta_bat_charge_source_changed(
-	enum manta_charge_source charge_source)
-{
-	mutex_lock(&manta_bat_state_lock);
-	manta_bat_selected_charge_source = charge_source;
-
-	pr_info("battery: charge source type was changed: %s\n",
-		manta_charge_source_str(charge_source));
-
-	mutex_unlock(&manta_bat_state_lock);
-	queue_work(manta_bat_monitor_wqueue, &manta_bat_chgdetect_work);
-}
-
-static void manta_bat_set_full_status(void)
-{
-	mutex_lock(&manta_bat_state_lock);
-	pr_info("battery: battery full\n");
-	manta_bat_charging_status = POWER_SUPPLY_STATUS_FULL;
-	manta_bat_enable_charging(false);
-	manta_bat_recharging = false;
-	mutex_unlock(&manta_bat_state_lock);
-	manta_bat_send_uevent();
-}
-
-static void manta_bat_chgdetect_worker(struct work_struct *work)
-{
-	mutex_lock(&manta_bat_state_lock);
-
-	switch (manta_bat_selected_charge_source) {
-	case MANTA_CHARGE_SOURCE_NONE:
-		manta_bat_charging_status = POWER_SUPPLY_STATUS_DISCHARGING;
-		manta_bat_enable_charging(false);
-		manta_bat_health = POWER_SUPPLY_HEALTH_GOOD;
-		manta_bat_recharging = false;
-		manta_bat_charging_start_time = 0;
-		break;
-	case MANTA_CHARGE_SOURCE_USB:
-	case MANTA_CHARGE_SOURCE_AC_SAMSUNG:
-	case MANTA_CHARGE_SOURCE_AC_OTHER:
-		/*
-		 * If charging status indicates a charger was already
-		 * connected prior to this and the status is something
-		 * other than charging ("full" or "not-charging"), leave
-		 * the status alone.
-		 */
-		if (manta_bat_charging_status ==
-		    POWER_SUPPLY_STATUS_DISCHARGING ||
-		    manta_bat_charging_status == POWER_SUPPLY_STATUS_UNKNOWN)
-			manta_bat_charging_status =
-				POWER_SUPPLY_STATUS_CHARGING;
-
-		/*
-		 * Don't re-enable charging if the battery is full and we
-		 * are not actively re-charging it, or if "not-charging"
-		 * status is set.
-		 */
-		if (!((manta_bat_charging_status == POWER_SUPPLY_STATUS_FULL
-		       && !manta_bat_recharging) || manta_bat_charging_status ==
-		      POWER_SUPPLY_STATUS_NOT_CHARGING))
-			manta_bat_enable_charging(true);
-
+	switch (prop) {
+	case POWER_SUPPLY_PROP_CHARGE_ENABLED:
+		ret = manta_bat_enable_charging(val->intval);
 		break;
 	default:
-		pr_err("%s: Invalid charger type\n", __func__);
+		ret = -EINVAL;
 		break;
 	}
 
-	mutex_unlock(&manta_bat_state_lock);
-	wake_lock_timeout(&manta_bat_chgdetect_wakelock, HZ * 2);
-	manta_bat_send_uevent();
-}
-
-
-static void manta_bat_monitor_worker(struct work_struct *work)
-{
-	wake_lock(&manta_bat_monitor_wake_lock);
-	manta_bat_update_data();
-	mutex_lock(&manta_bat_state_lock);
-
-	switch (manta_bat_charging_status) {
-	case POWER_SUPPLY_STATUS_FULL:
-		if (manta_bat_vcell < RECHARGING_VOLTAGE &&
-		    !manta_bat_recharging) {
-			manta_bat_recharging = true;
-			manta_bat_enable_charging(true);
-			pr_info("battery: start recharging, v=%d\n",
-				manta_bat_vcell/1000);
-		}
-		break;
-	case POWER_SUPPLY_STATUS_DISCHARGING:
-		break;
-	case POWER_SUPPLY_STATUS_CHARGING:
-		switch (manta_bat_health) {
-		case POWER_SUPPLY_HEALTH_OVERHEAT:
-		case POWER_SUPPLY_HEALTH_COLD:
-		case POWER_SUPPLY_HEALTH_OVERVOLTAGE:
-		case POWER_SUPPLY_HEALTH_DEAD:
-		case POWER_SUPPLY_HEALTH_UNSPEC_FAILURE:
-			manta_bat_charging_status =
-				POWER_SUPPLY_STATUS_NOT_CHARGING;
-			manta_bat_enable_charging(false);
-
-			pr_info("battery: Not charging, health=%d\n",
-				manta_bat_health);
-			break;
-		default:
-			break;
-		}
-		break;
-	case POWER_SUPPLY_STATUS_NOT_CHARGING:
-		if (manta_bat_health == POWER_SUPPLY_HEALTH_GOOD) {
-			pr_info("battery: battery health recovered\n");
-			if (manta_bat_selected_charge_source !=
-			    MANTA_CHARGE_SOURCE_NONE) {
-				manta_bat_enable_charging(true);
-				manta_bat_charging_status
-					= POWER_SUPPLY_STATUS_CHARGING;
-			} else {
-				manta_bat_charging_status
-					= POWER_SUPPLY_STATUS_DISCHARGING;
-			}
-		}
-		break;
-	default:
-		pr_err("%s: Undefined battery status: %d\n", __func__,
-		       manta_bat_charging_status);
-		break;
-	}
-
-	manta_bat_charging_timer();
-	mutex_unlock(&manta_bat_state_lock);
-	manta_bat_last_poll = ktime_get_boottime();
-	mod_timer(&manta_bat_monitor_timer, jiffies +
-		  msecs_to_jiffies(MONITOR_POLL_INTERVAL));
-	wake_unlock(&manta_bat_monitor_wake_lock);
-	return;
-}
-
-static void manta_bat_monitor_kick(unsigned long data)
-{
-	wake_lock(&manta_bat_monitor_wake_lock);
-	queue_work(manta_bat_monitor_wqueue, &manta_bat_monitor_work);
+	return ret;
 }
 
 static int manta_bat_get_property(struct power_supply *ps,
-				  enum power_supply_property psp,
+				  enum power_supply_property prop,
 				  union power_supply_propval *val)
 {
-	switch (psp) {
-	case POWER_SUPPLY_PROP_STATUS:
-		val->intval = manta_bat_charging_status;
-		break;
-	case POWER_SUPPLY_PROP_HEALTH:
-		val->intval = manta_bat_health;
-		break;
-	case POWER_SUPPLY_PROP_PRESENT:
-		val->intval = 1;
-		break;
-	case POWER_SUPPLY_PROP_TEMP:
-		val->intval = manta_bat_temp;
-		break;
-	case POWER_SUPPLY_PROP_ONLINE:
-		val->intval = 1;
-		break;
-	case POWER_SUPPLY_PROP_VOLTAGE_NOW:
-		manta_bat_update_data();
-		val->intval = manta_bat_vcell;
-		break;
-	case POWER_SUPPLY_PROP_CAPACITY:
-		val->intval = manta_bat_soc;
-		break;
-	case POWER_SUPPLY_PROP_TECHNOLOGY:
-		val->intval = POWER_SUPPLY_TECHNOLOGY_LION;
-		break;
-	case POWER_SUPPLY_PROP_CURRENT_NOW:
-		manta_bat_update_data();
-		val->intval = manta_bat_current;
-		break;
+	switch (prop) {
+	case POWER_SUPPLY_PROP_CHARGE_ENABLED:
+		val->intval = manta_bat_chg_enabled;
+		return 0;
 	default:
 		return -EINVAL;
 	}
+};
+
+static int manta_bat_property_is_writeable(struct power_supply *psy,
+					   enum power_supply_property prop)
+{
+	switch (prop) {
+	case POWER_SUPPLY_PROP_CHARGE_ENABLED:
+		return 1;
+	default:
+		break;
+	}
+
 	return 0;
 }
-
 static enum power_supply_property manta_battery_props[] = {
-	POWER_SUPPLY_PROP_STATUS,
-	POWER_SUPPLY_PROP_HEALTH,
-	POWER_SUPPLY_PROP_PRESENT,
-	POWER_SUPPLY_PROP_TEMP,
-	POWER_SUPPLY_PROP_ONLINE,
-	POWER_SUPPLY_PROP_VOLTAGE_NOW,
-	POWER_SUPPLY_PROP_CAPACITY,
-	POWER_SUPPLY_PROP_TECHNOLOGY,
-	POWER_SUPPLY_PROP_CURRENT_NOW,
+	POWER_SUPPLY_PROP_CHARGE_ENABLED,
 };
 
 static void manta_bat_power_changed(struct power_supply *psy)
@@ -1247,6 +871,8 @@ static struct power_supply manta_battery_psy = {
 	.num_properties = ARRAY_SIZE(manta_battery_props),
 	.external_power_changed = manta_bat_power_changed,
 	.get_property = manta_bat_get_property,
+	.set_property = manta_bat_set_property,
+	.property_is_writeable = manta_bat_property_is_writeable,
 };
 
 static void manta_bat_send_uevent(void)
@@ -1265,19 +891,10 @@ void __init exynos5_manta_battery_init(void)
 
 	charger_gpio_init();
 	INIT_DELAYED_WORK(&redetect_work, redetect_work_proc);
-	INIT_WORK(&manta_bat_monitor_work, manta_bat_monitor_worker);
-	INIT_WORK(&manta_bat_chgdetect_work, manta_bat_chgdetect_worker);
-	manta_bat_monitor_wqueue =
-		alloc_workqueue("manta-battery", WQ_FREEZABLE, 1);
-	if (!manta_bat_monitor_wqueue)
-		pr_err("%s: fail to create workqueue\n", __func__);
-	setup_timer(&manta_bat_monitor_timer, manta_bat_monitor_kick, 0);
 	wake_lock_init(&manta_bat_chgdetect_wakelock, WAKE_LOCK_SUSPEND,
 		       "manta-chgdetect");
 	wake_lock_init(&manta_bat_redetect_wl, WAKE_LOCK_SUSPEND,
 		       "manta-chgredetect");
-	wake_lock_init(&manta_bat_monitor_wake_lock, WAKE_LOCK_SUSPEND,
-		       "manta-battery-monitor");
 
 	if (hw_rev >= MANTA_REV_DOGFOOD02) {
 		s3c_gpio_cfgpin(GPIO_1WIRE_SLEEP, S3C_GPIO_OUTPUT);
@@ -1408,16 +1025,7 @@ static int __init exynos5_manta_battery_late_init(void)
 	}
 
 	/* get initial charger status */
-	manta_bat_selected_charge_source = manta_bat_poll_charge_source();
-
-	if (manta_bat_monitor_wqueue) {
-		wake_lock(&manta_bat_chgdetect_wakelock);
-		queue_work(manta_bat_monitor_wqueue, &manta_bat_chgdetect_work);
-		wake_lock(&manta_bat_monitor_wake_lock);
-		manta_bat_last_poll = ktime_get_boottime();
-		queue_work(manta_bat_monitor_wqueue, &manta_bat_monitor_work);
-	}
-
+	change_charger_status(false, false);
 	return 0;
 }
 
