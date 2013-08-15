@@ -81,13 +81,14 @@
 	KBASE_TIMELINE_TRACE_CODE(SW_SET_GPU_POWER_ACTIVE,        "SW: GPU power active",            "%d,%d",    "_tgid,_value_is_power_active"),
 	KBASE_TIMELINE_TRACE_CODE(SW_SET_GPU_POWER_TILER_ACTIVE,  "SW: GPU tiler powered",           "%d,%d",    "_tgid,_value_number_of_tilers"),
 	KBASE_TIMELINE_TRACE_CODE(SW_SET_GPU_POWER_SHADER_ACTIVE, "SW: GPU shaders powered",         "%d,%d",    "_tgid,_value_number_of_shaders"),
+	KBASE_TIMELINE_TRACE_CODE(SW_SET_GPU_POWER_L2_ACTIVE,     "SW: GPU L2 powered",              "%d,%d",    "_tgid,_value_number_of_l2"),
 
 	/* SW Power event messaging. _event_type is one from the kbase_pm_event enum  */
 	KBASE_TIMELINE_TRACE_CODE(SW_FLOW_PM_SEND_EVENT,          "SW: PM Send Event",               "%d,%d,%d", "_tgid,_event_type,_writerof_pm_event_id"),
 	KBASE_TIMELINE_TRACE_CODE(SW_FLOW_PM_HANDLE_EVENT,        "SW: PM Handle Event",             "%d,%d,%d", "_tgid,_event_type,_finalconsumerof_pm_event_id"),
 	/* SW L2 power events */
 	KBASE_TIMELINE_TRACE_CODE(SW_FLOW_GPU_POWER_L2_POWERING,  "SW: GPU L2 powering",             "%d,%d", "_tgid,_writerof_l2_transitioning"),
-	KBASE_TIMELINE_TRACE_CODE(SW_FLOW_GPU_POWER_L2_ACTIVE,	  "SW: GPU L2 powered",              "%d,%d", "_tgid,_finalconsumerof_l2_transitioning"),
+	KBASE_TIMELINE_TRACE_CODE(SW_FLOW_GPU_POWER_L2_ACTIVE,	  "SW: GPU L2 powering done",        "%d,%d", "_tgid,_finalconsumerof_l2_transitioning"),
 
 	/*
 	 * BEGIN: Significant SW Functions that call kbase_pm_check_transitions_nolock()
@@ -116,6 +117,8 @@
 	KBASE_TIMELINE_TRACE_CODE(SW_FLOW_PM_CHECKTRANS_PM_RELEASE_CORES_TILER_END,   "SW: PM CheckTrans from kbase_pm_release_cores(tiler)", "%d,%d", "_tgid,_finalconsumerof_pm_checktrans_pm_release_cores_tiler"),
 	KBASE_TIMELINE_TRACE_CODE(SW_FLOW_PM_CHECKTRANS_PM_RELEASE_CORES_SHADER_TILER_START, "SW: PM CheckTrans from kbase_pm_release_cores(shader+tiler)", "%d,%d", "_tgid,_writerof_pm_checktrans_pm_release_cores_shader_tiler"),
 	KBASE_TIMELINE_TRACE_CODE(SW_FLOW_PM_CHECKTRANS_PM_RELEASE_CORES_SHADER_TILER_END,   "SW: PM CheckTrans from kbase_pm_release_cores(shader+tiler)", "%d,%d", "_tgid,_finalconsumerof_pm_checktrans_pm_release_cores_shader_tiler"),
+	KBASE_TIMELINE_TRACE_CODE(SW_FLOW_PM_CHECKTRANS_PM_RELEASE_CORES_DEFERRED_START, "SW: PM CheckTrans from kbasep_pm_do_shader_poweroff_callback", "%d,%d", "_tgid,_writerof_pm_checktrans_pm_do_shader_poweroff_callback"),
+	KBASE_TIMELINE_TRACE_CODE(SW_FLOW_PM_CHECKTRANS_PM_RELEASE_CORES_DEFERRED_END,   "SW: PM CheckTrans from kbasep_pm_do_shader_poweroff_callback", "%d,%d", "_tgid,_finalconsumerof_pm_checktrans_pm_do_shader_poweroff_callback"),
 	/*
 	 * END: SW Functions that call kbase_pm_check_transitions_nolock()
 	 */

@@ -429,6 +429,8 @@ mali_error kbase_region_tracker_init(kbase_context *kctx)
 	struct kbase_va_region *pmem_reg;
 	struct kbase_va_region *exec_reg;
 	struct kbase_va_region *tmem_reg;
+	u64 tmem_size = KBASE_REG_ZONE_TMEM_SIZE;
+	u64 va_limit;
 
 	/* Make sure page 0 is not used... */
 	pmem_reg = kbase_alloc_free_region(kctx, 1, KBASE_REG_ZONE_EXEC_BASE - 1, KBASE_REG_ZONE_PMEM);
@@ -441,7 +443,20 @@ mali_error kbase_region_tracker_init(kbase_context *kctx)
 		return MALI_ERROR_OUT_OF_MEMORY;
 	}
 
-	tmem_reg = kbase_alloc_free_region(kctx, KBASE_REG_ZONE_TMEM_BASE, KBASE_REG_ZONE_TMEM_SIZE, KBASE_REG_ZONE_TMEM);
+	/* Find out where TMEM should end */
+	va_limit = (1ULL << kctx->kbdev->gpu_props.mmu.va_bits) >> PAGE_SHIFT;
+	KBASE_DEBUG_ASSERT(va_limit > KBASE_REG_ZONE_TMEM_BASE);
+
+	/* If the current size of TMEM is out of range of the 
+	 * virtual address space addressable by the MMU then
+	 * we should shrink it to fit
+	 */
+	if( (KBASE_REG_ZONE_TMEM_BASE + KBASE_REG_ZONE_TMEM_SIZE) >= va_limit )
+	{
+		tmem_size = va_limit - KBASE_REG_ZONE_TMEM_BASE;
+	}
+
+	tmem_reg = kbase_alloc_free_region(kctx, KBASE_REG_ZONE_TMEM_BASE, tmem_size, KBASE_REG_ZONE_TMEM);
 	if (!tmem_reg) {
 		kbase_free_alloced_region(pmem_reg);
 		kbase_free_alloced_region(exec_reg);

@@ -25,7 +25,7 @@
 
 static void fixed_init(struct kbase_device *kbdev)
 {
-	CSTD_UNUSED(kbdev);
+	kbdev->pm.ca_in_transition = MALI_FALSE;
 }
 
 static void fixed_term(struct kbase_device *kbdev)

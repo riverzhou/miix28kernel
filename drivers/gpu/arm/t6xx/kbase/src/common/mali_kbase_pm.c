@@ -144,7 +144,6 @@ void kbase_pm_do_poweroff(kbase_device *kbdev)
 
 	/* Force all cores off */
 	kbdev->pm.desired_shader_state = 0;
-	kbdev->pm.pm_tiler_required = MALI_FALSE;
 
 	/* Force all cores to be unavailable, in the situation where 
 	 * transitions are in progress for some cores but not others,
@@ -152,6 +151,7 @@ void kbase_pm_do_poweroff(kbase_device *kbdev)
 	 * power off the cores */
 	kbdev->shader_available_bitmap = 0;
 	kbdev->tiler_available_bitmap = 0;
+	kbdev->l2_available_bitmap = 0;
 
 	KBASE_TIMELINE_PM_CHECKTRANS(kbdev, SW_FLOW_PM_CHECKTRANS_PM_DO_POWEROFF_START);
 	cores_are_available = kbase_pm_check_transitions_nolock(kbdev);
@@ -337,6 +337,7 @@ void kbase_pm_halt(kbase_device *kbdev)
 	KBASE_DEBUG_ASSERT(kbdev != NULL);
 
 	mutex_lock(&kbdev->pm.lock);
+	kbase_pm_cancel_deferred_poweroff(kbdev);
 	kbase_pm_do_poweroff(kbdev);
 	mutex_unlock(&kbdev->pm.lock);
 }
@@ -399,6 +400,7 @@ void kbase_pm_suspend(struct kbase_device *kbdev)
 	 * the PM active count reaches zero (otherwise, we risk turning it off
 	 * prematurely) */
 	mutex_lock(&kbdev->pm.lock);
+	kbase_pm_cancel_deferred_poweroff(kbdev);
 	kbase_pm_do_poweroff(kbdev);
 	mutex_unlock(&kbdev->pm.lock);
 }

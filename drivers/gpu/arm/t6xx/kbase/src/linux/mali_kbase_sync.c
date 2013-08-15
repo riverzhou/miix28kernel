@@ -99,7 +99,7 @@ static void timeline_value_str(struct sync_timeline *timeline, char * str,
 			       int size)
 {
 	struct mali_sync_timeline *mtl = to_mali_sync_timeline(timeline);
-	snprintf(str, size, "%d", mtl->signalled);
+	snprintf(str, size, "%d", atomic_read(&mtl->signalled));
 }
 
 static void pt_value_str(struct sync_pt *pt, char *str, int size)

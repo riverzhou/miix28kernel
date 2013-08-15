@@ -206,6 +206,7 @@ typedef enum {
 #define KBASE_KATOM_FLAG_BEEN_SOFT_STOPPPED (1<<1)
 /** Atom has been previously retried to execute */
 #define KBASE_KATOM_FLAGS_RERUN (1<<2)
+#define KBASE_KATOM_FLAGS_JOBCHAIN (1<<3)
 
 typedef struct kbase_jd_atom kbase_jd_atom;
 
@@ -330,6 +331,7 @@ typedef struct kbase_jm_slot {
 
 	u8 submitted_head;
 	u8 submitted_nr;
+	u8 job_chain_flag;
 
 } kbase_jm_slot;
 
@@ -568,6 +570,8 @@ struct kbase_device {
 
 	/** List of SW workarounds for HW issues */
 	unsigned long hw_issues_mask[(BASE_HW_ISSUE_END + BITS_PER_LONG - 1) / BITS_PER_LONG];
+	/** List of features available */
+	unsigned long hw_features_mask[(BASE_HW_FEATURE_END + BITS_PER_LONG - 1) / BITS_PER_LONG];
 
 	/* Cached present bitmaps - these are the same as the corresponding hardware registers */
 	u64 shader_present_bitmap;
@@ -609,6 +613,7 @@ struct kbase_device {
 	 */
 	u64 shader_available_bitmap;
 	u64 tiler_available_bitmap;
+	u64 l2_available_bitmap;
 
 	u64 shader_ready_bitmap;
 	u64 shader_transitioning_bitmap;

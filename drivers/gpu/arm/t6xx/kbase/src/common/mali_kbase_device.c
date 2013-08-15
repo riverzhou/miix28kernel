@@ -89,6 +89,9 @@ mali_error kbase_device_init(kbase_device * const kbdev)
 		goto free_platform;
 	}
 
+	/* Set the list of features available on the current HW (identified by the GPU_ID register) */
+	kbase_hw_set_features_mask(kbdev);
+
 	kbdev->nr_hw_address_spaces = kbdev->gpu_props.num_address_spaces;
 
 	/* We're done accessing the GPU registers for now. */
@@ -567,8 +570,10 @@ struct trace_seq_state {
 void *kbasep_trace_seq_start(struct seq_file *s, loff_t *pos)
 {
 	struct trace_seq_state *state = s->private;
+	int i;
 
-	if (*pos >= KBASE_TRACE_SIZE)
+	i = (state->start + *pos) & KBASE_TRACE_MASK;
+	if (i >= state-> end)
 		return NULL;
 
 	return state;
@@ -581,11 +586,13 @@ void kbasep_trace_seq_stop(struct seq_file *s, void *data)
 void *kbasep_trace_seq_next(struct seq_file *s, void *data, loff_t *pos)
 {
 	struct trace_seq_state *state = s->private;
-	int i = (state->start + *pos) & KBASE_TRACE_MASK;
-	if (i == state->end)
-		return NULL;
+	int i;
 
 	(*pos)++;
+
+	i = (state->start + *pos) & KBASE_TRACE_MASK;
+	if (i >= state->end)
+		return NULL;
 
 	return &state->trace_buf[i];
 }

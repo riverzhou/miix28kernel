@@ -25,6 +25,26 @@
 #include "mali_kbase.h"
 #include "mali_kbase_hw.h"
 
+void kbase_hw_set_features_mask(kbase_device *kbdev)
+{
+	const base_hw_feature *features;
+	u32 gpu_id;
+
+	gpu_id = kbdev->gpu_props.props.raw_props.gpu_id;
+
+	switch (gpu_id) {
+	case GPU_ID_MAKE(GPU_ID_PI_T76X, 0, 0, 0):
+		features = base_hw_features_t76x;
+		break;
+	default:
+		features = base_hw_features_t6xx_t72x;
+		break;
+	}
+
+	for (; *features != BASE_HW_FEATURE_END; features++)
+		set_bit(*features, &kbdev->hw_features_mask[0]);
+}
+
 mali_error kbase_hw_set_issues_mask(kbase_device *kbdev)
 {
 	const base_hw_issue *issues;
@@ -68,6 +88,9 @@ mali_error kbase_hw_set_issues_mask(kbase_device *kbdev)
 		issues = base_hw_issues_t67x_r1p0;
 		break;
 	case GPU_ID_MAKE(GPU_ID_PI_T76X, 0, 0, 0):
+		issues = base_hw_issues_t76x_r0p0_beta;
+		break;
+	case GPU_ID_MAKE(GPU_ID_PI_T76X, 0, 0, 1):
 		issues = base_hw_issues_t76x_r0p0;
 		break;
 	case GPU_ID_MAKE(GPU_ID_PI_T72X, 0, 0, 0):

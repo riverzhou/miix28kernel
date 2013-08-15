@@ -13,8 +13,6 @@
  *
  */
 
-
-
 /**
  * @file mali_kbase_pm_policy.c
  * Power policy API implementations
@@ -28,22 +26,29 @@
 extern const kbase_pm_policy kbase_pm_always_on_policy_ops;
 extern const kbase_pm_policy kbase_pm_coarse_demand_policy_ops;
 extern const kbase_pm_policy kbase_pm_demand_policy_ops;
-extern const kbase_pm_policy kbase_pm_demand_always_powered_policy_ops;
+
+#if MALI_CUSTOMER_RELEASE == 0 
 extern const kbase_pm_policy kbase_pm_fast_start_policy_ops;
+extern const kbase_pm_policy kbase_pm_demand_always_powered_policy_ops;
+#endif
 
 static const kbase_pm_policy *const policy_list[] = {
 #ifdef CONFIG_MALI_NO_MALI
 	&kbase_pm_always_on_policy_ops,
 	&kbase_pm_demand_policy_ops,
 	&kbase_pm_coarse_demand_policy_ops,
+#if MALI_CUSTOMER_RELEASE == 0 
 	&kbase_pm_demand_always_powered_policy_ops,
-	&kbase_pm_fast_start_policy_ops
+	&kbase_pm_fast_start_policy_ops,
+#endif
 #else				/* CONFIG_MALI_NO_MALI */
 	&kbase_pm_demand_policy_ops,
 	&kbase_pm_always_on_policy_ops,
 	&kbase_pm_coarse_demand_policy_ops,
+#if MALI_CUSTOMER_RELEASE == 0        
 	&kbase_pm_demand_always_powered_policy_ops,
-	&kbase_pm_fast_start_policy_ops
+	&kbase_pm_fast_start_policy_ops,
+#endif
 #endif				/* CONFIG_MALI_NO_MALI */
 };
 
@@ -143,14 +148,122 @@ STATIC INLINE void kbase_timeline_pm_cores_func(kbase_device *kbdev,
 
 #endif /* CONFIG_MALI_TRACE_TIMELINE */
 
+static enum hrtimer_restart kbasep_pm_do_gpu_poweroff_callback(struct hrtimer *timer)
+{
+	kbase_device *kbdev;
+
+	kbdev = container_of(timer, kbase_device, pm.gpu_poweroff_timer);
+
+	/* It is safe for this call to do nothing if the work item is already queued.
+	 * The worker function will read the must up-to-date state of kbdev->pm.gpu_poweroff_pending
+	 * under lock.
+	 *
+	 * If a state change occurs while the worker function is processing, this
+	 * call will succeed as a work item can be requeued once it has started
+	 * processing. 
+	 */
+	if (kbdev->pm.gpu_poweroff_pending)
+		queue_work(kbdev->pm.gpu_poweroff_wq, &kbdev->pm.gpu_poweroff_work);
+
+	if (kbdev->pm.shader_poweroff_pending) {
+		unsigned long flags;
+
+		spin_lock_irqsave(&kbdev->pm.power_change_lock, flags);
+
+		if (kbdev->pm.shader_poweroff_pending) {
+			kbdev->pm.shader_poweroff_pending_time--;
+
+			KBASE_DEBUG_ASSERT(kbdev->pm.shader_poweroff_pending_time >= 0);
+
+			if (kbdev->pm.shader_poweroff_pending_time == 0) {
+				u64 prev_shader_state = kbdev->pm.desired_shader_state;
+
+				kbdev->pm.desired_shader_state &= ~kbdev->pm.shader_poweroff_pending;
+				kbdev->pm.shader_poweroff_pending = 0;
+
+				if (prev_shader_state != kbdev->pm.desired_shader_state ||
+			    	    kbdev->pm.ca_in_transition != MALI_FALSE) {
+					mali_bool cores_are_available;
+
+					KBASE_TIMELINE_PM_CHECKTRANS(kbdev, SW_FLOW_PM_CHECKTRANS_PM_RELEASE_CORES_DEFERRED_START);
+					cores_are_available = kbase_pm_check_transitions_nolock(kbdev);
+					KBASE_TIMELINE_PM_CHECKTRANS(kbdev, SW_FLOW_PM_CHECKTRANS_PM_RELEASE_CORES_DEFERRED_END);		
+
+					/* Don't need 'cores_are_available', because we don't return anything */
+					CSTD_UNUSED(cores_are_available);
+				}
+			}
+		}
+
+		spin_unlock_irqrestore(&kbdev->pm.power_change_lock, flags);
+	}
+
+	hrtimer_add_expires(timer, kbdev->pm.gpu_poweroff_time);
+	return HRTIMER_RESTART;
+}
+
+static void kbasep_pm_do_gpu_poweroff_wq(struct work_struct *data)
+{
+	unsigned long flags;
+	kbase_device *kbdev;
+	mali_bool do_poweroff = MALI_FALSE;
+
+	kbdev = container_of(data, kbase_device, pm.gpu_poweroff_work);
+
+	mutex_lock(&kbdev->pm.lock);
+
+	if (kbdev->pm.gpu_poweroff_pending == 0) {
+		mutex_unlock(&kbdev->pm.lock);
+		return;
+	}
+
+	kbdev->pm.gpu_poweroff_pending--;
+
+	if (kbdev->pm.gpu_poweroff_pending > 0) {
+		mutex_unlock(&kbdev->pm.lock);
+		return;
+	}
+
+	KBASE_DEBUG_ASSERT(kbdev->pm.gpu_poweroff_pending == 0);
+
+	spin_lock_irqsave(&kbdev->pm.power_change_lock, flags);
+
+	/* Only power off the GPU if a request is still pending */
+	if (kbdev->pm.pm_current_policy->get_core_active(kbdev) == MALI_FALSE)
+		do_poweroff = MALI_TRUE;
+
+	spin_unlock_irqrestore(&kbdev->pm.power_change_lock, flags);
+
+	if (do_poweroff != MALI_FALSE) {
+		kbdev->pm.poweroff_timer_running = MALI_FALSE;
+		/* Power off the GPU */
+		kbase_pm_do_poweroff(kbdev);
+		hrtimer_cancel(&kbdev->pm.gpu_poweroff_timer);
+	}
+
+	mutex_unlock(&kbdev->pm.lock);
+}
 
 mali_error kbase_pm_policy_init(kbase_device *kbdev)
 {
 	KBASE_DEBUG_ASSERT(kbdev != NULL);
 
+	kbdev->pm.gpu_poweroff_wq = alloc_workqueue("kbase_pm_do_poweroff", WQ_HIGHPRI | WQ_UNBOUND, 1);
+	if (NULL == kbdev->pm.gpu_poweroff_wq)
+		return MALI_ERROR_OUT_OF_MEMORY;
+	INIT_WORK(&kbdev->pm.gpu_poweroff_work, kbasep_pm_do_gpu_poweroff_wq);
+
+	hrtimer_init(&kbdev->pm.gpu_poweroff_timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
+	kbdev->pm.gpu_poweroff_timer.function = kbasep_pm_do_gpu_poweroff_callback;
+
 	kbdev->pm.pm_current_policy = policy_list[0];
 
 	kbdev->pm.pm_current_policy->init(kbdev);
+
+	kbdev->pm.gpu_poweroff_time = HR_TIMER_DELAY_NSEC(kbasep_get_config_value(kbdev, kbdev->config_attributes, KBASE_CONFIG_ATTR_PM_GPU_POWEROFF_TICK_NS));
+
+	kbdev->pm.poweroff_shader_ticks = kbasep_get_config_value(kbdev, kbdev->config_attributes, KBASE_CONFIG_ATTR_PM_POWEROFF_TICK_SHADER);
+	kbdev->pm.poweroff_gpu_ticks = kbasep_get_config_value(kbdev, kbdev->config_attributes, KBASE_CONFIG_ATTR_PM_POWEROFF_TICK_GPU);
 
 	return MALI_ERROR_NONE;
 }
@@ -158,6 +271,25 @@ mali_error kbase_pm_policy_init(kbase_device *kbdev)
 void kbase_pm_policy_term(kbase_device *kbdev)
 {
 	kbdev->pm.pm_current_policy->term(kbdev);
+}
+
+void kbase_pm_cancel_deferred_poweroff(kbase_device *kbdev)
+{
+	unsigned long flags;
+
+	lockdep_assert_held(&kbdev->pm.lock);
+
+	hrtimer_cancel(&kbdev->pm.gpu_poweroff_timer);
+
+	/* If wq is already running but is held off by pm.lock, make sure it has no effect */
+	kbdev->pm.gpu_poweroff_pending = 0;
+
+	spin_lock_irqsave(&kbdev->pm.power_change_lock, flags);
+
+	kbdev->pm.shader_poweroff_pending = 0;
+	kbdev->pm.shader_poweroff_pending_time = 0;
+
+	spin_unlock_irqrestore(&kbdev->pm.power_change_lock, flags);
 }
 
 void kbase_pm_update_active(kbase_device *kbdev)
@@ -174,9 +306,22 @@ void kbase_pm_update_active(kbase_device *kbdev)
 
 	active = kbdev->pm.pm_current_policy->get_core_active(kbdev);
 
-	spin_unlock_irqrestore(&kbdev->pm.power_change_lock, flags);
-
 	if (active != MALI_FALSE) {
+		spin_unlock_irqrestore(&kbdev->pm.power_change_lock, flags);
+
+		if (kbdev->pm.gpu_poweroff_pending) {
+			/* Cancel any pending power off request */
+			kbdev->pm.gpu_poweroff_pending = 0;
+
+			/* If a request was pending then the GPU was still powered, so no need to continue */
+			return;
+		}
+
+		if (!kbdev->pm.poweroff_timer_running && !kbdev->pm.gpu_powered) {
+			kbdev->pm.poweroff_timer_running = MALI_TRUE;
+			hrtimer_start(&kbdev->pm.gpu_poweroff_timer, kbdev->pm.gpu_poweroff_time, HRTIMER_MODE_REL);
+		}
+
 		/* Power on the GPU and any cores requested by the policy */
 		kbase_pm_do_poweron(kbdev);
 	} else {
@@ -184,16 +329,30 @@ void kbase_pm_update_active(kbase_device *kbdev)
 		 * when there are contexts active */
 		KBASE_DEBUG_ASSERT(kbdev->pm.active_count == 0);
 
-		/* Power off the GPU */
-		kbase_pm_do_poweroff(kbdev);
+		if (kbdev->pm.shader_poweroff_pending) {
+			kbdev->pm.shader_poweroff_pending = 0;
+			kbdev->pm.shader_poweroff_pending_time = 0;
+		}
+
+		spin_unlock_irqrestore(&kbdev->pm.power_change_lock, flags);
+
+
+		/* Request power off */
+		if (kbdev->pm.gpu_powered) {
+			kbdev->pm.gpu_poweroff_pending = kbdev->pm.poweroff_gpu_ticks;
+			if (!kbdev->pm.poweroff_timer_running) {
+				/* Start timer if not running (eg if power policy has been changed from always_on
+				 * to something else). This will ensure the GPU is actually powered off */
+				kbdev->pm.poweroff_timer_running = MALI_TRUE;
+				hrtimer_start(&kbdev->pm.gpu_poweroff_timer, kbdev->pm.gpu_poweroff_time, HRTIMER_MODE_REL);
+			}
+		}
 	}
 }
 
 void kbase_pm_update_cores_state_nolock(kbase_device *kbdev)
 {
-	u64 prev_shader_state = kbdev->pm.desired_shader_state;
 	u64 desired_bitmap;
-	mali_bool prev_tiler_state = kbdev->pm.pm_tiler_required;
 	mali_bool cores_are_available;
 
 	lockdep_assert_held(&kbdev->pm.power_change_lock);
@@ -204,24 +363,38 @@ void kbase_pm_update_cores_state_nolock(kbase_device *kbdev)
 	desired_bitmap = kbdev->pm.pm_current_policy->get_core_mask(kbdev); 
 	desired_bitmap &= kbase_pm_ca_get_core_mask(kbdev);
 
+	/* Enable core 0 if tiler required, regardless of core availability */
 	if (kbdev->tiler_needed_cnt > 0 || kbdev->tiler_inuse_cnt > 0)
-		kbdev->pm.pm_tiler_required = MALI_TRUE;
-	else
-		kbdev->pm.pm_tiler_required = MALI_FALSE;
-
-	/* Enable core 0 if tiler required */
-	if (kbdev->pm.pm_tiler_required != MALI_FALSE)
 		desired_bitmap |= 1;
 
-	kbdev->pm.desired_shader_state = desired_bitmap;
+	if (kbdev->pm.desired_shader_state != desired_bitmap)
+		KBASE_TRACE_ADD(kbdev, PM_CORES_CHANGE_DESIRED, NULL, NULL, 0u, (u32)desired_bitmap);
 
-	if (prev_shader_state != kbdev->pm.desired_shader_state)
-		KBASE_TRACE_ADD(kbdev, PM_CORES_CHANGE_DESIRED, NULL, NULL, 0u, (u32) kbdev->pm.desired_shader_state);
-	if (prev_tiler_state != kbdev->pm.pm_tiler_required)
-		KBASE_TRACE_ADD(kbdev, PM_CORES_CHANGE_DESIRED_TILER, NULL, NULL, 0u, (u32) kbdev->pm.desired_tiler_state);
+	/* Are any cores being powered on? */
+	if (~kbdev->pm.desired_shader_state & desired_bitmap ||
+	    kbdev->pm.ca_in_transition != MALI_FALSE) {
+		kbdev->pm.desired_shader_state = desired_bitmap;
 
-	/* Ideally this should only be called when required core state actually changes */
-	cores_are_available = kbase_pm_check_transitions_nolock(kbdev);
+		/* If any cores are being powered on, transition immediately */
+		cores_are_available = kbase_pm_check_transitions_nolock(kbdev);
+
+		/* Ensure timer does not power off wanted cores */
+		if (kbdev->pm.shader_poweroff_pending != 0) {
+			kbdev->pm.shader_poweroff_pending &= ~kbdev->pm.desired_shader_state;
+			if (kbdev->pm.shader_poweroff_pending == 0)
+				kbdev->pm.shader_poweroff_pending_time = 0;
+		}
+	} else if (kbdev->pm.desired_shader_state & ~desired_bitmap) {
+		/* Start timer to power off cores */
+		kbdev->pm.shader_poweroff_pending |= (kbdev->pm.desired_shader_state & ~desired_bitmap);
+		kbdev->pm.shader_poweroff_pending_time = kbdev->pm.poweroff_shader_ticks;
+	} else if (kbdev->pm.active_count == 0 && desired_bitmap != 0 && kbdev->pm.poweroff_timer_running) {
+		/* If power policy is keeping cores on despite there being no active contexts
+		 * then disable poweroff timer as it isn't required */
+		kbdev->pm.poweroff_timer_running = MALI_FALSE;
+		hrtimer_cancel(&kbdev->pm.gpu_poweroff_timer);
+	}
+
 	/* Don't need 'cores_are_available', because we don't return anything */
 	CSTD_UNUSED(cores_are_available);
 }
@@ -349,8 +522,18 @@ void kbase_pm_request_cores(kbase_device *kbdev, mali_bool tiler_required, u64 s
 
 		KBASE_DEBUG_ASSERT(kbdev->tiler_needed_cnt != 0);
 
-		if (1 == kbdev->tiler_needed_cnt)
-			change_gpu_state |= KBASE_PM_CHANGE_STATE_TILER;
+		/* For tiler jobs, we must make sure that core 0 is not turned off if it's already on.
+	         * However, it's safe for core 0 to be left off and turned on later whilst a tiler job
+		 * is running. Hence, we don't need to update the cores state immediately. Also,
+		 * attempts to turn off cores will always check the tiler_needed/inuse state first anyway.
+		 *
+		 * Finally, kbase_js_choose_affinity() ensures core 0 is always requested for tiler jobs
+		 * anyway. Hence when there's only a tiler job in the system, this will still cause
+		 * kbase_pm_update_cores_state_nolock() to be called.
+		 *
+		 * Note that we still need to keep track of tiler_needed/inuse_cnt, to ensure that
+		 * kbase_pm_update_cores_state_nolock() can override the core availability policy and
+		 * force core 0 to be powered when a tiler job is in the system. */
 	}
 
 	if (change_gpu_state) {
@@ -387,6 +570,7 @@ void kbase_pm_unrequest_cores(kbase_device *kbdev, mali_bool tiler_required, u64
 
 		if (0 == cnt) {
 			kbdev->shader_needed_bitmap &= ~bit;
+
 			change_gpu_state |= KBASE_PM_CHANGE_STATE_SHADER;
 		}
 
@@ -398,8 +582,11 @@ void kbase_pm_unrequest_cores(kbase_device *kbdev, mali_bool tiler_required, u64
 
 		--kbdev->tiler_needed_cnt;
 
-		if (0 == kbdev->tiler_needed_cnt)
-			change_gpu_state |= KBASE_PM_CHANGE_STATE_TILER;
+		/* Whilst tiler jobs must not allow core 0 to be turned off, we don't need to make an
+		 * extra call to kbase_pm_update_cores_state_nolock() to ensure core 0 is turned off
+		 * when the last tiler job unrequests cores: kbase_js_choose_affinity() ensures core 0
+		 * was originally requested for tiler jobs. Hence when there's only a tiler job in the
+		 * system, this will still cause kbase_pm_update_cores_state_nolock() to be called. */
 	}
 
 	if (change_gpu_state) {
@@ -527,8 +714,11 @@ void kbase_pm_release_cores(kbase_device *kbdev, mali_bool tiler_required, u64 s
 
 		--kbdev->tiler_inuse_cnt;
 
-		if (0 == kbdev->tiler_inuse_cnt)
-			change_gpu_state |= KBASE_PM_CHANGE_STATE_TILER;
+		/* Whilst tiler jobs must not allow core 0 to be turned off, we don't need to make an
+		 * extra call to kbase_pm_update_cores_state_nolock() to ensure core 0 is turned off
+		 * when the last tiler job finishes: kbase_js_choose_affinity() ensures core 0 was
+		 * originally requested for tiler jobs. Hence when there's only a tiler job in the
+		 * system, this will still cause kbase_pm_update_cores_state_nolock() to be called */
 	}
 
 	if (change_gpu_state) {

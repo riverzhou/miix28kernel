@@ -33,13 +33,17 @@ struct kbase_device;
 #include "mali_kbase_pm_policy.h"
 
 #include "mali_kbase_pm_ca_fixed.h"
+#if MALI_CUSTOMER_RELEASE == 0
 #include "mali_kbase_pm_ca_random.h"
+#endif
 
 #include "mali_kbase_pm_always_on.h"
 #include "mali_kbase_pm_coarse_demand.h"
 #include "mali_kbase_pm_demand.h"
+#if MALI_CUSTOMER_RELEASE == 0
 #include "mali_kbase_pm_demand_always_powered.h"
 #include "mali_kbase_pm_fast_start.h"
+#endif
 
 /** The types of core in a GPU.
  *
@@ -133,13 +137,17 @@ typedef union kbase_pm_policy_data {
 	kbasep_pm_policy_always_on always_on;
 	kbasep_pm_policy_coarse_demand coarse_demand;
 	kbasep_pm_policy_demand demand;
+#if MALI_CUSTOMER_RELEASE == 0 	
 	kbasep_pm_policy_demand_always_powered demand_always_powered;
 	kbasep_pm_policy_fast_start fast_start;
+#endif
 } kbase_pm_policy_data;
 
 typedef union kbase_pm_ca_policy_data {
 	kbasep_pm_ca_policy_fixed fixed;
+#if MALI_CUSTOMER_RELEASE == 0
 	kbasep_pm_ca_policy_random random;
+#endif
 } kbase_pm_ca_policy_data;
 
 /** Data stored per device for power management.
@@ -182,6 +190,13 @@ typedef struct kbase_pm_device_data {
 
 	/** Private data for current PM policy */
 	kbase_pm_policy_data pm_policy_data;
+
+	/** Flag indicating when core availability policy is transitioning cores.
+	 * The core availability policy must set this when a change in core availability
+	 * is occuring.
+	 *
+	 * power_change_lock must be held when accessing this. */
+	mali_bool ca_in_transition;
 
 	/** Waiting for reset and a queue to wait for changes */
 	mali_bool reset_done;
@@ -226,10 +241,10 @@ typedef struct kbase_pm_device_data {
 
 	/** Lock protecting the power state of the device.
 	 *
-	 * This lock must be held when accessing the shader_available_bitmap, tiler_available_bitmap, shader_inuse_bitmap
-	 * and tiler_inuse_bitmap fields of kbase_device. It is also held when the hardware power registers are being
-	 * written to, to ensure that two threads do not conflict over the power transitions that the hardware should
-	 * make.
+	 * This lock must be held when accessing the shader_available_bitmap, tiler_available_bitmap, l2_available_bitmap,
+	 * shader_inuse_bitmap and tiler_inuse_bitmap fields of kbase_device, and the ca_in_transition and shader_poweroff_pending
+	 * fields of kbase_pm_device_data. It is also held when the hardware power registers are being written to, to ensure
+	 * that two threads do not conflict over the power transitions that the hardware should make.
 	 */
 	spinlock_t power_change_lock;
 
@@ -244,9 +259,6 @@ typedef struct kbase_pm_device_data {
 
 	/** A bit mask identifying the available shader cores that are specified via sysfs */
 	u64 debug_core_mask;
-
-	/** Set to true when the tiler is required, false otherwise */
-	mali_bool pm_tiler_required;
 
 	/** Set to true when instrumentation is enabled, false otherwise */
 	mali_bool instr_enabled;
@@ -271,6 +283,32 @@ typedef struct kbase_pm_device_data {
 	/** Structure to hold metrics for the GPU */
 
 	kbasep_pm_metrics_data metrics;
+
+	/** Set to the number of poweroff timer ticks until the GPU is powered off */
+	int gpu_poweroff_pending;
+
+	/** Set to the number of poweroff timer ticks until shaders are powered off */
+	int shader_poweroff_pending_time;
+
+	/** Timer for powering off GPU */
+	struct hrtimer gpu_poweroff_timer;
+
+	struct workqueue_struct *gpu_poweroff_wq;
+
+	struct work_struct gpu_poweroff_work;
+
+	/** Period of GPU poweroff timer */
+	ktime_t gpu_poweroff_time;
+
+	/** Bit mask of shaders to be powered off on next timer callback */
+	u64 shader_poweroff_pending;
+
+	/** Set to MALI_TRUE if the poweroff timer is currently running, MALI_FALSE otherwise */
+	mali_bool poweroff_timer_running;
+
+	int poweroff_shader_ticks;
+
+	int poweroff_gpu_ticks;
 
 	/** Callback when the GPU needs to be turned on. See @ref kbase_pm_callback_conf
 	 *
@@ -551,8 +589,6 @@ void kbase_pm_check_transitions_sync(struct kbase_device *kbdev);
  *
  * @param kbdev       The kbase device structure for the device (must be a valid
  *                    pointer)
- * @param policy_func The ID of the policy function to call, see
- *                    @ref kbase_pm_policy_func
  */
 void kbase_pm_update_cores_state_nolock(struct kbase_device *kbdev);
 
@@ -566,10 +602,17 @@ void kbase_pm_update_cores_state_nolock(struct kbase_device *kbdev);
  *
  * @param kbdev       The kbase device structure for the device (must be a valid
  *                    pointer)
- * @param policy_func The ID of the policy function to call, see
- *                    @ref kbase_pm_policy_func
  */
 void kbase_pm_update_cores_state(struct kbase_device *kbdev);
+
+/** Cancel any pending requests to power off the GPU and/or shader cores.
+ *
+ * This should be called by any functions which directly power off the GPU.
+ *
+ * @param kbdev       The kbase device structure for the device (must be a valid
+ *                    pointer)
+ */
+void kbase_pm_cancel_deferred_poweroff(struct kbase_device *kbdev);
 
 /** Read the bitmasks of present cores.
  *

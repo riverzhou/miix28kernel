@@ -152,25 +152,36 @@ void kbasep_trace_timeline_debugfs_term(kbase_device *kbdev);
 		                                     hweight64(bitmap));         \
 	} while (0)
 
-/* Trace state of L2 cache*/
-#define KBASE_TIMELINE_POWERING_L2(kbdev)                   			  \
-	do									  \
-	{									  \
-		struct timespec ts;						  \
-		getnstimeofday(&ts);						  \
-		trace_mali_timeline_l2_power_active(ts.tv_sec, ts.tv_nsec,	  \
-					   	    SW_FLOW_GPU_POWER_L2_POWERING,\
-					            1);                           \
+/* Trace state of L2 power */
+#define KBASE_TIMELINE_POWER_L2(kbdev, bitmap)                              \
+	do                                                                      \
+	{                                                                       \
+		struct timespec ts;                                                 \
+		getnstimeofday(&ts);                                                \
+		trace_mali_timeline_gpu_power_active(ts.tv_sec, ts.tv_nsec,         \
+				                             SW_SET_GPU_POWER_L2_ACTIVE,    \
+				                             hweight64(bitmap));            \
 	}while(0)
 
-#define KBASE_TIMELINE_POWERED_L2(kbdev)                     			  \
-	do									  \
-	{								          \
-		struct timespec ts;						  \
-		getnstimeofday(&ts);						  \
-		trace_mali_timeline_l2_power_active(ts.tv_sec, ts.tv_nsec,	  \
-					            SW_FLOW_GPU_POWER_L2_ACTIVE,  \
-					            1);                           \
+/* Trace state of L2 cache*/
+#define KBASE_TIMELINE_POWERING_L2(kbdev)                                   \
+	do                                                                      \
+	{                                                                       \
+		struct timespec ts;                                                 \
+		getnstimeofday(&ts);                                                \
+		trace_mali_timeline_l2_power_active(ts.tv_sec, ts.tv_nsec,	        \
+		                                    SW_FLOW_GPU_POWER_L2_POWERING,  \
+		                                    1);                             \
+	}while(0)
+
+#define KBASE_TIMELINE_POWERED_L2(kbdev)                                    \
+	do                                                                      \
+	{                                                                       \
+		struct timespec ts;                                                 \
+		getnstimeofday(&ts);                                                \
+		trace_mali_timeline_l2_power_active(ts.tv_sec, ts.tv_nsec,          \
+		                                    SW_FLOW_GPU_POWER_L2_ACTIVE,    \
+		                                     1);                            \
 	}while(0)
 
 /* Trace kbase_pm_send_event message send */
@@ -298,6 +309,8 @@ void kbase_timeline_pm_l2_transition_done(kbase_device *kbdev);
 #define KBASE_TIMELINE_POWER_TILER(kbdev, bitmap) CSTD_NOP()
 
 #define KBASE_TIMELINE_POWER_SHADER(kbdev, bitmap) CSTD_NOP()
+
+#define KBASE_TIMELINE_POWER_L2(kbdev, active) CSTD_NOP()
 
 #define KBASE_TIMELINE_POWERING_L2(kbdev) CSTD_NOP()
 

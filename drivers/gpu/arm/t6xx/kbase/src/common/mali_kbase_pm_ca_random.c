@@ -46,9 +46,13 @@ STATIC void random_timer_callback(unsigned long cb)
 	/* Disable any cores that are now unwanted */
 	data->cores_enabled &= data->cores_desired;
 
+	kbdev->pm.ca_in_transition = MALI_TRUE;
+
 	/* If there are no cores to be powered off then power on desired cores */
-	if (!(data->cores_used & ~data->cores_desired))
+	if (!(data->cores_used & ~data->cores_desired)) {
 		data->cores_enabled = data->cores_desired;
+		kbdev->pm.ca_in_transition = MALI_FALSE;
+	}
 
 	data->core_change_timer.expires = jiffies + 5 * HZ;
 
@@ -70,12 +74,13 @@ static void random_init(struct kbase_device *kbdev)
 	data->cores_enabled = kbdev->shader_present_bitmap;
 	data->cores_desired = kbdev->shader_present_bitmap;
 	data->cores_used = 0;
+	kbdev->pm.ca_in_transition = MALI_FALSE;
 
 	init_timer(&data->core_change_timer);
 
 	data->core_change_timer.function = random_timer_callback;
 	data->core_change_timer.data = (unsigned long) kbdev;
-	data->core_change_timer.expires = jiffies + 1 * HZ;
+	data->core_change_timer.expires = jiffies + 5 * HZ;
 
 	add_timer(&data->core_change_timer);
 }
@@ -100,6 +105,10 @@ static void random_update_core_status(struct kbase_device *kbdev, u64 cores_read
 
 	data->cores_used = cores_ready | cores_transitioning;
 
+	/* If in desired state then clear transition flag */
+	if (data->cores_enabled == data->cores_desired)
+		kbdev->pm.ca_in_transition = MALI_FALSE;
+
 	/* If all undesired cores are now off then power on desired cores.
 	 * The direct comparison against cores_enabled limits potential 
 	 * recursion to one level */
@@ -107,6 +116,8 @@ static void random_update_core_status(struct kbase_device *kbdev, u64 cores_read
 		data->cores_enabled = data->cores_desired;
 
 		kbase_pm_update_cores_state_nolock(kbdev);
+
+		kbdev->pm.ca_in_transition = MALI_FALSE;
 	}
 }
 

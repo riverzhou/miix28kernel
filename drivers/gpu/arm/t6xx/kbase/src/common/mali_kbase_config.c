@@ -138,6 +138,21 @@
 
 #define DEFAULT_PM_DVFS_FREQ 500 /* Milliseconds */
 
+/**
+ * Default poweroff tick granuality, in nanoseconds
+ */
+#define DEFAULT_PM_GPU_POWEROFF_TICK_NS 400000 /* 400us */
+
+/**
+ * Default number of poweroff ticks before shader cores are powered off
+ */
+#define DEFAULT_PM_POWEROFF_TICK_SHADER 2      /* 400-800us */
+
+/**
+ * Default number of poweroff ticks before GPU is powered off
+ */
+#define DEFAULT_PM_POWEROFF_TICK_GPU 2         /* 400-800us */
+
 /*** End Power Manager defaults ***/
 
 /**
@@ -145,29 +160,6 @@
  * Points to @ref kbase_cpuprops_get_default_clock_speed.
  */
 #define DEFAULT_CPU_SPEED_FUNC ((uintptr_t)kbase_cpuprops_get_default_clock_speed)
-
-#ifdef CONFIG_MALI_PLATFORM_FAKE
-
-extern kbase_platform_config platform_config;
-kbase_platform_config *kbasep_get_platform_config(void)
-{
-	return &platform_config;
-}
-#endif				/* CONFIG_MALI_PLATFORM_FAKE */
-
-int kbasep_get_config_attribute_count(const kbase_attribute *attributes)
-{
-	int count = 1;
-
-	KBASE_DEBUG_ASSERT(attributes != NULL);
-
-	while (attributes->id != KBASE_CONFIG_ATTR_END) {
-		attributes++;
-		count++;
-	}
-
-	return count;
-}
 
 const kbase_attribute *kbasep_get_next_attribute(const kbase_attribute *attributes, int attribute_id)
 {
@@ -254,6 +246,13 @@ uintptr_t kbasep_get_config_value(struct kbase_device *kbdev, const kbase_attrib
 		return DEFAULT_ALTERNATIVE_HWC;
 	case KBASE_CONFIG_ATTR_POWER_MANAGEMENT_DVFS_FREQ:
 		return DEFAULT_PM_DVFS_FREQ;
+	case KBASE_CONFIG_ATTR_PM_GPU_POWEROFF_TICK_NS:
+		return DEFAULT_PM_GPU_POWEROFF_TICK_NS;
+	case KBASE_CONFIG_ATTR_PM_POWEROFF_TICK_SHADER:
+		return DEFAULT_PM_POWEROFF_TICK_SHADER;
+	case KBASE_CONFIG_ATTR_PM_POWEROFF_TICK_GPU:
+		return DEFAULT_PM_POWEROFF_TICK_GPU;
+
 	default:
 		KBASE_DEBUG_PRINT_ERROR(KBASE_CORE, "kbasep_get_config_value. Cannot get value of attribute with id=%d and no default value defined", attribute_id);
 		return 0;
@@ -548,6 +547,27 @@ mali_bool kbasep_validate_configuration_attributes(kbase_device *kbdev, const kb
 #if CSTD_CPU_64BIT
 			if ((u64) attributes[i].data > (u64) U32_MAX) {
 				KBASE_DEBUG_PRINT_WARN(KBASE_CORE, "PM DVFS interval exceeds 32-bits: " "id==%d val==%d", attributes[i].id, (int)attributes[i].data);
+				return MALI_FALSE;
+			}
+#endif
+			break;
+
+		case KBASE_CONFIG_ATTR_PM_GPU_POWEROFF_TICK_NS:
+#if CSTD_CPU_64BIT
+			if (attributes[i].data == 0u || (u64) attributes[i].data > (u64) U32_MAX) {
+#else
+			if (attributes[i].data == 0u) {
+#endif
+				KBASE_DEBUG_PRINT_WARN(KBASE_CORE, "Invalid Power Manager Configuration attribute for " "KBASE_CONFIG_ATTR_PM_GPU_POWEROFF_TICK_NS: %d", (int)attributes[i].data);
+				return MALI_FALSE;
+			}
+			break;
+
+	case KBASE_CONFIG_ATTR_PM_POWEROFF_TICK_SHADER:
+	case KBASE_CONFIG_ATTR_PM_POWEROFF_TICK_GPU:
+#if CSTD_CPU_64BIT
+			if ((u64) attributes[i].data > (u64) U32_MAX) {
+				KBASE_DEBUG_PRINT_WARN(KBASE_CORE, "Power Manager Configuration attribute exceeds 32-bits: " "id==%d val==%d", attributes[i].id, (int)attributes[i].data);
 				return MALI_FALSE;
 			}
 #endif

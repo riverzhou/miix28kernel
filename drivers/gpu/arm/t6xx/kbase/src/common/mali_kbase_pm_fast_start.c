@@ -48,10 +48,7 @@ static mali_bool fast_start_get_core_active(struct kbase_device *kbdev)
 	struct kbasep_pm_policy_fast_start *data = &kbdev->pm.pm_policy_data.fast_start;
 
 	if (0 != kbdev->pm.active_count && data->active_state == MALI_FALSE)
-	{
 		data->fast_start = MALI_TRUE;
-		kbase_pm_update_cores_state_nolock(kbdev);
-	}
 
 	if (0 == kbdev->pm.active_count)
 	{

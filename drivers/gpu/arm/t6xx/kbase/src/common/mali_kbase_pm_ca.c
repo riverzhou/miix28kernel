@@ -24,11 +24,15 @@
 #include <kbase/src/common/mali_kbase_pm.h>
 
 extern const kbase_pm_ca_policy kbase_pm_ca_fixed_policy_ops;
+#if MALI_CUSTOMER_RELEASE == 0
 extern const kbase_pm_ca_policy kbase_pm_ca_random_policy_ops;
+#endif
 
 static const kbase_pm_ca_policy *const policy_list[] = {
 	&kbase_pm_ca_fixed_policy_ops,
+#if MALI_CUSTOMER_RELEASE == 0
 	&kbase_pm_ca_random_policy_ops
+#endif
 };
 
 /** The number of policies available in the system.
