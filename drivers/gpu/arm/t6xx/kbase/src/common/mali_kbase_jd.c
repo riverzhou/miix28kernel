@@ -1028,14 +1028,22 @@ static void jd_done_worker(struct work_struct *data)
 			KBASE_DEBUG_PRINT_INFO(KBASE_JD, " Clamping has been executed, try to rerun the job \n" );
 			katom->event_code = BASE_JD_EVENT_STOPPED;
 			katom->atom_flags |= KBASE_KATOM_FLAGS_RERUN;
+
+			/* The atom will be requeued, but requeing does not submit more
+			 * jobs. If this was the last job, we must also ensure that more
+			 * jobs will be run on slot 0 - this is a Fragment job. */
+			kbasep_js_set_job_retry_submit_slot(katom, 0);
 		}
 	}
 
 	/* If job was rejected due to BASE_JD_EVENT_PM_EVENT but was not
-         * specifically targeting core group 1, then re-submit targeting core
+	 * specifically targeting core group 1, then re-submit targeting core
 	 * group 0 */
 	if (katom->event_code == BASE_JD_EVENT_PM_EVENT && !(katom->core_req & BASE_JD_REQ_SPECIFIC_COHERENT_GROUP)) {
 		katom->event_code = BASE_JD_EVENT_STOPPED;
+		/* Don't need to worry about any previously set retry-slot - it's
+		 * impossible for it to have been set previously, because we guarantee
+		 * kbase_jd_done() was called with done_code==0 on this atom */
 		kbasep_js_set_job_retry_submit_slot(katom, 1);
 	}
 

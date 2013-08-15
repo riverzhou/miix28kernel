@@ -1,19 +1,14 @@
-/*
+/* drivers/gpu/t6xx/kbase/src/platform/manta/mali_kbase_platform.c
  *
- * (C) COPYRIGHT ARM Limited. All rights reserved.
+ * Copyright 2011 by S.LSI. Samsung Electronics Inc.
+ * San#24, Nongseo-Dong, Giheung-Gu, Yongin, Korea
  *
- * This program is free software and is provided to you under the terms of the
- * GNU General Public License version 2 as published by the Free Software
- * Foundation, and any use by you of this program is subject to the terms
- * of such GNU licence.
+ * Samsung SoC Mali-T604 platform-dependent codes
  *
- * A copy of the licence is included with the program, and can also be obtained
- * from Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
- * Boston, MA  02110-1301, USA.
- *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software FoundatIon.
  */
-
-
 
 /**
  * @file mali_kbase_platform.c
@@ -224,9 +219,6 @@ int kbase_platform_cmu_pmu_control(struct kbase_device *kbdev, int control)
 
 	spin_lock_irqsave(&platform->cmu_pmu_lock, flags);
 
-#ifdef CONFIG_MALI_GATOR_SUPPORT
-	kbase_trace_mali_timeline_event(GATOR_MAKE_EVENT(ACTIVITY_RTPM_CHANGED, ACTIVITY_RTPM) | control);
-#endif
 	/* off */
 	if (control == 0) {
 		if (platform->cmu_pmu_status == 0) {

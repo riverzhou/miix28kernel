@@ -24,7 +24,6 @@
 #include <kbase/src/common/mali_kbase_uku.h>
 #include <kbase/src/common/mali_midg_regmap.h>
 #include <kbase/src/linux/mali_kbase_mem_linux.h>
-#include <kbase/src/linux/mali_kbase_config_linux.h>
 #ifdef CONFIG_MALI_NO_MALI
 #include "mali_kbase_model_linux.h"
 #endif /* CONFIG_MALI_NO_MALI */
@@ -882,7 +881,7 @@ static int kbase_release(struct inode *inode, struct file *filp)
 	return 0;
 }
 
-#define CALL_MAX_SIZE 528 
+#define CALL_MAX_SIZE 536 
 
 static long kbase_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 {
@@ -1357,8 +1356,6 @@ static int kbase_install_interrupts(kbase_device *kbdev)
 	u32 nr = ARRAY_SIZE(kbase_handler_table);
 	int err;
 	u32 i;
-
-	BUG_ON(nr > PLATFORM_CONFIG_IRQ_RES_COUNT);	/* Only 3 interrupts! */
 
 	for (i = 0; i < nr; i++) {
 		err = request_irq(osdev->irqs[i].irq, kbase_handler_table[i], osdev->irqs[i].flags | IRQF_SHARED, dev_name(osdev->dev), kbase_tag(kbdev, i));
@@ -2762,66 +2759,42 @@ static struct platform_driver kbase_platform_driver = {
 };
 
 #ifdef CONFIG_MALI_PLATFORM_FAKE
-static struct platform_device *mali_device;
-#endif /* CONFIG_MALI_PLATFORM_FAKE */
+#ifndef MALI_PLATFORM_FAKE_MODULE
+extern int kbase_platform_fake_register(void);
+extern void kbase_platform_fake_unregister(void);
+#endif
+#endif
 
 static int __init kbase_driver_init(void)
 {
-	int err;
+	int ret;
+	
 #ifdef CONFIG_MALI_PLATFORM_FAKE
-	kbase_platform_config *config;
-	int attribute_count;
-	struct resource resources[PLATFORM_CONFIG_RESOURCE_COUNT];
+#ifndef MALI_PLATFORM_FAKE_MODULE
+	ret = kbase_platform_fake_register();
+	if (ret)
+		return ret;
+#endif
+#endif
+	ret = platform_driver_register(&kbase_platform_driver);
+#ifdef CONFIG_MALI_PLATFORM_FAKE
+#ifndef MALI_PLATFORM_FAKE_MODULE
+	if (ret)
+		kbase_platform_fake_unregister();
+#endif
+#endif
 
-	config = kbasep_get_platform_config();
-	attribute_count = kbasep_get_config_attribute_count(config->attributes);
-#ifdef CONFIG_MACH_MANTA
-	err = platform_device_add_data(&exynos5_device_g3d, config->attributes, attribute_count * sizeof(config->attributes[0]));
-	if (err)
-		return err;
-#else
-
-	mali_device = platform_device_alloc(kbase_drv_name, 0);
-	if (mali_device == NULL)
-		return -ENOMEM;
-
-	kbasep_config_parse_io_resources(config->io_resources, resources);
-	err = platform_device_add_resources(mali_device, resources, PLATFORM_CONFIG_RESOURCE_COUNT);
-	if (err) {
-		platform_device_put(mali_device);
-		mali_device = NULL;
-		return err;
-	}
-
-	err = platform_device_add_data(mali_device, config->attributes, attribute_count * sizeof(config->attributes[0]));
-	if (err) {
-		platform_device_unregister(mali_device);
-		mali_device = NULL;
-		return err;
-	}
-
-	err = platform_device_add(mali_device);
-	if (err) {
-		platform_device_unregister(mali_device);
-		mali_device = NULL;
-		return err;
-	}
-#endif /* CONFIG_CONFIG_MACH_MANTA */
-#endif /* CONFIG_MALI_PLATFORM_FAKE */
-	err = platform_driver_register(&kbase_platform_driver);
-	if (err)
-		return err;
-
-	return 0;
+	return ret;
 }
 
 static void __exit kbase_driver_exit(void)
 {
 	platform_driver_unregister(&kbase_platform_driver);
 #ifdef CONFIG_MALI_PLATFORM_FAKE
-	if (mali_device)
-		platform_device_unregister(mali_device);
-#endif /* CONFIG_MALI_PLATFORM_FAKE */
+#ifndef MALI_PLATFORM_FAKE_MODULE
+	kbase_platform_fake_unregister();
+#endif
+#endif
 }
 
 module_init(kbase_driver_init);

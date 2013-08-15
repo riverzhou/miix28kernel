@@ -58,6 +58,12 @@ typedef struct kbase_pm_ca_policy {
 
 	/** Function called to get the current shader core availability mask
 	 *
+	 * When a change in core availability is occuring, the policy must set kbdev->pm.ca_in_transition
+	 * to MALI_TRUE. This is to indicate that reporting changes in power state cannot be optimized out,
+	 * even if kbdev->pm.desired_shader_state remains unchanged. This must be done by any functions
+	 * internal to the Core Availability Policy that change the return value of
+	 * kbase_pm_ca_policy::get_core_mask.
+	 *
 	 * @param kbdev     The kbase device structure for the device (must be a valid pointer)
 	 *
 	 * @return     The current core availability mask */
@@ -68,6 +74,10 @@ typedef struct kbase_pm_ca_policy {
 	 * If none of the cores in core group 0 are ready or transitioning, then the policy must
 	 * ensure that the next call to get_core_mask does not return 0 for all cores in core group
 	 * 0. It is an error to disable core group 0 through the core availability policy.
+	 *
+	 * When a change in core availability has finished, the policy must set kbdev->pm.ca_in_transition
+	 * to MALI_FALSE. This is to indicate that changes in power state can once again be optimized out
+	 * when kbdev->pm.desired_shader_state is unchanged.
 	 *
 	 * @param kbdev                   The kbase device structure for the device (must be a valid pointer)
 	 * @param cores_ready             The mask of cores currently powered and ready to run jobs

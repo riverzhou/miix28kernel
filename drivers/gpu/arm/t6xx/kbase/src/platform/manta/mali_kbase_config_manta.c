@@ -19,7 +19,6 @@
 #include <linux/clk.h>
 #include <kbase/src/common/mali_kbase.h>
 #include <kbase/src/common/mali_kbase_defs.h>
-#include <kbase/src/linux/mali_kbase_config_linux.h>
 #include <mach/map.h>
 #include <plat/devs.h>
 #include <linux/pm_runtime.h>
@@ -240,7 +239,12 @@ static kbase_attribute config_attributes[] = {
 	 0}
 };
 
-kbase_platform_config platform_config = {
+kbase_platform_config manta_platform_config = {
 	.attributes = config_attributes,
 	.io_resources = &io_resources
 };
+
+kbase_platform_config *kbase_get_platform_config(void)
+{
+	return &manta_platform_config;
+}

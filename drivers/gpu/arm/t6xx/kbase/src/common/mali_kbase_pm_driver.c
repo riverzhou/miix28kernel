@@ -171,6 +171,7 @@ void kbasep_pm_read_present_cores(kbase_device *kbdev)
 	kbdev->shader_available_bitmap = 0;
 	kbdev->tiler_available_bitmap = 0;
 	kbdev->l2_users_count = 0;
+	kbdev->l2_available_bitmap = 0;
 	kbdev->tiler_needed_cnt = 0;
 	kbdev->tiler_inuse_cnt = 0;
 
@@ -322,9 +323,22 @@ STATIC mali_bool kbase_pm_transition_core_type(kbase_device *kbdev, kbase_pm_cor
 	powerup &= ~ready;
 	powerdown &= ready;
 
-	/* Don't transition any cores that are already transitioning */
-	powerup &= ~trans;
+	/* Don't transition any cores that are already transitioning, except for
+	 * Mali cores that support the following case:
+	 *
+	 * If the SHADER_PWRON or TILER_PWRON registers are written to turn on
+	 * a core that is currently transitioning to power off, then this is 
+	 * remembered and the shader core is automatically powered up again once
+	 * the original transition completes. Once the automatic power on is
+	 * complete any job scheduled on the shader core should start.
+	 */
 	powerdown &= ~trans;
+
+	if (kbase_hw_has_feature(kbdev, BASE_HW_FEATURE_PWRON_DURING_PWROFF_TRANS))
+		if (KBASE_PM_CORE_SHADER == type || KBASE_PM_CORE_TILER == type)
+			trans = powering_on_trans; /* for exception cases, only mask off cores in power on transitions */
+
+	powerup &= ~trans;
 
 	/* Perform transitions if any */
 	kbase_pm_invoke(kbdev, type, powerup, ACTION_PWRON);
@@ -418,9 +432,6 @@ mali_bool MOCKABLE(kbase_pm_check_transitions_nolock) (struct kbase_device *kbde
 	if (kbdev->l2_users_count > 0)
 		cores_powered |= kbdev->l2_present_bitmap;
 
-	if (kbdev->pm.pm_tiler_required != MALI_FALSE)
-		cores_powered |= kbdev->tiler_present_bitmap;
-
 	desired_l2_state = get_desired_cache_status(kbdev->l2_present_bitmap, cores_powered);
 
 	/* If any l2 cache is on, then enable l2 #0, for use by job manager */
@@ -437,7 +448,15 @@ mali_bool MOCKABLE(kbase_pm_check_transitions_nolock) (struct kbase_device *kbde
 	in_desired_state &= kbase_pm_transition_core_type(kbdev, KBASE_PM_CORE_L3, desired_l3_state, 0, NULL, &kbdev->pm.powering_on_l3_state);
 	in_desired_state &= kbase_pm_transition_core_type(kbdev, KBASE_PM_CORE_L2, desired_l2_state, 0, &l2_available_bitmap, &kbdev->pm.powering_on_l2_state);
 
+	if( kbdev->l2_available_bitmap != l2_available_bitmap)
+	{
+		KBASE_TIMELINE_POWER_L2(kbdev,l2_available_bitmap);
+	}
+
+	kbdev->l2_available_bitmap = l2_available_bitmap;
+
 	if (in_desired_state) {
+
 		in_desired_state &= kbase_pm_transition_core_type(kbdev, KBASE_PM_CORE_TILER, kbdev->pm.desired_tiler_state, 0, &tiler_available_bitmap, &kbdev->pm.powering_on_tiler_state);
 		in_desired_state &= kbase_pm_transition_core_type(kbdev, KBASE_PM_CORE_SHADER, kbdev->pm.desired_shader_state, kbdev->shader_inuse_bitmap, &shader_available_bitmap, &kbdev->pm.powering_on_shader_state);
 
@@ -454,6 +473,7 @@ mali_bool MOCKABLE(kbase_pm_check_transitions_nolock) (struct kbase_device *kbde
 		}
 
 		kbdev->tiler_available_bitmap = tiler_available_bitmap;
+
 	} else if ((l2_available_bitmap & kbdev->tiler_present_bitmap) != kbdev->tiler_present_bitmap) {
 		tiler_available_bitmap = 0;
 
@@ -645,8 +665,7 @@ void kbase_pm_clock_off(kbase_device *kbdev)
 	lockdep_assert_held(&kbdev->pm.lock);
 
 	/* ASSERT that the cores should now be unavailable. No lock needed. */
-	KBASE_DEBUG_ASSERT(kbdev->shader_available_bitmap == 0u
-	                   && kbdev->pm.pm_tiler_required == MALI_FALSE);
+	KBASE_DEBUG_ASSERT(kbdev->shader_available_bitmap == 0u);
 
 	if (!kbdev->pm.gpu_powered) {
 		/* Already turned off */
@@ -716,15 +735,19 @@ static void kbase_pm_hw_issues(kbase_device *kbdev)
 
 	/* Needed due to MIDBASE-1494: LS_PAUSEBUFFER_DISABLE. See PRLAM-8443. */
 	if (kbase_hw_has_issue(kbdev, BASE_HW_ISSUE_8443))
-		value |= (1 << 16);
+		value |= SC_LS_PAUSEBUFFER_DISABLE;
 
 	/* Needed due to MIDBASE-2054: SDC_DISABLE_OQ_DISCARD. See PRLAM-10327. */
 	if (kbase_hw_has_issue(kbdev, BASE_HW_ISSUE_10327))
-		value |= (1 << 6);
+		value |= SC_SDC_DISABLE_OQ_DISCARD;
 
 	/* Enable alternative hardware counter selection if configured. */
-	if( kbasep_get_config_value(kbdev, kbdev->config_attributes, KBASE_CONFIG_ATTR_ALTERNATIVE_HWC) )
-		value |= (1 << 3);
+	if (kbasep_get_config_value(kbdev, kbdev->config_attributes, KBASE_CONFIG_ATTR_ALTERNATIVE_HWC))
+		value |= SC_ALT_COUNTERS;
+
+	/* Use software control of forward pixel kill when needed. See SKRYMIR-2189. */
+	if (kbase_hw_has_issue(kbdev, BASE_HW_ISSUE_T76X_2121))
+		value |= SC_OVERRIDE_FWD_PIXEL_KILL;
 
 	if (value != 0)
 		kbase_reg_write(kbdev, GPU_CONTROL_REG(SHADER_CONFIG), value, NULL);
@@ -777,6 +800,7 @@ mali_error kbase_pm_init_hw(kbase_device *kbdev, mali_bool enable_irqs )
 			KBASE_TRACE_ADD(kbdev, PM_CORES_CHANGE_AVAILABLE_TILER, NULL, NULL, 0u, (u32)0u);
 	kbdev->shader_available_bitmap = 0u;
 	kbdev->tiler_available_bitmap = 0u;
+	kbdev->l2_available_bitmap = 0u;
 	spin_unlock_irqrestore(&kbdev->pm.power_change_lock, flags);
 
 	/* Soft reset the GPU */

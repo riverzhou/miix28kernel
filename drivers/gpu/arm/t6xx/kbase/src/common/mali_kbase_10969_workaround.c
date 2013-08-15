@@ -13,8 +13,6 @@
  *
  */
 
-
-
 #include <kbase/src/common/mali_kbase.h>
 
 /* This function is used to solve an HW issue with single iterator GPUs.

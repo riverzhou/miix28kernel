@@ -13,8 +13,6 @@
  *
  */
 
-
-
 /**
  * @file mali_kbase_pm_policy.h
  * Power policy API definitions
@@ -28,8 +26,10 @@ typedef enum kbase_pm_policy_id {
 	KBASE_PM_POLICY_ID_DEMAND = 1,
 	KBASE_PM_POLICY_ID_ALWAYS_ON,
 	KBASE_PM_POLICY_ID_COARSE_DEMAND,
+#if MALI_CUSTOMER_RELEASE == 0
 	KBASE_PM_POLICY_ID_DEMAND_ALWAYS_POWERED,
 	KBASE_PM_POLICY_ID_FAST_START
+#endif
 } kbase_pm_policy_id;
 
 typedef u32 kbase_pm_policy_flags;
@@ -153,24 +153,23 @@ typedef enum kbase_pm_cores_ready {
 
 /** Synchronous variant of kbase_pm_request_cores()
  *
- * When this function returns, the @a shader_cores and @a tiler_cores will be
- * in the READY state.
+ * When this function returns, the @a shader_cores will be in the READY state.
  *
  * This is safe variant of kbase_pm_check_transitions_sync(): it handles the
  * work of ensuring the requested cores will remain powered until a matching
  * call to kbase_pm_unrequest_cores()/kbase_pm_release_cores() (as appropriate)
  * is made.
  *
- * @param kbdev         The kbase device structure for the device
- * @param shader_cores  A bitmask of shader cores which are necessary for the job
- * @param tiler_cores   A bitmask of tiler cores which are necessary for the job
+ * @param kbdev           The kbase device structure for the device
+ * @param tiler_required  MALI_TRUE if the tiler is required, MALI_FALSE otherwise
+ * @param shader_cores    A bitmask of shader cores which are necessary for the job
  */
 
 void kbase_pm_request_cores_sync(struct kbase_device *kbdev, mali_bool tiler_required, u64 shader_cores);
 
 /** Mark one or more cores as being required for jobs to be submitted.
  *
- * This function is called by the job scheduler to mark one or both cores
+ * This function is called by the job scheduler to mark one or more cores
  * as being required to submit jobs that are ready to run.
  *
  * The cores requested are reference counted and a subsequent call to @ref kbase_pm_register_inuse_cores or
@@ -181,9 +180,9 @@ void kbase_pm_request_cores_sync(struct kbase_device *kbdev, mali_bool tiler_req
  * immediately, but they might not complete/the cores might not be available
  * until a Power Management IRQ.
  *
- * @param kbdev         The kbase device structure for the device
- * @param shader_cores  A bitmask of shader cores which are necessary for the job
- * @param tiler_cores   A bitmask of tiler cores which are necessary for the job
+ * @param kbdev           The kbase device structure for the device
+ * @param tiler_required  MALI_TRUE if the tiler is required, MALI_FALSE otherwise
+ * @param shader_cores    A bitmask of shader cores which are necessary for the job
  *
  * @return MALI_ERROR_NONE if the cores were successfully requested.
  */
@@ -200,9 +199,9 @@ void kbase_pm_request_cores(struct kbase_device *kbdev, mali_bool tiler_required
  *
  * The policy may use this as an indication that it can power down cores.
  *
- * @param kbdev         The kbase device structure for the device
- * @param shader_cores  A bitmask of shader cores (as given to @ref kbase_pm_request_cores)
- * @param tiler_cores   A bitmask of tiler cores (as given to @ref kbase_pm_request_cores)
+ * @param kbdev           The kbase device structure for the device
+ * @param tiler_required  MALI_TRUE if the tiler is required, MALI_FALSE otherwise
+ * @param shader_cores    A bitmask of shader cores (as given to @ref kbase_pm_request_cores)
  */
 void kbase_pm_unrequest_cores(struct kbase_device *kbdev, mali_bool tiler_required, u64 shader_cores);
 
@@ -214,9 +213,9 @@ void kbase_pm_unrequest_cores(struct kbase_device *kbdev, mali_bool tiler_requir
  *
  * If the necessary cores are not currently available then the function will return MALI_FALSE and have no effect.
  *
- * @param kbdev         The kbase device structure for the device
- * @param shader_cores  A bitmask of shader cores (as given to @ref kbase_pm_request_cores)
- * @param tiler_cores   A bitmask of tiler cores (as given to @ref kbase_pm_request_cores)
+ * @param kbdev           The kbase device structure for the device
+ * @param tiler_required  MALI_TRUE if the tiler is required, MALI_FALSE otherwise
+ * @param shader_cores    A bitmask of shader cores (as given to @ref kbase_pm_request_cores)
  *
  * @return MALI_TRUE if the job can be submitted to the hardware or MALI_FALSE if the job is not ready to run.
  */
@@ -230,8 +229,8 @@ mali_bool kbase_pm_register_inuse_cores(struct kbase_device *kbdev, mali_bool ti
  * cores which are no longer 'inuse'.
  *
  * @param kbdev         The kbase device structure for the device
+ * @param tiler_required  MALI_TRUE if the tiler is required, MALI_FALSE otherwise
  * @param shader_cores  A bitmask of shader cores (as given to @ref kbase_pm_register_inuse_cores)
- * @param tiler_cores   A bitmask of tiler cores (as given to @ref kbase_pm_register_inuse_cores)
  */
 void kbase_pm_release_cores(struct kbase_device *kbdev, mali_bool tiler_required, u64 shader_cores);
 

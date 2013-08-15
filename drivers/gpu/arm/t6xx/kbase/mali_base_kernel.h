@@ -1191,15 +1191,17 @@ struct mali_base_gpu_tiler_props {
 };
 
 /**
- * GPU threading system details. If a value is 0 the information is not available on
- * the implementation of the GPU. 
+ * GPU threading system details.  
  */
 struct mali_base_gpu_thread_props {
+	u32 max_threads;            /* Max. number of threads per core */ 
+	u32 max_workgroup_size;     /* Max. number of threads per workgroup */
+	u32 max_barrier_size;       /* Max. number of threads that can synchronize on a simple barrier */
 	u16 max_registers;			/* Total size [1..65535] of the register file available per core. */
-	u8 max_task_queue;			/* Max. tasks [1..255] which may be sent to a core before it becomes blocked. */
-	u8 max_thread_group_split;	/* Max. allowed value [1..15] of the Thread Group Split field. */
-	u8 impl_tech;		    	/* 1 = Silicon, 2 = FPGA, 3 = SW Model/Emulation */
-	u8 padding[3];
+	u8  max_task_queue;			/* Max. tasks [1..255] which may be sent to a core before it becomes blocked. */
+	u8  max_thread_group_split;	/* Max. allowed value [1..15] of the Thread Group Split field. */
+	u8  impl_tech;		    	/* 0 = Not specified, 1 = Silicon, 2 = FPGA, 3 = SW Model/Emulation */
+	u8  padding[7];
 };
 
 /**
@@ -1311,6 +1313,11 @@ struct midg_raw_gpu_props {
 
 /**
  * Return structure for _mali_base_get_gpu_props().
+ *
+ * NOTE: the raw_props member in this datastructure contains the register
+ * values from which the value of the other members are derived. The derived
+ * members exist to allow for efficient access and/or shielding the details
+ * of the layout of the registers.
  *
  */
 typedef struct mali_base_gpu_props {

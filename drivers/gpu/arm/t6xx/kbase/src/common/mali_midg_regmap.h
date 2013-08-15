@@ -319,6 +319,10 @@
 #define JSn_COMMAND_START       0x01	/* Start processing a job chain. Writing this value is ignored */
 #define JSn_COMMAND_SOFT_STOP   0x02	/* Gently stop processing a job chain */
 #define JSn_COMMAND_HARD_STOP   0x03	/* Rudely stop processing a job chain */
+#define JSn_COMMAND_SOFT_STOP_0 0x04	/* Execute SOFT_STOP if JOB_CHAIN_FLAG is 0 */
+#define JSn_COMMAND_HARD_STOP_0 0x05	/* Execute HARD_STOP if JOB_CHAIN_FLAG is 0 */
+#define JSn_COMMAND_SOFT_STOP_1 0x06	/* Execute SOFT_STOP if JOB_CHAIN_FLAG is 1 */
+#define JSn_COMMAND_HARD_STOP_1 0x07	/* Execute HARD_STOP if JOB_CHAIN_FLAG is 1 */
 
 /* ASn_COMMAND register commands */
 #define ASn_COMMAND_NOP         0x00	/* NOP Operation */
@@ -336,6 +340,7 @@
 #define JSn_CONFIG_START_FLUSH_CLEAN            (1u << 8)
 #define JSn_CONFIG_START_FLUSH_CLEAN_INVALIDATE (3u << 8)
 #define JSn_CONFIG_START_MMU                    (1u << 10)
+#define JSn_CONFIG_JOB_CHAIN_FLAG               (1u << 11)
 #define JSn_CONFIG_END_FLUSH_NO_ACTION          JSn_CONFIG_START_FLUSH_NO_ACTION
 #define JSn_CONFIG_END_FLUSH_CLEAN              (1u << 12)
 #define JSn_CONFIG_END_FLUSH_CLEAN_INVALIDATE   (3u << 12)
@@ -465,5 +470,27 @@
 #define L2_MMU_CONFIG_LIMIT_EXTERNAL_WRITES_QUARTER     (0x2 << L2_MMU_CONFIG_LIMIT_EXTERNAL_WRITES_SHIFT)
 #define L2_MMU_CONFIG_LIMIT_EXTERNAL_WRITES_HALF        (0x3 << L2_MMU_CONFIG_LIMIT_EXTERNAL_WRITES_SHIFT)
 /* End L2_MMU_CONFIG register */
+
+/* THREAD_* registers */
+
+/* Default values when registers are not supported by the implemented hardware */
+#define THREAD_MT_DEFAULT     256
+#define THREAD_MWS_DEFAULT    256
+#define THREAD_MBS_DEFAULT    256
+#define THREAD_MR_DEFAULT     1024
+#define THREAD_MTQ_DEFAULT    4
+#define THREAD_MTGS_DEFAULT   10
+#define THREAD_IT_DEFAULT     1
+
+/* End THREAD_* registers */
+
+/* SHADER_CONFIG register */
+
+#define SC_ALT_COUNTERS             (1ul << 3)
+#define SC_OVERRIDE_FWD_PIXEL_KILL  (1ul << 4)
+#define SC_SDC_DISABLE_OQ_DISCARD   (1ul << 6)
+#define SC_LS_PAUSEBUFFER_DISABLE   (1ul << 16)
+
+/* End SHADER_CONFIG register */
 
 #endif				/* _MIDGARD_REGMAP_H_ */
