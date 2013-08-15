@@ -44,10 +44,6 @@ const char *const op_table[] = {
 	"file_mmap",
 	"file_mprotect",
 
-	"pivotroot",
-	"mount",
-	"umount",
-
 	"create",
 	"post_create",
 	"bind",
@@ -92,7 +88,7 @@ static const char *const aa_audit_type[] = {
 	"HINT",
 	"STATUS",
 	"ERROR",
-	"KILLED",
+	"KILLED"
 	"AUTO"
 };
 
@@ -119,46 +115,39 @@ static void audit_pre(struct audit_buffer *ab, void *ca)
 
 	if (aa_g_audit_header) {
 		audit_log_format(ab, "apparmor=");
-		audit_log_string(ab, aa_audit_type[aad(sa)->type]);
+		audit_log_string(ab, aa_audit_type[sa->aad->type]);
 	}
 
-	if (aad(sa)->op) {
+	if (sa->aad->op) {
 		audit_log_format(ab, " operation=");
-		audit_log_string(ab, op_table[aad(sa)->op]);
+		audit_log_string(ab, op_table[sa->aad->op]);
 	}
 
-	if (aad(sa)->info) {
+	if (sa->aad->info) {
 		audit_log_format(ab, " info=");
-		audit_log_string(ab, aad(sa)->info);
-		if (aad(sa)->error)
-			audit_log_format(ab, " error=%d", aad(sa)->error);
+		audit_log_string(ab, sa->aad->info);
+		if (sa->aad->error)
+			audit_log_format(ab, " error=%d", sa->aad->error);
 	}
 
-	if (aad(sa)->label) {
-		struct aa_label *label = aad(sa)->label;
+	if (sa->aad->profile) {
+		struct aa_profile *profile = sa->aad->profile;
 		pid_t pid;
 		rcu_read_lock();
 		pid = rcu_dereference(tsk->real_parent)->pid;
 		rcu_read_unlock();
 		audit_log_format(ab, " parent=%d", pid);
-		if (label_isprofile(label)) {
-			struct aa_profile *profile = labels_profile(label);
-			if (profile->ns != root_ns) {
-				audit_log_format(ab, " namespace=");
-				audit_log_untrustedstring(ab,
-							  profile->ns->base.hname);
-			}
-			audit_log_format(ab, " profile=");
-			audit_log_untrustedstring(ab, profile->base.hname);
-		} else {
-			audit_log_format(ab, " label=");
-			aa_label_audit(ab, root_ns, label, false, GFP_ATOMIC);
+		if (profile->ns != root_ns) {
+			audit_log_format(ab, " namespace=");
+			audit_log_untrustedstring(ab, profile->ns->base.hname);
 		}
+		audit_log_format(ab, " profile=");
+		audit_log_untrustedstring(ab, profile->base.hname);
 	}
 
-	if (aad(sa)->name) {
+	if (sa->aad->name) {
 		audit_log_format(ab, " name=");
-		audit_log_untrustedstring(ab, aad(sa)->name);
+		audit_log_untrustedstring(ab, sa->aad->name);
 	}
 }
 
@@ -170,7 +159,7 @@ static void audit_pre(struct audit_buffer *ab, void *ca)
 void aa_audit_msg(int type, struct common_audit_data *sa,
 		  void (*cb) (struct audit_buffer *, void *))
 {
-	aad(sa)->type = type;
+	sa->aad->type = type;
 	common_lsm_audit(sa, audit_pre, cb);
 }
 
@@ -193,7 +182,7 @@ int aa_audit(int type, struct aa_profile *profile, gfp_t gfp,
 	BUG_ON(!profile);
 
 	if (type == AUDIT_APPARMOR_AUTO) {
-		if (likely(!aad(sa)->error)) {
+		if (likely(!sa->aad->error)) {
 			if (AUDIT_MODE(profile) != AUDIT_ALL)
 				return 0;
 			type = AUDIT_APPARMOR_AUDIT;
@@ -205,21 +194,21 @@ int aa_audit(int type, struct aa_profile *profile, gfp_t gfp,
 	if (AUDIT_MODE(profile) == AUDIT_QUIET ||
 	    (type == AUDIT_APPARMOR_DENIED &&
 	     AUDIT_MODE(profile) == AUDIT_QUIET))
-		return aad(sa)->error;
+		return sa->aad->error;
 
 	if (KILL_MODE(profile) && type == AUDIT_APPARMOR_DENIED)
 		type = AUDIT_APPARMOR_KILL;
 
-	aad(sa)->label = &profile->label;
+	if (!unconfined(profile))
+		sa->aad->profile = profile;
 
 	aa_audit_msg(type, sa, cb);
 
-	if (aad(sa)->type == AUDIT_APPARMOR_KILL)
-		(void)send_sig_info(SIGKILL, NULL,
-				    sa->tsk ? sa->tsk : current);
+	if (sa->aad->type == AUDIT_APPARMOR_KILL)
+		(void)send_sig_info(SIGKILL, NULL, sa->tsk ? sa->tsk : current);
 
-	if (aad(sa)->type == AUDIT_APPARMOR_ALLOWED)
-		return complain_error(aad(sa)->error);
+	if (sa->aad->type == AUDIT_APPARMOR_ALLOWED)
+		return complain_error(sa->aad->error);
 
-	return aad(sa)->error;
+	return sa->aad->error;
 }
