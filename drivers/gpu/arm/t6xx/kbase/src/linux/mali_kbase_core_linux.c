@@ -1419,7 +1419,7 @@ static ssize_t show_gpu_memory(struct device *dev, struct device_attribute *attr
 	ssize_t ret = 0;
 	struct list_head *entry;
 
-	ret += scnprintf(buf + ret, PAGE_SIZE - ret, "Name              cap(pages) usage(pages)\n" "=========================================\n");
+	ret += scnprintf(buf + ret, PAGE_SIZE - ret, "Name                 pid  cap(pages) usage(pages) unmapped(pages)\n" "=================================================================\n");
 	down(&kbase_dev_list_lock);
 	list_for_each(entry, &kbase_dev_list) {
 		struct kbase_device *kbdev = NULL;
@@ -1427,13 +1427,30 @@ static ssize_t show_gpu_memory(struct device *dev, struct device_attribute *attr
 
 		kbdev = list_entry(entry, struct kbase_device, osdev.entry);
 		/* output the total memory usage and cap for this device */
-		ret += scnprintf(buf + ret, PAGE_SIZE - ret, "%-16s  %10u   %10u\n", kbdev->osdev.devname, kbdev->memdev.usage.max_pages, atomic_read(&(kbdev->memdev.usage.cur_pages))
-		    );
+		ret += scnprintf(buf + ret, PAGE_SIZE - ret, "%-16s           %8u   %8u\n",
+			kbdev->osdev.devname, kbdev->memdev.usage.max_pages,
+			atomic_read(&(kbdev->memdev.usage.cur_pages)));
 		mutex_lock(&kbdev->kctx_list_lock);
 		list_for_each_entry(element, &kbdev->kctx_list, link) {
+			struct pid *pid;
+			struct task_struct *tsk = NULL;
+
+			pid = find_get_pid(element->kctx->pid);
+			if (pid)
+				tsk = get_pid_task(pid, PIDTYPE_PID);
+
 			/* output the memory usage and cap for each kctx opened on this device */
-			ret += scnprintf(buf + ret, PAGE_SIZE - ret, "  %s-0x%p %10u   %10u\n", "kctx", element->kctx, element->kctx->usage.max_pages, atomic_read(&(element->kctx->usage.cur_pages))
-			    );
+			ret += scnprintf(buf + ret, PAGE_SIZE - ret,
+				"  %-16s %5u   %8u   %8u   %8u\n",
+				tsk ? tsk->comm : "", element->kctx->pid,
+				element->kctx->usage.max_pages,
+				atomic_read(&(element->kctx->usage.cur_pages)),
+				atomic_read(&(element->kctx->nonmapped_pages)));
+
+			if (tsk)
+				put_task_struct(tsk);
+			if (pid)
+				put_pid(pid);
 		}
 		mutex_unlock(&kbdev->kctx_list_lock);
 	}

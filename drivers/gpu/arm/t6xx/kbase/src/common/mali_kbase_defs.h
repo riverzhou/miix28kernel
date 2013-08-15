@@ -762,6 +762,7 @@ struct kbase_context {
 	 * All other flags must be added there */
 	spinlock_t         mm_update_lock;
 	struct mm_struct * process_mm;
+	pid_t              pid;
 
 #ifdef CONFIG_MALI_TRACE_TIMELINE
 	kbase_trace_kctx_timeline timeline;
