@@ -712,8 +712,6 @@ static irqreturn_t s5p_mfc_irq(int irq, void *priv)
 			s5p_mfc_dec_calc_dpb_size(ctx);
 
 			ctx->dpb_count = s5p_mfc_get_dpb_count();
-			if (FW_HAS_BUS_RESET(dev))
-				dec->mv_count = s5p_mfc_get_mv_count();
 			if (ctx->img_width == 0 || ctx->img_height == 0)
 				ctx->state = MFCINST_ERROR;
 			else
