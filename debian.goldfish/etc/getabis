@@ -1,0 +1,5 @@
+repo_list=(
+	"http://ports.ubuntu.com/ubuntu-ports/pool/universe/l/linux-goldfish"
+)
+
+getall armhf goldfish

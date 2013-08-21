@@ -1,0 +1,38 @@
+Source: SRCPKGNAME
+Section: devel
+Priority: optional
+Maintainer: Ubuntu Kernel Team <kernel-team@lists.ubuntu.com>
+Standards-Version: 3.8.4.0
+Build-Depends: debhelper (>= 5), cpio, module-init-tools, kernel-wedge (>= 2.24ubuntu1), libelf-dev, binutils-dev, rsync, libdw-dev, python-dev, gcc-4.7, flex, bison, xmlto, docbook-utils, ghostscript, transfig, bzip2, sharutils, asciidoc
+Vcs-Git: git://kernel.ubuntu.com/ubuntu/ubuntu-saucy.git mako
+
+Package: SRCPKGNAME-headers-PKGVER-ABINUM
+Architecture: armhf
+Section: devel
+Priority: optional
+Depends: ${misc:Depends}, coreutils | fileutils (>= 4.0)
+#Provides: SRCPKGNAME-headers, SRCPKGNAME-headers-2.6
+Description: Header files related to Linux kernel version PKGVER
+ This package provides kernel header files for version PKGVER, for sites
+ that want the latest kernel headers. Please read
+ /usr/share/doc/SRCPKGNAME-headers-PKGVER-ABINUM/debian.README.gz for details
+
+Package: SRCPKGNAME-tools-common
+Architecture: armhf
+Section: kernel
+Priority: optional
+Depends: ${misc:Depends}
+Description: Linux kernel version specific tools for version PKGVER
+ This package provides the architecture independent parts for kernel
+ version locked tools (such as perf) for version PGKVER.
+
+Package: SRCPKGNAME-tools-PKGVER-ABINUM
+Architecture: armhf
+Section: devel
+Priority: optional
+Depends: ${misc:Depends}, ${shlibs:Depends}, SRCPKGNAME-tools-common
+Description: Linux kernel version specific tools for version PKGVER-ABINUM
+ This package provides the architecture dependant parts for kernel
+ version locked tools (such as perf) for version PKGVER-ABINUM on
+ =HUMAN=.
+
