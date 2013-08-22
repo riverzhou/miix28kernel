@@ -4,7 +4,7 @@ linux-goldfish (3.4.0-0.1) saucy; urgency=low
 
  -- Tim Gardner <tim.gardner@canonical.com>  Wed, 21 Aug 2013 12:19:33 -0600
 
-linux-goldfish (3.4.0-0.0) UNRELEASED; urgency=low
+linux-goldfish (3.4.0-0.0) saucy; urgency=low
 
   * Place holder
 
