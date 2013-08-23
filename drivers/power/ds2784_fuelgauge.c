@@ -24,6 +24,7 @@
 #include <linux/spinlock.h>
 #include <linux/power_supply.h>
 #include <linux/debugfs.h>
+#include <linux/math64.h>
 
 #include "../w1/w1.h"
 #include "../w1/slaves/w1_ds2784.h"
@@ -102,6 +103,7 @@ static int ds2784_get_current(struct ds2784_info *di, bool avg, int *ival)
 	int reg = avg ? DS2784_REG_AVG_CURR_MSB : DS2784_REG_CURR_MSB;
 	short n;
 	int ret;
+	int div_rsnsp;
 
 	if (!di->raw[DS2784_REG_RSNSP]) {
 		ret = ds2784_read(di, di->raw + DS2784_REG_RSNSP,
@@ -109,6 +111,7 @@ static int ds2784_get_current(struct ds2784_info *di, bool avg, int *ival)
 		if (ret < 0)
 			dev_err(di->dev, "error %d reading RSNSP\n", ret);
 	}
+	div_rsnsp = 10000 / di->raw[DS2784_REG_RSNSP];
 
 	ret = ds2784_read(di, di->raw + reg, reg, 2);
 	if (ret < 0)
@@ -116,7 +119,7 @@ static int ds2784_get_current(struct ds2784_info *di, bool avg, int *ival)
 
 	n = ((di->raw[reg] << 8) | (di->raw[reg+1]));
 
-	*ival = (n * 15625) / 10 * di->raw[DS2784_REG_RSNSP] / 1000;
+	*ival = div_s64((long long)n * 15625, div_rsnsp);
 	return 0;
 }
 
