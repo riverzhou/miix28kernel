@@ -161,6 +161,7 @@ static int ds2784_get_accumulated_current(struct ds2784_info *di, int *acc)
 {
 	int n;
 	int ret;
+	int div_rsnsp;
 
 	if (!di->raw[DS2784_REG_RSNSP]) {
 		ret = ds2784_read(di, di->raw + DS2784_REG_RSNSP,
@@ -170,6 +171,7 @@ static int ds2784_get_accumulated_current(struct ds2784_info *di, int *acc)
 			return ret;
 		}
 	}
+	div_rsnsp = 100 / di->raw[DS2784_REG_RSNSP];
 
 	ret = ds2784_read(di, di->raw + DS2784_REG_ACCUMULATE_CURR_MSB,
 			  DS2784_REG_ACCUMULATE_CURR_MSB, 2);
@@ -179,7 +181,7 @@ static int ds2784_get_accumulated_current(struct ds2784_info *di, int *acc)
 
 	n = (di->raw[DS2784_REG_ACCUMULATE_CURR_MSB] << 8) |
 		di->raw[DS2784_REG_ACCUMULATE_CURR_LSB];
-	*acc = n * 625 / 100 * di->raw[DS2784_REG_RSNSP];
+	*acc = n * 625 / div_rsnsp;
 	return 0;
 }
 
