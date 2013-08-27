@@ -29,7 +29,6 @@
 
 #include <mach/exynos5_bus.h>
 
-#define MFC_MAX_EXTRA_DPB       5
 #define MFC_MAX_BUFFERS		32
 #define MFC_MAX_REF_BUFS	2
 #define MFC_FRAME_PLANES	2
