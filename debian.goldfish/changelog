@@ -1,3 +1,10 @@
+linux-goldfish (3.4.0-0.3) saucy; urgency=low
+
+  * No code change rebuild, fix FTBS because of incorrect
+    ABI directory name.
+
+ -- Tim Gardner <tim.gardner@canonical.com>  Wed, 11 Sep 2013 11:52:30 -0600
+
 linux-goldfish (3.4.0-0.2) saucy; urgency=low
 
   [ Tim Gardner ]
