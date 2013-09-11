@@ -1,4 +1,4 @@
-arch="armhf"
+arch="armhf i386"
 supported="Android touch emulation"
 desc="Android touch emulation"
 target="Android touch emulation"

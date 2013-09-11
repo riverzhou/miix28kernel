@@ -7,7 +7,7 @@ Build-Depends: debhelper (>= 5), cpio, module-init-tools, kernel-wedge (>= 2.24u
 Vcs-Git: git://kernel.ubuntu.com/ubuntu/ubuntu-saucy.git mako
 
 Package: SRCPKGNAME-headers-PKGVER-ABINUM
-Architecture: armhf
+Architecture: armhf i386
 Section: devel
 Priority: optional
 Depends: ${misc:Depends}, coreutils | fileutils (>= 4.0)
@@ -18,7 +18,7 @@ Description: Header files related to Linux kernel version PKGVER
  /usr/share/doc/SRCPKGNAME-headers-PKGVER-ABINUM/debian.README.gz for details
 
 Package: SRCPKGNAME-tools-common
-Architecture: armhf
+Architecture: armhf i386
 Section: kernel
 Priority: optional
 Depends: ${misc:Depends}
@@ -27,7 +27,7 @@ Description: Linux kernel version specific tools for version PKGVER
  version locked tools (such as perf) for version PGKVER.
 
 Package: SRCPKGNAME-tools-PKGVER-ABINUM
-Architecture: armhf
+Architecture: armhf i386
 Section: devel
 Priority: optional
 Depends: ${misc:Depends}, ${shlibs:Depends}, SRCPKGNAME-tools-common
