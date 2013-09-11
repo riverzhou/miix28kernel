@@ -24,7 +24,6 @@
 #include <kbase/src/common/mali_midg_regmap.h>
 #include <kbase/src/common/mali_kbase_gator.h>
 #include <kbase/src/common/mali_kbase_js_affinity.h>
-#include <kbase/src/common/mali_kbase_8401_workaround.h>
 #include <kbase/src/common/mali_kbase_hw.h>
 
 #include "mali_kbase_jm.h"
@@ -736,7 +735,6 @@ static void kbasep_job_slot_soft_or_hard_stop(kbase_device *kbdev, kbase_context
 				 *
 				 * This can't be an ASSERT due to MMU fault code:
 				 * - This first hard-stops the job that caused the fault
-				 *  - Under HW Issue 8401, this inserts a dummy workaround job into NEXT
 				 * - Under HW Issue 8245, it will then reset the GPU
 				 *  - This causes a Soft-stop to occur on all slots
 				 * - By the time of the soft-stop, we may (depending on timing) still have:

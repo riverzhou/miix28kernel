@@ -745,10 +745,6 @@ static void kbase_pm_hw_issues(kbase_device *kbdev)
 	if (kbasep_get_config_value(kbdev, kbdev->config_attributes, KBASE_CONFIG_ATTR_ALTERNATIVE_HWC))
 		value |= SC_ALT_COUNTERS;
 
-	/* Use software control of forward pixel kill when needed. See SKRYMIR-2189. */
-	if (kbase_hw_has_issue(kbdev, BASE_HW_ISSUE_T76X_2121))
-		value |= SC_OVERRIDE_FWD_PIXEL_KILL;
-
 	if (value != 0)
 		kbase_reg_write(kbdev, GPU_CONTROL_REG(SHADER_CONFIG), value, NULL);
 

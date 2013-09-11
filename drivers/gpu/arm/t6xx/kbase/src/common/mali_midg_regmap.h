@@ -427,8 +427,6 @@
 #define GPU_ID_PI_T65X                    0x3456
 #define GPU_ID_PI_T62X                    0x0620
 #define GPU_ID_PI_T67X                    0x0670
-#define GPU_ID_PI_T76X                    0x0750
-#define GPU_ID_PI_T72X                    0x0720
 
 /* Values for GPU_ID_VERSION_STATUS field for PRODUCT_ID GPU_ID_PI_T60X and GPU_ID_PI_T65X */
 #define GPU_ID_S_15DEV0                   0x1
@@ -473,6 +471,12 @@
 
 /* THREAD_* registers */
 
+/* THREAD_FEATURES IMPLEMENTATION_TECHNOLOGY values */
+#define IMPLEMENTATION_UNSPECIFIED  0
+#define IMPLEMENTATION_SILICON      1
+#define IMPLEMENTATION_FPGA         2
+#define IMPLEMENTATION_MODEL        3
+
 /* Default values when registers are not supported by the implemented hardware */
 #define THREAD_MT_DEFAULT     256
 #define THREAD_MWS_DEFAULT    256
@@ -480,14 +484,12 @@
 #define THREAD_MR_DEFAULT     1024
 #define THREAD_MTQ_DEFAULT    4
 #define THREAD_MTGS_DEFAULT   10
-#define THREAD_IT_DEFAULT     1
 
 /* End THREAD_* registers */
 
 /* SHADER_CONFIG register */
 
 #define SC_ALT_COUNTERS             (1ul << 3)
-#define SC_OVERRIDE_FWD_PIXEL_KILL  (1ul << 4)
 #define SC_SDC_DISABLE_OQ_DISCARD   (1ul << 6)
 #define SC_LS_PAUSEBUFFER_DISABLE   (1ul << 16)
 
