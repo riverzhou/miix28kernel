@@ -1,3 +1,11 @@
+linux-goldfish (3.4.0-0.2) saucy; urgency=low
+
+  [ Tim Gardner ]
+
+  * [Config] Build for i386
+
+ -- Tim Gardner <tim.gardner@canonical.com>  Wed, 11 Sep 2013 11:19:52 -0600
+
 linux-goldfish (3.4.0-0.1) saucy; urgency=low
 
   * Initial release 
