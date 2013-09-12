@@ -659,13 +659,6 @@ struct kbase_device {
 
 	const kbase_attribute *config_attributes;
 
-	/* >> BASE_HW_ISSUE_8401 >> */
-#define KBASE_8401_WORKAROUND_COMPUTEJOB_COUNT 3
-	kbase_context *workaround_kctx;
-	void *workaround_compute_job_va[KBASE_8401_WORKAROUND_COMPUTEJOB_COUNT];
-	phys_addr_t workaround_compute_job_pa[KBASE_8401_WORKAROUND_COMPUTEJOB_COUNT];
-	/* << BASE_HW_ISSUE_8401 << */
-
 #if KBASE_TRACE_ENABLE != 0
 	spinlock_t              trace_lock;
 	u16                     trace_first_out;
