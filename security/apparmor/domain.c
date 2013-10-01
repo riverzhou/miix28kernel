@@ -370,7 +370,8 @@ int apparmor_bprm_set_creds(struct linux_binprm *bprm)
 	state = profile->file.start;
 
 	/* buffer freed below, name is pointer into buffer */
-	error = aa_path_name(&bprm->file->f_path, profile->path_flags, &buffer,
+	get_buffers(buffer);
+	error = aa_path_name(&bprm->file->f_path, profile->path_flags, buffer,
 			     &name, &info);
 	if (error) {
 		if (profile_unconfined(profile) ||
@@ -446,7 +447,9 @@ int apparmor_bprm_set_creds(struct linux_binprm *bprm)
 			}
 		}
 	} else if (COMPLAIN_MODE(profile)) {
-		/* no exec permission - are we in learning mode */
+		/* break rcu readlock so we can allocate learning profile */
+		put_buffers(buffer);
+		name = NULL;
 		new_profile = aa_new_null_profile(profile, 0);
 		if (!new_profile) {
 			error = -ENOMEM;
@@ -456,6 +459,12 @@ int apparmor_bprm_set_creds(struct linux_binprm *bprm)
 			target = new_profile->base.hname;
 		}
 		perms.xindex |= AA_X_UNSAFE;
+		/* re-aquire buffer and rcu readlock and re-get name */
+		get_buffers(buffer);
+		if (!error)
+			error = aa_path_name(&bprm->file->f_path,
+					     profile->path_flags, buffer,
+					     &name, &info);
 	} else
 		/* fail exec */
 		error = -EACCES;
@@ -522,7 +531,7 @@ audit:
 
 cleanup:
 	aa_put_label(label);
-	kfree(buffer);
+	put_buffers(buffer);
 
 	return error;
 }
