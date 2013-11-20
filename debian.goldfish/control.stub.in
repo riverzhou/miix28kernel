@@ -3,7 +3,7 @@ Section: devel
 Priority: optional
 Maintainer: Ubuntu Kernel Team <kernel-team@lists.ubuntu.com>
 Standards-Version: 3.8.4.0
-Build-Depends: debhelper (>= 5), cpio, module-init-tools, kernel-wedge (>= 2.24ubuntu1), libelf-dev, binutils-dev, rsync, libdw-dev, libpci-dev, python-dev, gcc-4.6 [armhf], flex, bison, xmlto, docbook-utils, ghostscript, transfig, bzip2, sharutils, asciidoc
+Build-Depends: debhelper (>= 5), cpio, module-init-tools, kernel-wedge (>= 2.24ubuntu1), libelf-dev, libiberty-dev, rsync, libdw-dev, libpci-dev, python-dev, gcc-4.6 [armhf], flex, bison, xmlto, docbook-utils, ghostscript, transfig, bzip2, sharutils, asciidoc
 Vcs-Git: git://kernel.ubuntu.com/ubuntu/ubuntu-saucy.git mako
 
 Package: SRCPKGNAME-headers-PKGVER-ABINUM
