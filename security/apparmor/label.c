@@ -19,6 +19,11 @@
 #include "include/policy.h"
 #include "include/sid.h"
 
+#if defined(CONFIG_SMP)
+#define smp_write_can_lock(X) write_can_lock(X)
+#else
+#define smp_write_can_lock(X) 0
+#endif
 
 /*
  * the aa_label represents the set of profiles confining an object
@@ -223,7 +228,7 @@ static bool __aa_label_remove(struct aa_labelset *ls, struct aa_label *label)
 {
 	AA_BUG(!ls);
 	AA_BUG(!label);
-	AA_BUG(write_can_lock(&ls->lock));
+	AA_BUG(smp_write_can_lock(&ls->lock));
 	AA_BUG(labels_set(label) != ls);
 
 	if (label_invalid(label))
@@ -267,7 +272,7 @@ static bool __aa_label_replace(struct aa_labelset *ls, struct aa_label *old,
 	AA_BUG(!ls);
 	AA_BUG(!old);
 	AA_BUG(!new);
-	AA_BUG(write_can_lock(&ls->lock));
+	AA_BUG(smp_write_can_lock(&ls->lock));
 	AA_BUG(labels_set(old) != ls);
 	AA_BUG(new->flags & FLAG_IN_TREE);
 
@@ -472,7 +477,7 @@ static struct aa_label *__aa_label_insert(struct aa_labelset *ls,
 
 	AA_BUG(!ls);
 	AA_BUG(!l);
-	AA_BUG(write_can_lock(&ls->lock));
+	AA_BUG(smp_write_can_lock(&ls->lock));
 	AA_BUG(l->flags & FLAG_IN_TREE);
 
 	/* Figure out where to put new node */
