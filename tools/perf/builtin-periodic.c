@@ -234,16 +234,17 @@ static int perf_setup_init(struct perf_setup_s *p)
 static int perf_setup_read(struct perf_setup_s *p)
 {
 	u64 data[DATA_SIZE];
-	int i, status;
+	int i;
 
 	p->totals.values = 0;
 	p->data.values = 0;
 	for (i = 0; i < MAX_NR_CPUS; i++) {
 		if (p->perf_fd[i] == 0)
 			continue;
-		status = read(p->perf_fd[i], &data, sizeof(data));
-		p->data.values += data[0];
-		p->totals.values += data[0];
+		if (read(p->perf_fd[i], &data, sizeof(data)) > 0) {
+			p->data.values += data[0];
+			p->totals.values += data[0];
+		}
 	}
 
 	/*
