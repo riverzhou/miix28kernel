@@ -12,7 +12,7 @@
 ##
 ##
 ##
-obj-m				+= lttng/
+#obj-m				+= lttng/
 ##
 ##
 ##
