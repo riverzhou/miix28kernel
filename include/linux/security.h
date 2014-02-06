@@ -3052,6 +3052,10 @@ static inline void free_secdata(void *secdata)
 extern int yama_ptrace_access_check(struct task_struct *child,
 				    unsigned int mode);
 extern int yama_ptrace_traceme(struct task_struct *parent);
+extern int yama_path_link(struct dentry *old_dentry, struct path *new_dir,
+			  struct dentry *new_dentry);
+extern int yama_inode_follow_link(struct dentry *dentry,
+				  struct nameidata *nameidata);
 extern void yama_task_free(struct task_struct *task);
 extern int yama_task_prctl(int option, unsigned long arg2, unsigned long arg3,
 			   unsigned long arg4, unsigned long arg5);
@@ -3063,6 +3067,19 @@ static inline int yama_ptrace_access_check(struct task_struct *child,
 }
 
 static inline int yama_ptrace_traceme(struct task_struct *parent)
+{
+	return 0;
+}
+
+static inline int yama_path_link(struct dentry *old_dentry,
+				 struct path *new_dir,
+				 struct dentry *new_dentry)
+{
+	return 0;
+}
+
+static inline int yama_inode_follow_link(struct dentry *dentry,
+					 struct nameidata *nameidata)
 {
 	return 0;
 }
