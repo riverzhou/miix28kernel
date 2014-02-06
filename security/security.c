@@ -432,8 +432,16 @@ int security_path_symlink(struct path *dir, struct dentry *dentry,
 int security_path_link(struct dentry *old_dentry, struct path *new_dir,
 		       struct dentry *new_dentry)
 {
+#ifdef CONFIG_SECURITY_YAMA_STACKED
+	int rc;
+#endif
 	if (unlikely(IS_PRIVATE(old_dentry->d_inode)))
 		return 0;
+#ifdef CONFIG_SECURITY_YAMA_STACKED
+	rc = yama_path_link(old_dentry, new_dir, new_dentry);
+	if (rc)
+		return rc;
+#endif
 	return security_ops->path_link(old_dentry, new_dir, new_dentry);
 }
 
@@ -547,8 +555,16 @@ int security_inode_readlink(struct dentry *dentry)
 
 int security_inode_follow_link(struct dentry *dentry, struct nameidata *nd)
 {
+#ifdef CONFIG_SECURITY_YAMA_STACKED
+	int rc;
+#endif
 	if (unlikely(IS_PRIVATE(dentry->d_inode)))
 		return 0;
+#ifdef CONFIG_SECURITY_YAMA_STACKED
+	rc = yama_inode_follow_link(dentry, nd);
+	if (rc)
+		return rc;
+#endif
 	return security_ops->inode_follow_link(dentry, nd);
 }
 
