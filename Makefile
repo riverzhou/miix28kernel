@@ -333,7 +333,7 @@ LD		= $(CROSS_COMPILE)ld
 ifeq ($(ARCH),arm)
 CC		= $(CROSS_COMPILE)gcc-4.6
 else
-CC		= $(CROSS_COMPILE)gcc
+CC		= $(CROSS_COMPILE)gcc-4.7
 endif
 CPP		= $(CC) -E
 AR		= $(CROSS_COMPILE)ar
