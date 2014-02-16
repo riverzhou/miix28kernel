@@ -59,6 +59,7 @@ lttng-probe-napi
 lttng-probe-net
 lttng-probe-power
 lttng-probe-printk
+lttng-probe-random
 lttng-probe-rcu
 lttng-probe-regmap
 lttng-probe-regulator
