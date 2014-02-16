@@ -29,6 +29,8 @@
 #include "../w1/w1.h"
 #include "../w1/slaves/w1_ds2784.h"
 
+static struct power_supply *manta_bat_smb347_battery;
+
 struct fuelgauge_status {
 	int timestamp;
 
@@ -57,6 +59,21 @@ struct ds2784_info {
 	bool				inited;
 	struct dentry			*dentry;
 };
+
+static inline int manta_bat_get_smb347_battery(void)
+{
+	if (!manta_bat_smb347_battery)
+		manta_bat_smb347_battery =
+			power_supply_get_by_name("smb347-battery");
+
+	if (!manta_bat_smb347_battery) {
+		pr_err("%s: failed to get smb347-battery power supply\n",
+				__func__);
+		return -ENODEV;
+	}
+
+	return 0;
+}
 
 static int ds2784_read(struct ds2784_info *di, char *buf, int addr,
 		       size_t count)
@@ -196,6 +213,12 @@ static int ds2784_get_property(struct power_supply *psy,
 		return -ENODEV;
 
 	switch (psp) {
+	case POWER_SUPPLY_PROP_STATUS:
+		if (manta_bat_get_smb347_battery())
+			return -EIO;
+		return manta_bat_smb347_battery->get_property(
+			manta_bat_smb347_battery, POWER_SUPPLY_PROP_STATUS, val);
+
 	case POWER_SUPPLY_PROP_VOLTAGE_NOW:
 		ret = ds2784_get_vcell(di, &val->intval);
 		break;
@@ -236,6 +259,7 @@ static int ds2784_get_property(struct power_supply *psy,
 }
 
 static enum power_supply_property ds2784_props[] = {
+	POWER_SUPPLY_PROP_STATUS,
 	POWER_SUPPLY_PROP_VOLTAGE_NOW,
 	POWER_SUPPLY_PROP_TEMP,
 	POWER_SUPPLY_PROP_MODEL_NAME,

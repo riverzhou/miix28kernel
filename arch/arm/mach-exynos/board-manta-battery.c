@@ -121,6 +121,21 @@ static inline int manta_bat_get_ds2784(void)
 	return 0;
 }
 
+static inline int manta_bat_get_smb347_battery(void)
+{
+	if (!manta_bat_smb347_battery)
+		manta_bat_smb347_battery =
+			power_supply_get_by_name("smb347-battery");
+
+	if (!manta_bat_smb347_battery) {
+		pr_err("%s: failed to get smb347-battery power supply\n",
+		       __func__);
+		return -ENODEV;
+	}
+
+	return 0;
+}
+
 static inline int manta_bat_get_smb347_usb(void)
 {
 	if (!manta_bat_smb347_usb)
@@ -460,11 +475,7 @@ static void manta_bat_set_charging_enable(int en)
 
 	manta_bat_chg_enabled = en;
 
-	if (!manta_bat_smb347_battery)
-		manta_bat_smb347_battery =
-			power_supply_get_by_name("smb347-battery");
-
-	if (!manta_bat_smb347_battery)
+	if (manta_bat_get_smb347_battery())
 		return;
 
 	value.intval = en ? 1 : 0;
@@ -478,7 +489,7 @@ static void manta_bat_sync_charge_enable(void)
 {
 	union power_supply_propval chg_enabled = {0,};
 
-	if (!manta_bat_smb347_battery)
+	if (manta_bat_get_smb347_battery())
 		return;
 
 	manta_bat_smb347_battery->get_property(
@@ -502,11 +513,7 @@ static void exynos5_manta_set_priority(void)
 	int ret;
 	union power_supply_propval value;
 
-	if (!manta_bat_smb347_battery)
-		manta_bat_smb347_battery =
-			power_supply_get_by_name("smb347-battery");
-
-	if (!manta_bat_smb347_battery) {
+	if (manta_bat_get_smb347_battery()) {
 		pr_err("%s: failed to get smb347-battery power supply\n",
 		       __func__);
 		return;
@@ -562,8 +569,7 @@ static void change_charger_status(bool force_dock_redetect,
 		manta_bat_smb347_mains =
 			power_supply_get_by_name("smb347-mains");
 		manta_bat_get_smb347_usb();
-		manta_bat_smb347_battery =
-			power_supply_get_by_name("smb347-battery");
+		manta_bat_get_smb347_battery();
 
 		if (!manta_bat_smb347_mains || !manta_bat_smb347_usb ||
 		    !manta_bat_smb347_battery)
@@ -835,6 +841,11 @@ static int manta_bat_get_property(struct power_supply *ps,
 				  union power_supply_propval *val)
 {
 	switch (prop) {
+	case POWER_SUPPLY_PROP_STATUS:
+		if (manta_bat_get_smb347_battery())
+			return -EIO;
+		return manta_bat_smb347_battery->get_property(
+			manta_bat_smb347_battery, POWER_SUPPLY_PROP_STATUS, val);
 	case POWER_SUPPLY_PROP_CHARGE_ENABLED:
 		val->intval = manta_bat_chg_enabled;
 		return 0;
@@ -863,6 +874,7 @@ static int manta_bat_property_is_writeable(struct power_supply *psy,
 	return 0;
 }
 static enum power_supply_property manta_battery_props[] = {
+	POWER_SUPPLY_PROP_STATUS,
 	POWER_SUPPLY_PROP_CHARGE_ENABLED,
 	POWER_SUPPLY_PROP_CAPACITY,
 };

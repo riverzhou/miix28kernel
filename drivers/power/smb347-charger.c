@@ -138,6 +138,8 @@
 #define APSD_RESULT_SDP				0x4
 #define APSD_RESULT_ACA				0x5
 
+static struct power_supply *manta_bat_ds2784_battery;
+
 static enum power_supply_type apsd_to_pst[STAT_D_APSD_RESULT_MASK] = {
 	[APSD_RESULT_CDP] = POWER_SUPPLY_TYPE_USB_CDP,
 	[APSD_RESULT_DCP] = POWER_SUPPLY_TYPE_USB_DCP,
@@ -232,6 +234,21 @@ static const unsigned int ccc_tbl[] = {
 	900000,
 	1200000,
 };
+
+static inline int manta_bat_get_ds2784(void)
+{
+	if (!manta_bat_ds2784_battery)
+		manta_bat_ds2784_battery =
+			power_supply_get_by_name("ds2784-fuelgauge");
+
+	if (!manta_bat_ds2784_battery) {
+		pr_err_once("%s: failed to get ds2784-fuelgauge power supply\n",
+				__func__);
+		return -ENODEV;
+	}
+
+	return 0;
+}
 
 /* Convert register value to current using lookup table */
 static int hw_to_current(const unsigned int *tbl, size_t size, unsigned int val)
@@ -1370,6 +1387,12 @@ static int smb347_battery_get_property(struct power_supply *psy,
 					POWER_SUPPLY_STATUS_NOT_CHARGING;
 		break;
 
+	case POWER_SUPPLY_PROP_CAPACITY:
+		if (manta_bat_get_ds2784())
+			return -EIO;
+		return manta_bat_ds2784_battery->get_property(
+			manta_bat_ds2784_battery, POWER_SUPPLY_PROP_CAPACITY, val);
+
 	case POWER_SUPPLY_PROP_CHARGE_TYPE:
 		if (!smb347_is_online(smb))
 			return -ENODATA;
@@ -1555,6 +1578,7 @@ static int smb347_battery_property_is_writeable(struct power_supply *psy,
 
 static enum power_supply_property smb347_battery_properties[] = {
 	POWER_SUPPLY_PROP_STATUS,
+	POWER_SUPPLY_PROP_CAPACITY,
 	POWER_SUPPLY_PROP_CHARGE_TYPE,
 	POWER_SUPPLY_PROP_TECHNOLOGY,
 	POWER_SUPPLY_PROP_VOLTAGE_MIN_DESIGN,
