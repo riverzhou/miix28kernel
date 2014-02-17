@@ -855,6 +855,8 @@ wcnss_trigger_config(struct platform_device *pdev)
 		return 0;
 	penv->triggered = 1;
 
+	pr_info(DEVICE " %s: triggering config\n", __func__);
+
 	/* initialize the WCNSS device configuration */
 	pdata = pdev->dev.platform_data;
 	if (WCNSS_CONFIG_UNSPECIFIED == has_48mhz_xo)
@@ -940,8 +942,7 @@ fail_pil:
 fail_power:
 	wcnss_gpios_config(penv->gpios_5wire, false);
 fail_gpio_res:
-	kfree(penv);
-	penv = NULL;
+	penv->triggered = 0;
 	return ret;
 }
 
