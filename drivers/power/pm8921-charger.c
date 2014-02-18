@@ -1447,6 +1447,7 @@ static int get_prop_batt_present(struct pm8921_chg_chip *chip)
 
 static int get_prop_batt_capacity(struct pm8921_chg_chip *chip)
 {
+	static unsigned long ptime;
 	int percent_soc;
 
 	if (!get_prop_batt_present(chip))
@@ -1457,7 +1458,8 @@ static int get_prop_batt_capacity(struct pm8921_chg_chip *chip)
 	if (percent_soc == -ENXIO)
 		percent_soc = voltage_based_capacity(chip);
 
-	if (percent_soc <= 10)
+	/* complain every 60 seconds */
+	if (percent_soc <= 10 && printk_timed_ratelimit(&ptime, 60000))
 		pr_warn("low battery charge = %d%%\n", percent_soc);
 
 	chip->recent_reported_soc = percent_soc;
