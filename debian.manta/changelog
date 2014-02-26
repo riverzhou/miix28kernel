@@ -1,9 +1,10 @@
-linux-manta (3.4.0-6.23) trusty; urgency=low
+linux-manta (3.4.0-6.24) trusty; urgency=low
 
   [ Andy Whitcroft ]
 
   * [Config] CONFIG_RT_GROUP_SCHED=n
     - LP: #1284731
+  * [Config] enforcer file cannot be zero length
 
  -- Andy Whitcroft <apw@canonical.com>  Wed, 26 Feb 2014 10:58:59 +0000
 
