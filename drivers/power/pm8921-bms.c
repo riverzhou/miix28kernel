@@ -1003,7 +1003,7 @@ static int ocv_ir_compensation(struct pm8921_bms_chip *chip, int ocv)
 	/* since the SEL_ALT_OREG_BIT is set this will give us VSENSE_OCV */
 	pm8921_bms_get_battery_current(&ibatt_ua);
 	compensated_ocv = ocv + div_s64((s64)ibatt_ua * rbatt_mohm, 1000);
-	pr_info("comp ocv = %d, ocv = %d, ibatt_ua = %d, rbatt_mohm = %d\n",
+	pr_debug("comp ocv = %d, ocv = %d, ibatt_ua = %d, rbatt_mohm = %d\n",
 			compensated_ocv, ocv, ibatt_ua, rbatt_mohm);
 
 	pm_bms_masked_write(chip, BMS_TEST1, SEL_ALT_OREG_BIT, 0);
@@ -1052,7 +1052,7 @@ static int read_soc_params_raw(struct pm8921_bms_chip *chip,
 
 		if (is_warm_restart(chip)) {
 			shutdown_soc_invalid = 1;
-			pr_info("discard shutdown soc! cc_raw = 0x%x\n", raw->cc);
+			pr_debug("discard shutdown soc! cc_raw = 0x%x\n", raw->cc);
 		}
 
 		pr_debug("PON_OCV_UV = %d\n", chip->last_ocv_uv);
@@ -1708,7 +1708,7 @@ static int charging_adjustments(struct pm8921_bms_chip *chip,
 			&& chip->wlc_is_plugged()
 			&& chip->prev_chg_soc < 99
 			&& ibat_ua > eoc_current) {
-		pr_info("ibat < eoc_current ! soc = %d \n", chip->prev_chg_soc);
+		pr_debug("ibat < eoc_current ! soc = %d \n", chip->prev_chg_soc);
 		return chip->prev_chg_soc;
 	}
 
@@ -1860,7 +1860,7 @@ static int adjust_soc(struct pm8921_bms_chip *chip, int soc,
 	soc = soc_new;
 
 out:
-	pr_info("ibat_ua = %d, vbat_uv = %d, soc = %d, batt_temp=%d\n",
+	pr_debug("ibat_ua = %d, vbat_uv = %d, soc = %d, batt_temp=%d\n",
 			ibat_ua, vbat_uv, soc, batt_temp);
 
 	return soc;
@@ -2231,7 +2231,7 @@ static void calculate_soc_work(struct work_struct *work)
 	if (chip->eoc_check_soc
 			&& is_recharging(chip, chip->last_reported_soc)) {
 		pm8921_force_start_charging();
-		pr_info("Recharging is started\n");
+		pr_debug("Recharging is started\n");
 	}
 
 	mutex_unlock(&chip->last_ocv_uv_mutex);
@@ -3435,7 +3435,7 @@ static int __devinit pm8921_bms_probe(struct platform_device *pdev)
 	calculate_soc_work(&(chip->calculate_soc_delayed_work.work));
 
 	get_battery_uvolts(chip, &vbatt);
-	pr_info("OK battery_capacity_at_boot=%d volt = %d ocv = %d\n",
+	pr_debug("OK battery_capacity_at_boot=%d volt = %d ocv = %d\n",
 				pm8921_bms_get_percent_charge(),
 				vbatt, chip->last_ocv_uv);
 
