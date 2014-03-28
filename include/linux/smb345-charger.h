@@ -18,7 +18,7 @@
 #endif
 
 #define SMB_NOTICE(format, arg...)	\
-	printk(KERN_NOTICE "smb345_charger: [%s] " format , __func__ , ## arg)
+	printk(KERN_DEBUG "smb345_charger: [%s] " format , __func__ , ## arg)
 
 #define SMB_ERR(format, arg...)	\
 	printk(KERN_ERR "smb345_charger: [%s] " format , __func__ , ## arg)
