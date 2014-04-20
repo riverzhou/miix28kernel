@@ -51,6 +51,7 @@ static inline int cap_mmap_addr(unsigned long addr)
 /* commits: 259e5e6c75a910f3b5e656151dc602f53f9d7548
             c29bceb3967398cf2ac8bf8edf9634fdb722df7d
 */
+#define LSM_UNSAFE_NO_NEW_PRIVS 0
 /* turn no_new_prics into an always false expr so the compiler throws it away */
 #define no_new_privs did_exec < 0
 
