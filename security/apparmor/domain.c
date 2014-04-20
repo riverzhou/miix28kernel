@@ -799,6 +799,18 @@ int aa_change_profile(const char *ns_name, const char *hname, bool onexec,
 		return -EPERM;
 	}
 
+	/*
+	 * Fail explicitly requested domain transitions if no_new_privs
+	 * and not unconfined.
+	 * Domain transitions from unconfined are allowed even when
+	 * no_new_privs is set because this aways results in a reduction
+	 * of permissions.
+	 */
+	if (current->no_new_privs && !unconfined(profile)) {
+		put_cred(cred);
+		return -EPERM;
+	}
+
 	if (ns_name) {
 		/* released below */
 		ns = aa_find_namespace(profile->ns, ns_name);
