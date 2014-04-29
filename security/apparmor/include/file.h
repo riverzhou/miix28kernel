@@ -17,7 +17,6 @@
 
 #include "domain.h"
 #include "match.h"
-#include "label.h"
 
 struct aa_profile;
 struct path;
@@ -48,8 +47,6 @@ struct path;
 				 AA_MAY_CHMOD | AA_MAY_CHOWN | AA_MAY_LOCK | \
 				 AA_EXEC_MMAP | AA_MAY_LINK)
 
-#define inode_cxt(X) (X)->i_security
-
 /*
  * The xindex is broken into 3 parts
  * - index - an index into either the exec name table or the variable table
@@ -74,7 +71,7 @@ struct path;
 
 /* need to make conditional which ones are being set */
 struct path_cond {
-	kuid_t uid;
+	uid_t uid;
 	umode_t mode;
 };
 
@@ -149,7 +146,7 @@ static inline u16 dfa_map_xindex(u16 mask)
 
 int aa_audit_file(struct aa_profile *profile, struct file_perms *perms,
 		  gfp_t gfp, int op, u32 request, const char *name,
-		  const char *target, kuid_t ouid, const char *info, int error);
+		  const char *target, uid_t ouid, const char *info, int error);
 
 /**
  * struct aa_file_rules - components used for file rule permissions
@@ -174,13 +171,13 @@ unsigned int aa_str_perms(struct aa_dfa *dfa, unsigned int start,
 			  const char *name, struct path_cond *cond,
 			  struct file_perms *perms);
 
-int aa_path_perm(int op, struct aa_label *label, struct path *path,
+int aa_path_perm(int op, struct aa_profile *profile, struct path *path,
 		 int flags, u32 request, struct path_cond *cond);
 
-int aa_path_link(struct aa_label *label, struct dentry *old_dentry,
+int aa_path_link(struct aa_profile *profile, struct dentry *old_dentry,
 		 struct path *new_dir, struct dentry *new_dentry);
 
-int aa_file_perm(int op, struct aa_label *label, struct file *file,
+int aa_file_perm(int op, struct aa_profile *profile, struct file *file,
 		 u32 request);
 
 static inline void aa_free_file_rules(struct aa_file_rules *rules)
@@ -188,6 +185,11 @@ static inline void aa_free_file_rules(struct aa_file_rules *rules)
 	aa_put_dfa(rules->dfa);
 	aa_free_domain_entries(&rules->trans);
 }
+
+#define ACC_FMODE(x) (("\000\004\002\006"[(x)&O_ACCMODE]) | (((x) << 1) & 0x40))
+
+/* from namei.c */
+#define MAP_OPEN_FLAGS(x) ((((x) + 1) & O_ACCMODE) ? (x) + 1 : (x))
 
 /**
  * aa_map_file_perms - map file flags to AppArmor permissions
@@ -197,13 +199,8 @@ static inline void aa_free_file_rules(struct aa_file_rules *rules)
  */
 static inline u32 aa_map_file_to_perms(struct file *file)
 {
-	int flags = file->f_flags;
-	u32 perms = 0;
-
-	if (file->f_mode & FMODE_WRITE)
-		perms |= MAY_WRITE;
-	if (file->f_mode & FMODE_READ)
-		perms |= MAY_READ;
+	int flags = MAP_OPEN_FLAGS(file->f_flags);
+	u32 perms = ACC_FMODE(file->f_mode);
 
 	if ((flags & O_APPEND) && (perms & MAY_WRITE))
 		perms = (perms & ~MAY_WRITE) | MAY_APPEND;

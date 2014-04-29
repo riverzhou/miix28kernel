@@ -17,8 +17,6 @@
 
 #include <linux/sched.h>
 
-#include "apparmorfs.h"
-
 struct aa_profile;
 
 /* aa_caps - confinement data for capabilities
@@ -35,8 +33,6 @@ struct aa_caps {
 	kernel_cap_t kill;
 	kernel_cap_t extended;
 };
-
-extern struct aa_fs_entry aa_fs_entry_caps[];
 
 int aa_capable(struct task_struct *task, struct aa_profile *profile, int cap,
 	       int audit);
