@@ -839,7 +839,6 @@ static int apparmor_unix_stream_connect(struct sock *sock, struct sock *other,
 static int apparmor_unix_may_send(struct socket *sock, struct socket *other)
 {
 	struct aa_sk_cxt *other_cxt = SK_CXT(other->sk);
-	struct aa_sk_cxt *cxt = SK_CXT(sock->sk);
 	struct aa_label *label = __aa_get_current_label();
 	int error;
 
