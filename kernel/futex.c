@@ -640,8 +640,7 @@ void exit_pi_state_list(struct task_struct *curr)
  */
 static int
 lookup_pi_state(u32 uval, struct futex_hash_bucket *hb,
-		union futex_key *key, struct futex_pi_state **ps,
-		struct task_struct *task)
+		union futex_key *key, struct futex_pi_state **ps)
 {
 	struct futex_pi_state *pi_state = NULL;
 	struct futex_q *this, *next;
@@ -887,7 +886,7 @@ retry:
 	 * We dont have the lock. Look up the PI state (or create it if
 	 * we are the first waiter):
 	 */
-	ret = lookup_pi_state(uval, hb, key, ps, task);
+	ret = lookup_pi_state(uval, hb, key, ps);
 
 	if (unlikely(ret)) {
 		switch (ret) {
@@ -1490,7 +1489,7 @@ retry_private:
 			 * rereading and handing potential crap to
 			 * lookup_pi_state.
 			 */
-			ret = lookup_pi_state(ret, hb2, &key2, &pi_state, NULL);
+			ret = lookup_pi_state(ret, hb2, &key2, &pi_state);
 		}
 
 		switch (ret) {
