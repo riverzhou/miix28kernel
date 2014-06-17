@@ -35,6 +35,16 @@ config EXTCON_AXP288
 	  Say Y here to enable support for USB peripheral detection
 	  and USB MUX switching by X-Power AXP288 PMIC.
 
+config EXTCON_INTEL_INT3496
+	tristate "Intel INT3496 ACPI device extcon driver"
+	depends on GPIOLIB && ACPI
+	help
+	  Say Y here to enable extcon support for USB OTG ports controlled by
+	  an Intel INT3496 ACPI device.
+
+          This ACPI device is typically found on Intel Baytrail or Cherrytrail
+          based tablets, or other Baytrail / Cherrytrail devices.
+
 config EXTCON_GPIO
 	tristate "GPIO extcon support"
 	depends on GPIOLIB || COMPILE_TEST
