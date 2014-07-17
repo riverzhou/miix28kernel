@@ -5110,6 +5110,8 @@ EXPORT_SYMBOL vmlinux 0xffa0adaa	tcp_v4_tw_get_peer
 EXPORT_SYMBOL vmlinux 0xffa19009	acpi_gbl_FADT
 EXPORT_SYMBOL vmlinux 0xffd5a395	default_wake_function
 EXPORT_SYMBOL vmlinux 0xffdb82bc	sg_free_table
+EXPORT_SYMBOL_GPL arch/x86/crypto/twofish-i586 0x28afd262	twofish_enc_blk
+EXPORT_SYMBOL_GPL arch/x86/crypto/twofish-i586 0x6f068d90	twofish_dec_blk
 EXPORT_SYMBOL_GPL crypto/af_alg 0x221ff0fc	af_alg_accept
 EXPORT_SYMBOL_GPL crypto/af_alg 0x309af65e	af_alg_release
 EXPORT_SYMBOL_GPL crypto/af_alg 0x3c57020b	af_alg_free_sg
@@ -5130,6 +5132,7 @@ EXPORT_SYMBOL_GPL crypto/async_tx/async_tx 0xe09c9715	async_trigger_callback
 EXPORT_SYMBOL_GPL crypto/async_tx/async_tx 0xe5683c5c	async_tx_submit
 EXPORT_SYMBOL_GPL crypto/async_tx/async_xor 0x0add0149	async_xor
 EXPORT_SYMBOL_GPL crypto/async_tx/async_xor 0x329ead2c	async_xor_val
+EXPORT_SYMBOL_GPL crypto/blowfish_common 0xa85b3187	blowfish_setkey
 EXPORT_SYMBOL_GPL crypto/cryptd 0x01914139	cryptd_free_aead
 EXPORT_SYMBOL_GPL crypto/cryptd 0x0830db43	cryptd_alloc_ahash
 EXPORT_SYMBOL_GPL crypto/cryptd 0x26a4d4dd	cryptd_shash_desc
@@ -5147,6 +5150,8 @@ EXPORT_SYMBOL_GPL crypto/serpent_generic 0x0f16c09a	serpent_setkey
 EXPORT_SYMBOL_GPL crypto/serpent_generic 0x5ddb33e9	__serpent_encrypt
 EXPORT_SYMBOL_GPL crypto/serpent_generic 0x77b39cb4	__serpent_setkey
 EXPORT_SYMBOL_GPL crypto/serpent_generic 0x8a1a99ad	__serpent_decrypt
+EXPORT_SYMBOL_GPL crypto/twofish_common 0x492c8ceb	twofish_setkey
+EXPORT_SYMBOL_GPL crypto/twofish_common 0x6c3229bb	__twofish_setkey
 EXPORT_SYMBOL_GPL crypto/xts 0xc1a6480c	xts_crypt
 EXPORT_SYMBOL_GPL drivers/acpi/sbshc 0x1c8984c7	acpi_smbus_unregister_callback
 EXPORT_SYMBOL_GPL drivers/acpi/sbshc 0x87bd07bd	acpi_smbus_register_callback
@@ -6133,6 +6138,7 @@ EXPORT_SYMBOL_GPL vmlinux 0x3cfedb3f	register_pm_notifier
 EXPORT_SYMBOL_GPL vmlinux 0x3d021fd7	pci_store_saved_state
 EXPORT_SYMBOL_GPL vmlinux 0x3d06e24c	usbhid_set_leds
 EXPORT_SYMBOL_GPL vmlinux 0x3d388324	dpm_resume_end
+EXPORT_SYMBOL_GPL vmlinux 0x3d396a6f	cred_to_ucred
 EXPORT_SYMBOL_GPL vmlinux 0x3d446e40	pci_configure_slot
 EXPORT_SYMBOL_GPL vmlinux 0x3d78bf50	ata_host_register
 EXPORT_SYMBOL_GPL vmlinux 0x3dc916b6	crypto_fl_tab
@@ -6255,7 +6261,6 @@ EXPORT_SYMBOL_GPL vmlinux 0x48a48a38	lookup_instantiate_filp
 EXPORT_SYMBOL_GPL vmlinux 0x48b7121d	inet_csk_search_req
 EXPORT_SYMBOL_GPL vmlinux 0x48eb2369	rtc_irq_set_state
 EXPORT_SYMBOL_GPL vmlinux 0x49196a55	ata_sff_dma_pause
-EXPORT_SYMBOL_GPL vmlinux 0x492c8ceb	twofish_setkey
 EXPORT_SYMBOL_GPL vmlinux 0x494d0e2e	register_pernet_subsys
 EXPORT_SYMBOL_GPL vmlinux 0x49594103	scsi_internal_device_unblock
 EXPORT_SYMBOL_GPL vmlinux 0x4982a57f	probe_kernel_write
@@ -6593,7 +6598,6 @@ EXPORT_SYMBOL_GPL vmlinux 0x6be8b77f	pm_generic_restore_early
 EXPORT_SYMBOL_GPL vmlinux 0x6c1251fd	apei_exec_read_register
 EXPORT_SYMBOL_GPL vmlinux 0x6c1f06f3	udp6_lib_lookup
 EXPORT_SYMBOL_GPL vmlinux 0x6c2f0ee0	ata_dummy_port_info
-EXPORT_SYMBOL_GPL vmlinux 0x6c3229bb	__twofish_setkey
 EXPORT_SYMBOL_GPL vmlinux 0x6c49c4f2	clockevents_notify
 EXPORT_SYMBOL_GPL vmlinux 0x6c8abf08	usb_get_status
 EXPORT_SYMBOL_GPL vmlinux 0x6c8d5ae8	__gpio_get_value
@@ -7012,7 +7016,6 @@ EXPORT_SYMBOL_GPL vmlinux 0x9833bc0c	hvc_kick
 EXPORT_SYMBOL_GPL vmlinux 0x98503a63	mpi_alloc
 EXPORT_SYMBOL_GPL vmlinux 0x98559586	rio_request_outb_mbox
 EXPORT_SYMBOL_GPL vmlinux 0x985a67f3	pci_ioremap_bar
-EXPORT_SYMBOL_GPL vmlinux 0x9871f357	cred_to_ucred
 EXPORT_SYMBOL_GPL vmlinux 0x98bdbc6d	usb_stor_disconnect
 EXPORT_SYMBOL_GPL vmlinux 0x98cc564a	regulator_set_voltage
 EXPORT_SYMBOL_GPL vmlinux 0x98e3561b	nf_conntrack_l4proto_udp4
