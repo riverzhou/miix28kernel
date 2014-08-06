@@ -486,8 +486,7 @@ static int __file_path_perm(int op, struct aa_label *label,
 	/* TODO: fix path lookup flags */
 	flags = PATH_DELEGATE_DELETED | labels_profile(label)->path_flags |
 		(S_ISDIR(cond.mode) ? PATH_IS_DIR : 0);
-	get_buffers(buffer);
-
+	__get_buffers(buffer);
 	error = path_name(op, label, &file->f_path, flags, buffer, &name, &cond,
 			  request, true);
 	if (error) {
@@ -529,8 +528,7 @@ static int __file_path_perm(int op, struct aa_label *label,
 	/*update_file_cxt(fcxt, label, request);*/
 
 out:
-	put_buffers(buffer);
-
+	__put_buffers(buffer);
 	return error;
 }
 
