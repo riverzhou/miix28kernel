@@ -709,6 +709,7 @@ twofish_generic
 u132-hcd
 udl
 udlfb
+uhid
 unix_diag
 usb-common
 usbcore

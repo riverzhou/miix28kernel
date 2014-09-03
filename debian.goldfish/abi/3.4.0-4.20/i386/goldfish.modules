@@ -330,6 +330,7 @@ hv_utils
 hv_vmbus
 hwmon
 hwmon-vid
+i2c-designware-core
 i2c-designware-pci
 i2c-diolan-u2c
 i2c-eg20t
@@ -843,6 +844,7 @@ ucd9000
 ucd9200
 udl
 udlfb
+uhid
 uio
 uio_aec
 uio_cif
