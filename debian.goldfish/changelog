@@ -1,3 +1,13 @@
+linux-goldfish (3.4.0-4.23) utopic; urgency=low
+
+  [ Andy Whitcroft ]
+
+  * SAUCE: ensure that if the first firmware is top level the firmware
+    directory is made.
+    Fixes FTBS
+
+ -- Tim Gardner <tim.gardner@canonical.com>  Mon, 22 Sep 2014 11:59:19 -0600
+
 linux-goldfish (3.4.0-4.22) utopic; urgency=low
 
   [ John Johansen ]
