@@ -5677,6 +5677,7 @@ EXPORT_SYMBOL_GPL vmlinux 0x7c8dce4d	inet6_csk_reqsk_queue_hash_add
 EXPORT_SYMBOL_GPL vmlinux 0x7c9b4658	usb_hcd_unmap_urb_for_dma
 EXPORT_SYMBOL_GPL vmlinux 0x7ca76820	xfrm_audit_state_icvfail
 EXPORT_SYMBOL_GPL vmlinux 0x7ceaf0d5	generic_handle_irq
+EXPORT_SYMBOL_GPL vmlinux 0x7d12914b	exportfs_encode_fh
 EXPORT_SYMBOL_GPL vmlinux 0x7d4fd414	spi_setup
 EXPORT_SYMBOL_GPL vmlinux 0x7d59dd46	pm_wq
 EXPORT_SYMBOL_GPL vmlinux 0x7d7a098e	nf_conntrack_l3proto_generic
@@ -6835,6 +6836,7 @@ EXPORT_SYMBOL_GPL vmlinux 0xf03b943b	crypto_init_shash_spawn
 EXPORT_SYMBOL_GPL vmlinux 0xf07ea9f3	kill_pid_info_as_cred
 EXPORT_SYMBOL_GPL vmlinux 0xf0a97449	pci_find_next_capability
 EXPORT_SYMBOL_GPL vmlinux 0xf0ce15e2	__mnt_is_readonly
+EXPORT_SYMBOL_GPL vmlinux 0xf0cf1acc	exportfs_decode_fh
 EXPORT_SYMBOL_GPL vmlinux 0xf0d700aa	nf_conntrack_l3proto_register
 EXPORT_SYMBOL_GPL vmlinux 0xf0dff4da	wakeup_source_drop
 EXPORT_SYMBOL_GPL vmlinux 0xf0e8c36e	fuse_conn_get
