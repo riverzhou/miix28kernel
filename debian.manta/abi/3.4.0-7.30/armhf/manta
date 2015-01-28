@@ -4296,6 +4296,7 @@ EXPORT_SYMBOL_GPL vmlinux 0x254fa0d1	spi_register_driver
 EXPORT_SYMBOL_GPL vmlinux 0x262f20a8	local_clock
 EXPORT_SYMBOL_GPL vmlinux 0x26335bc5	ftrace_set_filter
 EXPORT_SYMBOL_GPL vmlinux 0x2642f0b0	inet_csk_reqsk_queue_hash_add
+EXPORT_SYMBOL_GPL vmlinux 0x265e3114	exportfs_decode_fh
 EXPORT_SYMBOL_GPL vmlinux 0x2663832e	v4l2_fh_init
 EXPORT_SYMBOL_GPL vmlinux 0x2676c34c	usbnet_skb_return
 EXPORT_SYMBOL_GPL vmlinux 0x26980130	locks_alloc_lock
@@ -6033,6 +6034,7 @@ EXPORT_SYMBOL_GPL vmlinux 0xefc68286	aead_geniv_free
 EXPORT_SYMBOL_GPL vmlinux 0xefcbe218	crypto_shash_digest
 EXPORT_SYMBOL_GPL vmlinux 0xf088d5d8	device_add
 EXPORT_SYMBOL_GPL vmlinux 0xf0956b27	generic_fh_to_dentry
+EXPORT_SYMBOL_GPL vmlinux 0xf0a72381	exportfs_encode_fh
 EXPORT_SYMBOL_GPL vmlinux 0xf0c41fcd	bus_create_file
 EXPORT_SYMBOL_GPL vmlinux 0xf0c8a880	driver_unregister
 EXPORT_SYMBOL_GPL vmlinux 0xf0e6cbf6	regcache_cache_only
