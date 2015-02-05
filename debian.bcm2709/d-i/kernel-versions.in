@@ -5,7 +5,7 @@ i386	PKGVER-ABINUM	generic		PKGVER-ABINUM-generic		-
 
 armhf	PKGVER-ABINUM	generic		PKGVER-ABINUM-generic		-
 
-armhf	PKGVER-ABINUM	generic-lpae		PKGVER-ABINUM-generic-lpae		-
+#armhf	PKGVER-ABINUM	generic-lpae		PKGVER-ABINUM-generic-lpae		-
 
 arm64	PKGVER-ABINUM	generic		PKGVER-ABINUM-generic		-
 
