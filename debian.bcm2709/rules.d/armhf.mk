@@ -14,6 +14,8 @@ do_tools_usbip  = true
 do_tools_cpupower = true
 do_tools_perf	= true
 
+do_common_headers_indep=false
+
 do_dtbs		= true
 disable_d_i = true
 do_libc_dev_package=false
