@@ -20,6 +20,8 @@
 #include <linux/stddef.h>
 
 #include <asm/uaccess.h>
+#include <asm/desc.h>
+#include <asm/vm86.h>
 
 #include "fpu_system.h"
 #include "exception.h"
