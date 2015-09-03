@@ -1,3 +1,10 @@
+linux-mako (3.4.0-7.39) wily; urgency=low
+
+  * No change rebuild to increase the package version above that
+    of the Vivid package.
+
+ -- Tim Gardner <tim.gardner@canonical.com>  Thu, 03 Sep 2015 12:00:17 -0600
+
 linux-mako (3.4.0-7.38) wily; urgency=low
 
   [ Simon Fels ]
