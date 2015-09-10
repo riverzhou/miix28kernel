@@ -8,4 +8,4 @@ repo_list=(
 
 package_prefixes linux-image linux-image-extra
 
-getall armhf generic-bcm2709
+getall armhf raspi2
