@@ -2916,7 +2916,7 @@ CONFIG_PANIC_TIMEOUT				0
 CONFIG_STACKTRACE				y
 CONFIG_PROVIDE_OHCI1394_DMA_INIT		n
 CONFIG_STRICT_DEVMEM				y mark<ENFORCED>
-CONFIG_DEBUG_RODATA				p mark<ENFORCED> policy<{'amd64': 'y', 'i386': 'y', 'arm64': 'y'}>
+CONFIG_DEBUG_RODATA				p mark<ENFORCED> policy<{'amd64': 'y', 'i386': 'y', 'arm64': 'y', 'armhf': 'y'}>
 CONFIG_DEBUG_SET_MODULE_RONX			p mark<ENFORCED> policy<{'powerpc': '-', 'ppc64el': '-', '*': 'y'}>
 CONFIG_EARLY_PRINTK				y
 CONFIG_DEBUG_RODATA				p policy<{'amd64': 'y', 'i386': 'y', 'armhf': 'y'}>
