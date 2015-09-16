@@ -15485,6 +15485,7 @@ EXPORT_SYMBOL_GPL vmlinux 0x3b816f87	trace_seq_putmem
 EXPORT_SYMBOL_GPL vmlinux 0x3ba0d50d	rio_release_outb_dbell
 EXPORT_SYMBOL_GPL vmlinux 0x3c00958f	nvdimm_volatile_region_create
 EXPORT_SYMBOL_GPL vmlinux 0x3c24bbdf	spi_new_device
+EXPORT_SYMBOL_GPL vmlinux 0x3c51ea7c	opal_leds_get_ind
 EXPORT_SYMBOL_GPL vmlinux 0x3c52e2ee	netdev_rx_handler_unregister
 EXPORT_SYMBOL_GPL vmlinux 0x3c9390db	pci_vpd_find_tag
 EXPORT_SYMBOL_GPL vmlinux 0x3c970829	transport_setup_device
@@ -17063,6 +17064,7 @@ EXPORT_SYMBOL_GPL vmlinux 0xaec9921f	hash_page
 EXPORT_SYMBOL_GPL vmlinux 0xaed62406	devm_remove_action
 EXPORT_SYMBOL_GPL vmlinux 0xaf1675d3	device_add
 EXPORT_SYMBOL_GPL vmlinux 0xaf26d57b	get_kernel_page
+EXPORT_SYMBOL_GPL vmlinux 0xaf279112	opal_leds_set_ind
 EXPORT_SYMBOL_GPL vmlinux 0xaf2e8b0a	hrtimer_start_range_ns
 EXPORT_SYMBOL_GPL vmlinux 0xaf437791	pci_check_and_mask_intx
 EXPORT_SYMBOL_GPL vmlinux 0xaf5580e0	usb_phy_set_event

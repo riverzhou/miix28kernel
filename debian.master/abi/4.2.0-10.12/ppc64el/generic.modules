@@ -1762,6 +1762,7 @@ leds-pca9532
 leds-pca955x
 leds-pca963x
 leds-pm8941-wled
+leds-powernv
 leds-pwm
 leds-regulator
 leds-tca6507

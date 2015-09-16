@@ -15787,6 +15787,7 @@ EXPORT_SYMBOL_GPL vmlinux 0x3bf2cd8f	blk_insert_cloned_request
 EXPORT_SYMBOL_GPL vmlinux 0x3bf63815	disk_map_sector_rcu
 EXPORT_SYMBOL_GPL vmlinux 0x3c0df3a0	ip6_append_data
 EXPORT_SYMBOL_GPL vmlinux 0x3c41d3b4	regmap_update_bits_check
+EXPORT_SYMBOL_GPL vmlinux 0x3c51ea7c	opal_leds_get_ind
 EXPORT_SYMBOL_GPL vmlinux 0x3c60e8c5	usb_sg_cancel
 EXPORT_SYMBOL_GPL vmlinux 0x3c6595e0	bmp085_probe
 EXPORT_SYMBOL_GPL vmlinux 0x3c9390db	pci_vpd_find_tag
@@ -17348,6 +17349,7 @@ EXPORT_SYMBOL_GPL vmlinux 0xaec9921f	hash_page
 EXPORT_SYMBOL_GPL vmlinux 0xaed7be8d	pci_user_write_config_dword
 EXPORT_SYMBOL_GPL vmlinux 0xaef58c28	regulator_enable_regmap
 EXPORT_SYMBOL_GPL vmlinux 0xaf0afcc5	rio_request_mport_dma
+EXPORT_SYMBOL_GPL vmlinux 0xaf279112	opal_leds_set_ind
 EXPORT_SYMBOL_GPL vmlinux 0xaf2e8b0a	hrtimer_start_range_ns
 EXPORT_SYMBOL_GPL vmlinux 0xaf362142	blk_mq_cancel_requeue_work
 EXPORT_SYMBOL_GPL vmlinux 0xaf40bcf9	__netpoll_cleanup
