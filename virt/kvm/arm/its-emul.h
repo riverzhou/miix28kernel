@@ -31,5 +31,6 @@
 
 void vgic_enable_lpis(struct kvm_vcpu *vcpu);
 int vits_init(struct kvm *kvm);
+void vits_destroy(struct kvm *kvm);
 
 #endif

@@ -155,6 +155,9 @@ struct vgic_io_device {
 struct vgic_its {
 	bool			enabled;
 	spinlock_t		lock;
+	u64			cbaser;
+	int			creadr;
+	int			cwriter;
 };
 
 struct vgic_dist {

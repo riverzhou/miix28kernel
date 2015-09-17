@@ -928,6 +928,8 @@ static void vgic_v3_destroy_model(struct kvm *kvm)
 {
 	struct vgic_dist *dist = &kvm->arch.vgic;
 
+	vits_destroy(kvm);
+
 	kfree(dist->irq_spi_mpidr);
 	dist->irq_spi_mpidr = NULL;
 }
