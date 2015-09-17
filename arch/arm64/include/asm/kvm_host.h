@@ -40,6 +40,7 @@
 #define KVM_MAX_VCPUS VGIC_V3_MAX_CPUS
 
 #define KVM_VCPU_MAX_FEATURES 3
+#define KVM_IRQCHIP_NUM_PINS 988 /* 1020 - 32 is the number of SPI */
 
 int __attribute_const__ kvm_target_cpu(void);
 int kvm_reset_vcpu(struct kvm_vcpu *vcpu);

@@ -371,6 +371,4 @@ static inline int vgic_v3_probe(struct device_node *vgic_node,
 }
 #endif
 
-int kvm_send_userspace_msi(struct kvm *kvm, struct kvm_msi *msi);
-
 #endif

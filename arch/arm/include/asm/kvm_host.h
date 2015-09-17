@@ -36,6 +36,8 @@
 
 #define KVM_VCPU_MAX_FEATURES 2
 
+#define KVM_IRQCHIP_NUM_PINS 988 /* 1020 - 32 is the number of SPI */
+
 #include <kvm/arm_vgic.h>
 
 #define KVM_MAX_VCPUS VGIC_V2_MAX_CPUS
