@@ -321,7 +321,11 @@ struct kvm_kernel_irq_routing_entry {
 			unsigned irqchip;
 			unsigned pin;
 		} irqchip;
-		struct msi_msg msi;
+		struct {
+			struct msi_msg msi;
+			u32 flags;
+			u32 devid;
+		};
 		struct kvm_s390_adapter_int adapter;
 	};
 	struct hlist_node link;
