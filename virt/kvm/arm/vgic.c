@@ -100,6 +100,14 @@ int kvm_vgic_map_resources(struct kvm *kvm)
 	return kvm->arch.vgic.vm_ops.map_resources(kvm, vgic);
 }
 
+static void vgic_destroy_model(struct kvm *kvm)
+{
+	struct vgic_vm_ops *vm_ops = &kvm->arch.vgic.vm_ops;
+
+	if (vm_ops->destroy_model)
+		vm_ops->destroy_model(kvm);
+}
+
 /*
  * struct vgic_bitmap contains a bitmap made of unsigned longs, but
  * extracts u32s out of them.
@@ -1629,6 +1637,8 @@ void kvm_vgic_destroy(struct kvm *kvm)
 	struct kvm_vcpu *vcpu;
 	int i;
 
+	vgic_destroy_model(kvm);
+
 	kvm_for_each_vcpu(i, vcpu, kvm)
 		kvm_vgic_vcpu_destroy(vcpu);
 
@@ -1645,7 +1655,6 @@ void kvm_vgic_destroy(struct kvm *kvm)
 	}
 	kfree(dist->irq_sgi_sources);
 	kfree(dist->irq_spi_cpu);
-	kfree(dist->irq_spi_mpidr);
 	kfree(dist->irq_spi_target);
 	kfree(dist->irq_pending_on_cpu);
 	kfree(dist->irq_active_on_cpu);

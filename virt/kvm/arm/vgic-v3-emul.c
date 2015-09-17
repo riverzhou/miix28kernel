@@ -862,6 +862,14 @@ static int vgic_v3_init_model(struct kvm *kvm)
 	return 0;
 }
 
+static void vgic_v3_destroy_model(struct kvm *kvm)
+{
+	struct vgic_dist *dist = &kvm->arch.vgic;
+
+	kfree(dist->irq_spi_mpidr);
+	dist->irq_spi_mpidr = NULL;
+}
+
 /* GICv3 does not keep track of SGI sources anymore. */
 static void vgic_v3_add_sgi_source(struct kvm_vcpu *vcpu, int irq, int source)
 {
@@ -874,6 +882,7 @@ void vgic_v3_init_emulation(struct kvm *kvm)
 	dist->vm_ops.queue_sgi = vgic_v3_queue_sgi;
 	dist->vm_ops.add_sgi_source = vgic_v3_add_sgi_source;
 	dist->vm_ops.init_model = vgic_v3_init_model;
+	dist->vm_ops.destroy_model = vgic_v3_destroy_model;
 	dist->vm_ops.map_resources = vgic_v3_map_resources;
 
 	kvm->arch.max_vcpus = KVM_MAX_VCPUS;
