@@ -29,6 +29,9 @@
 
 #include "vgic.h"
 
+#define INTERRUPT_ID_BITS_ITS 16
+#define VITS_NR_LPIS (1U << INTERRUPT_ID_BITS_ITS)
+
 void vgic_enable_lpis(struct kvm_vcpu *vcpu);
 int vits_init(struct kvm *kvm);
 void vits_destroy(struct kvm *kvm);
