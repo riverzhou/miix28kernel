@@ -152,6 +152,11 @@ struct vgic_io_device {
 	struct kvm_io_device dev;
 };
 
+struct vgic_its {
+	bool			enabled;
+	spinlock_t		lock;
+};
+
 struct vgic_dist {
 	spinlock_t		lock;
 	bool			in_kernel;
@@ -260,6 +265,7 @@ struct vgic_dist {
 	u64			*pendbaser;
 
 	bool			lpis_enabled;
+	struct vgic_its		its;
 };
 
 struct vgic_v2_cpu_if {

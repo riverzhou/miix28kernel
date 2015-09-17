@@ -177,6 +177,7 @@
 #define GITS_CWRITER			0x0088
 #define GITS_CREADR			0x0090
 #define GITS_BASER			0x0100
+#define GITS_IDREGS_BASE		0xffd0
 #define GITS_PIDR2			GICR_PIDR2
 
 #define GITS_TRANSLATER			0x10040
