@@ -50,7 +50,25 @@ struct its_itte {
 	struct its_collection *collection;
 	u32 lpi;
 	u32 event_id;
+	bool enabled;
+	unsigned long *pending;
 };
+
+#define for_each_lpi(dev, itte, kvm) \
+	list_for_each_entry(dev, &(kvm)->arch.vgic.its.device_list, dev_list) \
+		list_for_each_entry(itte, &(dev)->itt, itte_list)
+
+static struct its_itte *find_itte_by_lpi(struct kvm *kvm, int lpi)
+{
+	struct its_device *device;
+	struct its_itte *itte;
+
+	for_each_lpi(device, itte, kvm) {
+		if (itte->lpi == lpi)
+			return itte;
+	}
+	return NULL;
+}
 
 #define BASER_BASE_ADDRESS(x) ((x) & 0xfffffffff000ULL)
 
@@ -143,6 +161,59 @@ static bool handle_mmio_gits_idregs(struct kvm_vcpu *vcpu,
 	vgic_reg_access(mmio, &reg, offset & 3,
 			ACCESS_READ_VALUE | ACCESS_WRITE_IGNORED);
 	return false;
+}
+
+/*
+ * Find all enabled and pending LPIs and queue them into the list
+ * registers.
+ * The dist lock is held by the caller.
+ */
+bool vits_queue_lpis(struct kvm_vcpu *vcpu)
+{
+	struct vgic_its *its = &vcpu->kvm->arch.vgic.its;
+	struct its_device *device;
+	struct its_itte *itte;
+	bool ret = true;
+
+	if (!vgic_has_its(vcpu->kvm))
+		return true;
+	if (!its->enabled || !vcpu->kvm->arch.vgic.lpis_enabled)
+		return true;
+
+	spin_lock(&its->lock);
+	for_each_lpi(device, itte, vcpu->kvm) {
+		if (!itte->enabled || !test_bit(vcpu->vcpu_id, itte->pending))
+			continue;
+
+		if (!itte->collection)
+			continue;
+
+		if (itte->collection->target_addr != vcpu->vcpu_id)
+			continue;
+
+		__clear_bit(vcpu->vcpu_id, itte->pending);
+
+		ret &= vgic_queue_irq(vcpu, 0, itte->lpi);
+	}
+
+	spin_unlock(&its->lock);
+	return ret;
+}
+
+/* Called with the distributor lock held by the caller. */
+void vits_unqueue_lpi(struct kvm_vcpu *vcpu, int lpi)
+{
+	struct vgic_its *its = &vcpu->kvm->arch.vgic.its;
+	struct its_itte *itte;
+
+	spin_lock(&its->lock);
+
+	/* Find the right ITTE and put the pending state back in there */
+	itte = find_itte_by_lpi(vcpu->kvm, lpi);
+	if (itte)
+		__set_bit(vcpu->vcpu_id, itte->pending);
+
+	spin_unlock(&its->lock);
 }
 
 static int vits_handle_command(struct kvm_vcpu *vcpu, u64 *its_cmd)

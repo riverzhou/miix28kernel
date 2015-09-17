@@ -95,6 +95,20 @@ static bool queue_sgi(struct kvm_vcpu *vcpu, int irq)
 	return vcpu->kvm->arch.vgic.vm_ops.queue_sgi(vcpu, irq);
 }
 
+static bool vgic_queue_lpis(struct kvm_vcpu *vcpu)
+{
+	if (vcpu->kvm->arch.vgic.vm_ops.queue_lpis)
+		return vcpu->kvm->arch.vgic.vm_ops.queue_lpis(vcpu);
+	else
+		return true;
+}
+
+static void vgic_unqueue_lpi(struct kvm_vcpu *vcpu, int irq)
+{
+	if (vcpu->kvm->arch.vgic.vm_ops.unqueue_lpi)
+		vcpu->kvm->arch.vgic.vm_ops.unqueue_lpi(vcpu, irq);
+}
+
 int kvm_vgic_map_resources(struct kvm *kvm)
 {
 	return kvm->arch.vgic.vm_ops.map_resources(kvm, vgic);
@@ -1135,6 +1149,10 @@ static void vgic_retire_disabled_irqs(struct kvm_vcpu *vcpu)
 	for_each_clear_bit(lr, elrsr_ptr, vgic->nr_lr) {
 		vlr = vgic_get_lr(vcpu, lr);
 
+		/* We don't care about LPIs here */
+		if (vlr.irq >= 8192)
+			continue;
+
 		if (!vgic_irq_is_enabled(vcpu, vlr.irq)) {
 			vlr.state = 0;
 			vgic_set_lr(vcpu, lr, vlr);
@@ -1147,25 +1165,33 @@ static void vgic_retire_disabled_irqs(struct kvm_vcpu *vcpu)
 static void vgic_queue_irq_to_lr(struct kvm_vcpu *vcpu, int irq,
 				 int lr_nr, int sgi_source_id)
 {
+	struct vgic_dist *dist = &vcpu->kvm->arch.vgic;
 	struct vgic_lr vlr;
 
 	vlr.state = 0;
 	vlr.irq = irq;
 	vlr.source = sgi_source_id;
 
-	if (vgic_irq_is_active(vcpu, irq)) {
-		vlr.state |= LR_STATE_ACTIVE;
-		kvm_debug("Set active, clear distributor: 0x%x\n", vlr.state);
-		vgic_irq_clear_active(vcpu, irq);
-		vgic_update_state(vcpu->kvm);
-	} else if (vgic_dist_irq_is_pending(vcpu, irq)) {
-		vlr.state |= LR_STATE_PENDING;
-		kvm_debug("Set pending: 0x%x\n", vlr.state);
+	/* We care only about state for SGIs/PPIs/SPIs, not for LPIs */
+	if (irq < dist->nr_irqs) {
+		if (vgic_irq_is_active(vcpu, irq)) {
+			vlr.state |= LR_STATE_ACTIVE;
+			kvm_debug("Set active, clear distributor: 0x%x\n",
+				  vlr.state);
+			vgic_irq_clear_active(vcpu, irq);
+			vgic_update_state(vcpu->kvm);
+		} else if (vgic_dist_irq_is_pending(vcpu, irq)) {
+			vlr.state |= LR_STATE_PENDING;
+			kvm_debug("Set pending: 0x%x\n", vlr.state);
+		}
+
+		if (!vgic_irq_is_edge(vcpu, irq))
+			vlr.state |= LR_EOI_INT;
+	} else {
+		/* If this is an LPI, it can only be pending */
+		if (irq >= 8192)
+			vlr.state |= LR_STATE_PENDING;
 	}
-
-	if (!vgic_irq_is_edge(vcpu, irq))
-		vlr.state |= LR_EOI_INT;
-
 	vgic_set_lr(vcpu, lr_nr, vlr);
 	vgic_sync_lr_elrsr(vcpu, lr_nr, vlr);
 }
@@ -1177,7 +1203,6 @@ static void vgic_queue_irq_to_lr(struct kvm_vcpu *vcpu, int irq,
  */
 bool vgic_queue_irq(struct kvm_vcpu *vcpu, u8 sgi_source_id, int irq)
 {
-	struct vgic_dist *dist = &vcpu->kvm->arch.vgic;
 	u64 elrsr = vgic_get_elrsr(vcpu);
 	unsigned long *elrsr_ptr = u64_to_bitmask(&elrsr);
 	int lr;
@@ -1185,7 +1210,6 @@ bool vgic_queue_irq(struct kvm_vcpu *vcpu, u8 sgi_source_id, int irq)
 	/* Sanitize the input... */
 	BUG_ON(sgi_source_id & ~7);
 	BUG_ON(sgi_source_id && irq >= VGIC_NR_SGIS);
-	BUG_ON(irq >= dist->nr_irqs);
 
 	kvm_debug("Queue IRQ%d\n", irq);
 
@@ -1265,8 +1289,12 @@ static void __kvm_vgic_flush_hwstate(struct kvm_vcpu *vcpu)
 			overflow = 1;
 	}
 
-
-
+	/*
+	 * LPIs are not mapped in our bitmaps, so we leave the iteration
+	 * to the ITS emulation code.
+	 */
+	if (!vgic_queue_lpis(vcpu))
+		overflow = 1;
 
 epilog:
 	if (overflow) {
@@ -1387,6 +1415,16 @@ static void __kvm_vgic_sync_hwstate(struct kvm_vcpu *vcpu)
 	for_each_clear_bit(lr_nr, elrsr_ptr, vgic_cpu->nr_lr) {
 		vlr = vgic_get_lr(vcpu, lr_nr);
 
+		/* LPIs are handled separately */
+		if (vlr.irq >= 8192) {
+			/* We just need to take care about still pending LPIs */
+			if (vlr.state & LR_STATE_PENDING) {
+				vgic_unqueue_lpi(vcpu, vlr.irq);
+				pending = true;
+			}
+			continue;
+		}
+
 		BUG_ON(!(vlr.state & LR_STATE_MASK));
 		pending = true;
 
@@ -1411,7 +1449,7 @@ static void __kvm_vgic_sync_hwstate(struct kvm_vcpu *vcpu)
 	}
 	vgic_update_state(vcpu->kvm);
 
-	/* vgic_update_state would not cover only-active IRQs */
+	/* vgic_update_state would not cover only-active IRQs or LPIs */
 	if (pending)
 		set_bit(vcpu->vcpu_id, dist->irq_pending_on_cpu);
 }

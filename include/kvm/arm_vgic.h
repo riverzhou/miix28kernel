@@ -143,6 +143,8 @@ struct vgic_vm_ops {
 	int	(*init_model)(struct kvm *);
 	void	(*destroy_model)(struct kvm *);
 	int	(*map_resources)(struct kvm *, const struct vgic_params *);
+	bool	(*queue_lpis)(struct kvm_vcpu *);
+	void	(*unqueue_lpi)(struct kvm_vcpu *, int irq);
 };
 
 struct vgic_io_device {
