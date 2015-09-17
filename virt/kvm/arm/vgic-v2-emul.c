@@ -478,6 +478,21 @@ static bool vgic_v2_queue_sgi(struct kvm_vcpu *vcpu, int irq)
 }
 
 /**
+ * vgic_v2m_inject_msi: emulates GICv2M MSI injection by injecting
+ * the SPI ID matching the msi data
+ *
+ * @kvm: pointer to the kvm struct
+ * @msi: the msi struct handle
+ */
+static int vgic_v2m_inject_msi(struct kvm *kvm, struct kvm_msi *msi)
+{
+	if (msi->flags & KVM_MSI_VALID_DEVID)
+		return -EINVAL;
+
+	return kvm_vgic_inject_irq(kvm, 0, msi->data, 1);
+}
+
+/**
  * kvm_vgic_map_resources - Configure global VGIC state before running any VCPUs
  * @kvm: pointer to the kvm struct
  *
@@ -566,6 +581,7 @@ void vgic_v2_init_emulation(struct kvm *kvm)
 	dist->vm_ops.add_sgi_source = vgic_v2_add_sgi_source;
 	dist->vm_ops.init_model = vgic_v2_init_model;
 	dist->vm_ops.map_resources = vgic_v2_map_resources;
+	dist->vm_ops.inject_msi = vgic_v2m_inject_msi;
 
 	dist->vgic_cpu_base = VGIC_ADDR_UNDEF;
 	dist->vgic_dist_base = VGIC_ADDR_UNDEF;
