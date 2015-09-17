@@ -8,7 +8,6 @@
  *
  * Limitations of the emulation:
  * (RAZ/WI: read as zero, write ignore, RAO/WI: read as one, write ignore)
- * - We do not support LPIs (yet). TYPER.LPIS is reported as 0 and is RAZ/WI.
  * - We do not support the message based interrupts (MBIs) triggered by
  *   writes to the GICD_{SET,CLR}SPI_* registers. TYPER.MBIS is reported as 0.
  * - We do not support the (optional) backwards compatibility feature.
@@ -87,10 +86,10 @@ static bool handle_mmio_ctlr(struct kvm_vcpu *vcpu,
 /*
  * As this implementation does not provide compatibility
  * with GICv2 (ARE==1), we report zero CPUs in bits [5..7].
- * Also LPIs and MBIs are not supported, so we set the respective bits to 0.
- * Also we report at most 2**10=1024 interrupt IDs (to match 1024 SPIs).
+ * Also we report at most 2**10=1024 interrupt IDs (to match 1024 SPIs)
+ * and provide 16 bits worth of LPI number space (to give 8192 LPIs).
  */
-#define INTERRUPT_ID_BITS 10
+#define INTERRUPT_ID_BITS_SPIS 10
 static bool handle_mmio_typer(struct kvm_vcpu *vcpu,
 			      struct kvm_exit_mmio *mmio, phys_addr_t offset)
 {
@@ -98,7 +97,12 @@ static bool handle_mmio_typer(struct kvm_vcpu *vcpu,
 
 	reg = (min(vcpu->kvm->arch.vgic.nr_irqs, 1024) >> 5) - 1;
 
-	reg |= (INTERRUPT_ID_BITS - 1) << 19;
+	if (vgic_has_its(vcpu->kvm)) {
+		reg |= GICD_TYPER_LPIS;
+		reg |= (INTERRUPT_ID_BITS_ITS - 1) << 19;
+	} else {
+		reg |= (INTERRUPT_ID_BITS_SPIS - 1) << 19;
+	}
 
 	vgic_reg_access(mmio, &reg, offset,
 			ACCESS_READ_VALUE | ACCESS_WRITE_IGNORED);
@@ -543,7 +547,9 @@ static bool handle_mmio_ctlr_redist(struct kvm_vcpu *vcpu,
 	vgic_reg_access(mmio, &reg, offset,
 			ACCESS_READ_VALUE | ACCESS_WRITE_VALUE);
 	if (!dist->lpis_enabled && (reg & GICR_CTLR_ENABLE_LPIS)) {
-		/* Eventually do something */
+		vgic_enable_lpis(vcpu);
+		dist->lpis_enabled = true;
+		return true;
 	}
 	return false;
 }
@@ -570,6 +576,8 @@ static bool handle_mmio_typer_redist(struct kvm_vcpu *vcpu,
 	reg = redist_vcpu->vcpu_id << 8;
 	if (target_vcpu_id == atomic_read(&vcpu->kvm->online_vcpus) - 1)
 		reg |= GICR_TYPER_LAST;
+	if (vgic_has_its(vcpu->kvm))
+		reg |= GICR_TYPER_PLPIS;
 	vgic_reg_access(mmio, &reg, offset,
 			ACCESS_READ_VALUE | ACCESS_WRITE_IGNORED);
 	return false;

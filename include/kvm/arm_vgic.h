@@ -158,6 +158,7 @@ struct vgic_io_device {
 
 struct vgic_its {
 	bool			enabled;
+	struct vgic_io_device	iodev;
 	spinlock_t		lock;
 	u64			cbaser;
 	int			creadr;
@@ -175,6 +176,9 @@ struct vgic_dist {
 
 	/* vGIC model the kernel emulates for the guest (GICv2 or GICv3) */
 	u32			vgic_model;
+
+	/* Do injected MSIs require an additional device ID? */
+	bool			msis_require_devid;
 
 	int			nr_cpus;
 	int			nr_irqs;
@@ -366,5 +370,7 @@ static inline int vgic_v3_probe(struct device_node *vgic_node,
 	return -ENODEV;
 }
 #endif
+
+int kvm_send_userspace_msi(struct kvm *kvm, struct kvm_msi *msi);
 
 #endif

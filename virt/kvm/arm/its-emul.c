@@ -1073,6 +1073,7 @@ int vits_init(struct kvm *kvm)
 {
 	struct vgic_dist *dist = &kvm->arch.vgic;
 	struct vgic_its *its = &dist->its;
+	int ret;
 
 	dist->pendbaser = kmalloc(sizeof(u64) * dist->nr_cpus, GFP_KERNEL);
 	if (!dist->pendbaser)
@@ -1087,9 +1088,16 @@ int vits_init(struct kvm *kvm)
 	INIT_LIST_HEAD(&its->device_list);
 	INIT_LIST_HEAD(&its->collection_list);
 
-	its->enabled = false;
+	ret = vgic_register_kvm_io_dev(kvm, dist->vgic_its_base,
+				       KVM_VGIC_V3_ITS_SIZE, vgicv3_its_ranges,
+				       -1, &its->iodev);
+	if (ret)
+		return ret;
 
-	return -ENXIO;
+	its->enabled = false;
+	dist->msis_require_devid = true;
+
+	return 0;
 }
 
 void vits_destroy(struct kvm *kvm)

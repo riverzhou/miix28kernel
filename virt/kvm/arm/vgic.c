@@ -2246,3 +2246,11 @@ int kvm_set_msi(struct kvm_kernel_irq_routing_entry *e,
 {
 	return 0;
 }
+
+int kvm_send_userspace_msi(struct kvm *kvm, struct kvm_msi *msi)
+{
+	if (kvm->arch.vgic.vm_ops.inject_msi)
+		return kvm->arch.vgic.vm_ops.inject_msi(kvm, msi);
+	else
+		return -ENODEV;
+}
