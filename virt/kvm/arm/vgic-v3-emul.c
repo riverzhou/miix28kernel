@@ -885,6 +885,9 @@ void vgic_v3_init_emulation(struct kvm *kvm)
 	dist->vm_ops.destroy_model = vgic_v3_destroy_model;
 	dist->vm_ops.map_resources = vgic_v3_map_resources;
 
+	dist->vgic_dist_base = VGIC_ADDR_UNDEF;
+	dist->vgic_redist_base = VGIC_ADDR_UNDEF;
+
 	kvm->arch.max_vcpus = KVM_MAX_VCPUS;
 }
 

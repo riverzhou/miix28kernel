@@ -567,6 +567,9 @@ void vgic_v2_init_emulation(struct kvm *kvm)
 	dist->vm_ops.init_model = vgic_v2_init_model;
 	dist->vm_ops.map_resources = vgic_v2_map_resources;
 
+	dist->vgic_cpu_base = VGIC_ADDR_UNDEF;
+	dist->vgic_dist_base = VGIC_ADDR_UNDEF;
+
 	kvm->arch.max_vcpus = VGIC_V2_MAX_CPUS;
 }
 
