@@ -145,6 +145,7 @@ struct vgic_vm_ops {
 	int	(*map_resources)(struct kvm *, const struct vgic_params *);
 	bool	(*queue_lpis)(struct kvm_vcpu *);
 	void	(*unqueue_lpi)(struct kvm_vcpu *, int irq);
+	int	(*inject_msi)(struct kvm *, struct kvm_msi *);
 };
 
 struct vgic_io_device {

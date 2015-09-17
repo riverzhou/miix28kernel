@@ -323,6 +323,55 @@ static bool handle_mmio_gits_idregs(struct kvm_vcpu *vcpu,
 }
 
 /*
+ * Translates an incoming MSI request into the redistributor (=VCPU) and
+ * the associated LPI number. Sets the LPI pending bit and also marks the
+ * VCPU as having a pending interrupt.
+ */
+int vits_inject_msi(struct kvm *kvm, struct kvm_msi *msi)
+{
+	struct vgic_dist *dist = &kvm->arch.vgic;
+	struct vgic_its *its = &dist->its;
+	struct its_itte *itte;
+	int cpuid;
+	bool inject = false;
+	int ret = 0;
+
+	if (!vgic_has_its(kvm))
+		return -ENODEV;
+
+	if (!(msi->flags & KVM_MSI_VALID_DEVID))
+		return -EINVAL;
+
+	spin_lock(&its->lock);
+
+	if (!its->enabled || !dist->lpis_enabled) {
+		ret = -EAGAIN;
+		goto out_unlock;
+	}
+
+	itte = find_itte(kvm, msi->devid, msi->data);
+	/* Triggering an unmapped IRQ gets silently dropped. */
+	if (!itte || !itte->collection)
+		goto out_unlock;
+
+	cpuid = itte->collection->target_addr;
+	__set_bit(cpuid, itte->pending);
+	inject = itte->enabled;
+
+out_unlock:
+	spin_unlock(&its->lock);
+
+	if (inject) {
+		spin_lock(&dist->lock);
+		__set_bit(cpuid, dist->irq_pending_on_cpu);
+		spin_unlock(&dist->lock);
+		kvm_vcpu_kick(kvm_get_vcpu(kvm, cpuid));
+	}
+
+	return ret;
+}
+
+/*
  * Find all enabled and pending LPIs and queue them into the list
  * registers.
  * The dist lock is held by the caller.
@@ -787,6 +836,19 @@ static int vits_cmd_handle_movall(struct kvm *kvm, u64 *its_cmd)
 	return 0;
 }
 
+/* The INT command injects the LPI associated with that DevID/EvID pair. */
+static int vits_cmd_handle_int(struct kvm *kvm, u64 *its_cmd)
+{
+	struct kvm_msi msi = {
+		.data = its_cmd_get_id(its_cmd),
+		.devid = its_cmd_get_deviceid(its_cmd),
+		.flags = KVM_MSI_VALID_DEVID,
+	};
+
+	vits_inject_msi(kvm, &msi);
+	return 0;
+}
+
 static int vits_handle_command(struct kvm_vcpu *vcpu, u64 *its_cmd)
 {
 	u8 cmd = its_cmd_get_command(its_cmd);
@@ -816,6 +878,9 @@ static int vits_handle_command(struct kvm_vcpu *vcpu, u64 *its_cmd)
 		break;
 	case GITS_CMD_MOVALL:
 		ret = vits_cmd_handle_movall(vcpu->kvm, its_cmd);
+		break;
+	case GITS_CMD_INT:
+		ret = vits_cmd_handle_int(vcpu->kvm, its_cmd);
 		break;
 	case GITS_CMD_INV:
 		ret = vits_cmd_handle_inv(vcpu->kvm, its_cmd);

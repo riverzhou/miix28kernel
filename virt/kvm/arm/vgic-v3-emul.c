@@ -948,6 +948,7 @@ void vgic_v3_init_emulation(struct kvm *kvm)
 	dist->vm_ops.init_model = vgic_v3_init_model;
 	dist->vm_ops.destroy_model = vgic_v3_destroy_model;
 	dist->vm_ops.map_resources = vgic_v3_map_resources;
+	dist->vm_ops.inject_msi = vits_inject_msi;
 	dist->vm_ops.queue_lpis = vits_queue_lpis;
 	dist->vm_ops.unqueue_lpi = vits_unqueue_lpi;
 
