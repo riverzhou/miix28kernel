@@ -39,6 +39,15 @@ Groups:
       Only valid for KVM_DEV_TYPE_ARM_VGIC_V3.
       This address needs to be 64K aligned.
 
+    KVM_VGIC_V3_ADDR_TYPE_ITS (rw, 64-bit)
+      Base address in the guest physical address space of the GICv3 ITS
+      control register frame. The ITS allows MSI(-X) interrupts to be
+      injected into guests. This extension is optional, if the kernel
+      does not support the ITS, the call returns -ENODEV.
+      This memory is solely for the guest to access the ITS control
+      registers and does not cover the ITS translation register.
+      Only valid for KVM_DEV_TYPE_ARM_VGIC_V3.
+      This address needs to be 64K aligned and the region covers 64 KByte.
 
   KVM_DEV_ARM_VGIC_GRP_DIST_REGS
   Attributes:

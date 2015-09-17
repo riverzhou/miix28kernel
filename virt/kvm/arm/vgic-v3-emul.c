@@ -887,6 +887,7 @@ void vgic_v3_init_emulation(struct kvm *kvm)
 
 	dist->vgic_dist_base = VGIC_ADDR_UNDEF;
 	dist->vgic_redist_base = VGIC_ADDR_UNDEF;
+	dist->vgic_its_base = VGIC_ADDR_UNDEF;
 
 	kvm->arch.max_vcpus = KVM_MAX_VCPUS;
 }
@@ -1059,6 +1060,7 @@ static int vgic_v3_has_attr(struct kvm_device *dev,
 			return -ENXIO;
 		case KVM_VGIC_V3_ADDR_TYPE_DIST:
 		case KVM_VGIC_V3_ADDR_TYPE_REDIST:
+		case KVM_VGIC_V3_ADDR_TYPE_ITS:
 			return 0;
 		}
 		break;

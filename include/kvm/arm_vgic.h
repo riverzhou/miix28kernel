@@ -174,6 +174,9 @@ struct vgic_dist {
 		phys_addr_t		vgic_redist_base;
 	};
 
+	/* The base address of the ITS control register frame */
+	phys_addr_t		vgic_its_base;
+
 	/* Distributor enabled */
 	u32			enabled;
 
