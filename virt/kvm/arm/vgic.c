@@ -446,6 +446,41 @@ void vgic_reg_access(struct kvm_exit_mmio *mmio, u32 *reg,
 	}
 }
 
+/* handle a 64-bit register access */
+void vgic_handle_base_register(struct kvm_vcpu *vcpu,
+			       struct kvm_exit_mmio *mmio,
+			       phys_addr_t offset, u64 *basereg,
+			       int mode)
+{
+	u32 reg;
+	u64 breg;
+
+	switch (offset & ~3) {
+	case 0x00:
+		breg = *basereg;
+		reg = lower_32_bits(breg);
+		vgic_reg_access(mmio, &reg, offset & 3, mode);
+		if (mmio->is_write && (mode & ACCESS_WRITE_VALUE)) {
+			breg &= GENMASK_ULL(63, 32);
+			breg |= reg;
+			*basereg = breg;
+		}
+		break;
+	case 0x04:
+		breg = *basereg;
+		reg = upper_32_bits(breg);
+		vgic_reg_access(mmio, &reg, offset & 3, mode);
+		if (mmio->is_write && (mode & ACCESS_WRITE_VALUE)) {
+			breg  = lower_32_bits(breg);
+			breg |= (u64)reg << 32;
+			*basereg = breg;
+		}
+		break;
+	}
+}
+
+
+
 bool handle_mmio_raz_wi(struct kvm_vcpu *vcpu, struct kvm_exit_mmio *mmio,
 			phys_addr_t offset)
 {

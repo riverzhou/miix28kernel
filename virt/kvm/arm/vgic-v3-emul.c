@@ -651,6 +651,38 @@ static bool handle_mmio_cfg_reg_redist(struct kvm_vcpu *vcpu,
 	return vgic_handle_cfg_reg(reg, mmio, offset);
 }
 
+/* We don't trigger any actions here, just store the register value */
+static bool handle_mmio_propbaser_redist(struct kvm_vcpu *vcpu,
+					 struct kvm_exit_mmio *mmio,
+					 phys_addr_t offset)
+{
+	struct vgic_dist *dist = &vcpu->kvm->arch.vgic;
+	int mode = ACCESS_READ_VALUE;
+
+	/* Storing a value with LPIs already enabled is undefined */
+	mode |= dist->lpis_enabled ? ACCESS_WRITE_IGNORED : ACCESS_WRITE_VALUE;
+	vgic_handle_base_register(vcpu, mmio, offset, &dist->propbaser, mode);
+
+	return false;
+}
+
+/* We don't trigger any actions here, just store the register value */
+static bool handle_mmio_pendbaser_redist(struct kvm_vcpu *vcpu,
+					 struct kvm_exit_mmio *mmio,
+					 phys_addr_t offset)
+{
+	struct kvm_vcpu *rdvcpu = mmio->private;
+	struct vgic_dist *dist = &vcpu->kvm->arch.vgic;
+	int mode = ACCESS_READ_VALUE;
+
+	/* Storing a value with LPIs already enabled is undefined */
+	mode |= dist->lpis_enabled ? ACCESS_WRITE_IGNORED : ACCESS_WRITE_VALUE;
+	vgic_handle_base_register(vcpu, mmio, offset,
+				  &dist->pendbaser[rdvcpu->vcpu_id], mode);
+
+	return false;
+}
+
 #define SGI_base(x) ((x) + SZ_64K)
 
 static const struct vgic_io_range vgic_redist_ranges[] = {
@@ -677,6 +709,18 @@ static const struct vgic_io_range vgic_redist_ranges[] = {
 		.len            = 0x04,
 		.bits_per_irq   = 0,
 		.handle_mmio    = handle_mmio_raz_wi,
+	},
+	{
+		.base		= GICR_PENDBASER,
+		.len		= 0x08,
+		.bits_per_irq	= 0,
+		.handle_mmio	= handle_mmio_pendbaser_redist,
+	},
+	{
+		.base		= GICR_PROPBASER,
+		.len		= 0x08,
+		.bits_per_irq	= 0,
+		.handle_mmio	= handle_mmio_propbaser_redist,
 	},
 	{
 		.base           = GICR_IDREGS,
