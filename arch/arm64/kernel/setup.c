@@ -65,6 +65,7 @@
 #include <asm/efi.h>
 #include <asm/virt.h>
 #include <asm/xen/hypervisor.h>
+#include <asm/numa.h>
 
 unsigned long elf_hwcap __read_mostly;
 EXPORT_SYMBOL_GPL(elf_hwcap);
@@ -437,6 +438,9 @@ static int __init topology_init(void)
 {
 	int i;
 
+	for_each_online_node(i)
+		register_one_node(i);
+
 	for_each_possible_cpu(i) {
 		struct cpu *cpu = &per_cpu(cpu_data.cpu, i);
 		cpu->hotpluggable = 1;
@@ -509,7 +513,12 @@ static int c_show(struct seq_file *m, void *v)
 		 * "processor".  Give glibc what it expects.
 		 */
 #ifdef CONFIG_SMP
+	if (IS_ENABLED(CONFIG_NUMA)) {
+		seq_printf(m, "processor\t: %d", i);
+		seq_printf(m, " [nid: %d]\n", cpu_to_node(i));
+	} else {
 		seq_printf(m, "processor\t: %d\n", i);
+	}
 #endif
 
 		/*
