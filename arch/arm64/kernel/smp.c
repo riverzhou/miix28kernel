@@ -503,6 +503,7 @@ void __init of_parse_and_init_cpus(void)
 
 		pr_debug("cpu logical map 0x%llx\n", hwid);
 		cpu_logical_map(cpu_count) = hwid;
+		dt_numa_set_node_info(cpu_count, hwid, (void *)dn);
 next:
 		cpu_count++;
 	}

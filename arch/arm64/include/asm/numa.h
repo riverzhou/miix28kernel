@@ -33,10 +33,17 @@ int __init numa_add_memblk(u32 nodeid, u64 start, u64 end);
 void numa_store_cpu_info(int cpu);
 void __init build_cpu_to_node_map(void);
 void __init numa_set_distance(int from, int to, int distance);
+#if defined(CONFIG_ARM64_DT_NUMA)
+void __init dt_numa_set_node_info(u32 cpu, u64 hwid, void *dn);
+#else
+static inline void dt_numa_set_node_info(u32 cpu, u64 hwid, void *dn) { }
+#endif
+int __init arm64_dt_numa_init(void);
 #else	/* CONFIG_NUMA */
 static inline void numa_store_cpu_info(int cpu)		{ }
 static inline void arm64_numa_init(void)		{ }
 static inline void build_cpu_to_node_map(void) { }
 static inline void numa_set_distance(int from, int to, int distance) { }
+static inline void dt_numa_set_node_info(u32 cpu, u64 hwid, void *dn) { }
 #endif	/* CONFIG_NUMA */
 #endif	/* _ASM_NUMA_H */

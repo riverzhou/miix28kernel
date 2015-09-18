@@ -28,6 +28,7 @@
 #include <linux/nodemask.h>
 #include <linux/sched.h>
 #include <linux/topology.h>
+#include <linux/of.h>
 #include <linux/mmzone.h>
 
 #include <asm/smp_plat.h>
@@ -546,5 +547,17 @@ static int __init dummy_numa_init(void)
  */
 void __init arm64_numa_init(void)
 {
+	int (*init_func)(void);
+
+	if (IS_ENABLED(CONFIG_ARM64_DT_NUMA))
+		init_func = arm64_dt_numa_init;
+	else
+		init_func = NULL;
+
+	if (!numa_off && init_func) {
+		if (!numa_init(init_func))
+			return;
+	}
+
 	numa_init(dummy_numa_init);
 }

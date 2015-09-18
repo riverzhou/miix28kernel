@@ -549,6 +549,12 @@ config NUMA
 	  local memory controller of the CPU and add some more
 	  NUMA awareness to the kernel.
 
+config ARM64_DT_NUMA
+	bool "Device Tree NUMA support"
+	depends on NUMA
+	help
+	  Enable Device Tree NUMA support.
+
 config NODES_SHIFT
 	int "Maximum NUMA Nodes (as a power of 2)"
 	range 1 10
