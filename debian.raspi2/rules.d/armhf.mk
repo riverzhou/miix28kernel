@@ -10,11 +10,16 @@ no_dumpfile	= true
 
 loader		= grub
 
-do_tools_usbip  = true
-do_tools_cpupower = true
-do_tools_perf	= true
+do_tools	= false
+#do_tools_usbip  = true
+#do_tools_cpupower = true
+#do_tools_perf	= true
 
-do_common_headers_indep=false
+do_common_headers_indep	= false
+do_doc_package          = false
+do_source_package       = false
+do_common_headers_indep = false
+do_libc_dev_package     = false
 
 do_dtbs		= true
 disable_d_i = true
