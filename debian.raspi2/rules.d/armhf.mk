@@ -11,7 +11,6 @@ no_dumpfile	= true
 loader		= grub
 
 do_tools	= false
-skipdbg		= true
 #do_tools_usbip  = true
 #do_tools_cpupower = true
 #do_tools_perf	= true
