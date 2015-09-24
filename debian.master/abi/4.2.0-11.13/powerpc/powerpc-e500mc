@@ -12398,10 +12398,10 @@ EXPORT_SYMBOL_GPL drivers/spi/spi-bitbang 0x92bd20db	spi_bitbang_setup
 EXPORT_SYMBOL_GPL drivers/spi/spi-bitbang 0x9a3a55a8	spi_bitbang_stop
 EXPORT_SYMBOL_GPL drivers/spi/spi-bitbang 0xcdcf203c	spi_bitbang_start
 EXPORT_SYMBOL_GPL drivers/spi/spi-bitbang 0xf896ac56	spi_bitbang_setup_transfer
-EXPORT_SYMBOL_GPL drivers/spi/spi-dw 0x5a51fae0	dw_spi_suspend_host
-EXPORT_SYMBOL_GPL drivers/spi/spi-dw 0x94339691	dw_spi_resume_host
-EXPORT_SYMBOL_GPL drivers/spi/spi-dw 0x9982fde8	dw_spi_add_host
-EXPORT_SYMBOL_GPL drivers/spi/spi-dw 0xdbc7f4b5	dw_spi_remove_host
+EXPORT_SYMBOL_GPL drivers/spi/spi-dw 0x58d6a4df	dw_spi_resume_host
+EXPORT_SYMBOL_GPL drivers/spi/spi-dw 0x7881cf6e	dw_spi_remove_host
+EXPORT_SYMBOL_GPL drivers/spi/spi-dw 0xe9d5ca7f	dw_spi_add_host
+EXPORT_SYMBOL_GPL drivers/spi/spi-dw 0xf9101e87	dw_spi_suspend_host
 EXPORT_SYMBOL_GPL drivers/spmi/spmi 0x0293d449	spmi_ext_register_readl
 EXPORT_SYMBOL_GPL drivers/spmi/spmi 0x08ada9fc	spmi_command_sleep
 EXPORT_SYMBOL_GPL drivers/spmi/spmi 0x0b411e13	spmi_driver_register
