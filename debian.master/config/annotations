@@ -4405,7 +4405,6 @@ CONFIG_LGUEST					n
 
 # Menu: Virtualization >> Architecture: arm
 CONFIG_KVM_ARM_HOST                             p policy<{'arm64': 'y', 'armhf-generic-lpae': 'y'}>
-CONFIG_KVM_ARM_MAX_VCPUS                        p policy<{'arm64': '4', 'armhf-generic-lpae': '4'}>
 CONFIG_KVM_ARM_VGIC                             p policy<{'arm64': 'y', 'armhf-generic-lpae': 'y'}>
 CONFIG_KVM_ARM_TIMER                            p policy<{'arm64': 'y', 'armhf-generic-lpae': 'y'}>
 
