@@ -1822,7 +1822,7 @@ CONFIG_RTC_DRV_TWL4030				p policy<{'armhf': 'y', '*': 'm'}> note<boot essential
 CONFIG_RTC_DRV_OMAP				p policy<{'armhf': 'y', '*': 'm'}>
 CONFIG_RTC_DRV_S3C				p policy<{'armhf': 'y', '*': 'm'}>
 CONFIG_RTC_DRV_PL031				p policy<{'armhf': 'y', '*': 'm'}>
-CONFIG_RTC_DRV_XGENE				p policy<{'amd64': 'y', '*': 'm'}>
+CONFIG_RTC_DRV_XGENE				p policy<{'arm64': 'y', '*': 'n'}>
 CONFIG_RTC_DRV_DS1374_WDT			y
 CONFIG_RTC_DRV_PCF8523				p policy<{'armhf-generic': 'y', '*': 'm'}>
 CONFIG_RTC_DRV_OPAL				p policy<{'powerpc-powerpc64-smp': 'y', 'ppc64el-generic': 'y'}>
