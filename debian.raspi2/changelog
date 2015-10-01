@@ -1,3 +1,12 @@
+linux-raspi2 (4.2.0-1010.15) wily; urgency=low
+
+  [ Tim Gardner ]
+
+  * Revert "Make a Raspberry PI kernel image"
+    u-boot loads a vmlinuz just fine.
+
+ -- Tim Gardner <tim.gardner@canonical.com>  Wed, 30 Sep 2015 17:24:48 -0700
+
 linux-raspi2 (4.2.0-1010.14) wily; urgency=low
 
   * Rebased on Ubuntu-4.2.0-13.15
