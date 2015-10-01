@@ -109,7 +109,6 @@ endif
 		while read dtb_file; do \
 			echo "$$dtb_file ?" >> $(DEBIAN)/d-i/firmware/kernel-image; \
 		done; \
-		scripts/mkknlimg $(builddir)/build-$*/arch/arm/boot/zImage $(pkgdir)/lib/firmware/$(abi_release)-$*/kernel7.img; \
 	fi
 ifeq ($(no_dumpfile),)
 	makedumpfile -g $(pkgdir)/boot/vmcoreinfo-$(abi_release)-$* \
