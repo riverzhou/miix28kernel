@@ -1,3 +1,13 @@
+linux-raspi2 (4.2.0-1011.16) wily; urgency=low
+
+  [ Tim Gardner ]
+
+  * Release Tracking Bug
+    - LP: #1503268
+  * Rebased on Ubuntu-4.2.0-15.17
+
+ -- Tim Gardner <tim.gardner@canonical.com>  Tue, 06 Oct 2015 07:02:36 -0600
+
 linux-raspi2 (4.2.0-1010.15) wily; urgency=low
 
   [ Tim Gardner ]
