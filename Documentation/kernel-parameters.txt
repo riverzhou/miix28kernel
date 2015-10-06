@@ -1544,6 +1544,9 @@ bytes respectively. Such letter suffixes can also be entirely omitted.
 		hwp_only
 			Only load intel_pstate on systems which support
 			hardware P state control (HWP) if available.
+		skylake_hwp
+			Enable the use of HWP on Skylake-S processors even though
+			it may cause hard lockups on certain systems.
 
 	intremap=	[X86-64, Intel-IOMMU]
 			on	enable Interrupt Remapping (default)

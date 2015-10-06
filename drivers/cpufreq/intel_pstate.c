@@ -1077,6 +1077,7 @@ static struct cpufreq_driver intel_pstate_driver = {
 static int __initdata no_load;
 static int __initdata no_hwp;
 static int __initdata hwp_only;
+static int __initdata skylake_hwp;
 static unsigned int force_load;
 
 static int intel_pstate_msrs_not_valid(void)
@@ -1257,7 +1258,7 @@ static int __init intel_pstate_init(void)
 		return -ENOMEM;
 
 	if (static_cpu_has_safe(X86_FEATURE_HWP) && !no_hwp
-		&& id->model != 0x5e)
+		&& (id->model != 0x5e || skylake_hwp))
 		hwp_active++;
 
 	if (!hwp_active && hwp_only)
@@ -1299,6 +1300,8 @@ static int __init intel_pstate_setup(char *str)
 		force_load = 1;
 	if (!strcmp(str, "hwp_only"))
 		hwp_only = 1;
+	if (!strcmp(str, "skylake_hwp"))
+		skylake_hwp = 1;
 	return 0;
 }
 early_param("intel_pstate", intel_pstate_setup);
