@@ -13569,6 +13569,7 @@ EXPORT_SYMBOL_GPL net/netfilter/nf_conntrack 0x709ed605	nf_ct_extend_register
 EXPORT_SYMBOL_GPL net/netfilter/nf_conntrack 0x71147620	nf_ct_expect_alloc
 EXPORT_SYMBOL_GPL net/netfilter/nf_conntrack 0x72575370	nf_ct_timeout_put_hook
 EXPORT_SYMBOL_GPL net/netfilter/nf_conntrack 0x7351d106	nf_conntrack_helper_register
+EXPORT_SYMBOL_GPL net/netfilter/nf_conntrack 0x7549ee75	nf_ct_tmpl_free
 EXPORT_SYMBOL_GPL net/netfilter/nf_conntrack 0x78f9b710	nf_ct_l3proto_try_module_get
 EXPORT_SYMBOL_GPL net/netfilter/nf_conntrack 0x79f5f28b	nf_ct_seq_adjust
 EXPORT_SYMBOL_GPL net/netfilter/nf_conntrack 0x7b0fdc4b	__nf_ct_kill_acct
