@@ -364,6 +364,8 @@ enum MR_EVT_ARGS {
 	MR_EVT_ARGS_GENERIC,
 };
 
+
+#define SGE_BUFFER_SIZE	4096
 /*
  * define constants for device list query options
  */
