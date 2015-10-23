@@ -306,6 +306,9 @@ bcm2708-rng
 bcm2708_wdog
 bcm2835-gpiomem
 bcm2835-rng
+bcm2835_smi
+bcm2835_smi_dev
+bcm2835_smi_nand
 bcm2835-v4l2
 bcm2835_wdt
 bcm3510
@@ -435,6 +438,7 @@ cifs
 clip
 clk-cdce706
 clk-cdce925
+clk-hifiberry-dacpro
 clk-max77686
 clk-max77802
 clk-palmas
@@ -2645,6 +2649,7 @@ snd-soc-pcm5102a
 snd-soc-pcm512x
 snd-soc-pcm512x-i2c
 snd-soc-pcm512x-spi
+snd-soc-raspidac3
 snd-soc-rpi-dac
 snd-soc-rpi-proto
 snd-soc-rt5631

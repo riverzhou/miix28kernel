@@ -1253,6 +1253,13 @@ EXPORT_SYMBOL drivers/mfd/wm8994-regmap 0xf4c44d2c	wm1811_regmap_config
 EXPORT_SYMBOL drivers/misc/ad525x_dpot 0x45c2ced1	ad_dpot_probe
 EXPORT_SYMBOL drivers/misc/ad525x_dpot 0xf203840c	ad_dpot_remove
 EXPORT_SYMBOL drivers/misc/altera-stapl/altera-stapl 0x8a05ed90	altera_init
+EXPORT_SYMBOL drivers/misc/bcm2835_smi 0x43ad1c1d	bcm2835_smi_get
+EXPORT_SYMBOL drivers/misc/bcm2835_smi 0x727204cb	bcm2835_smi_user_dma
+EXPORT_SYMBOL drivers/misc/bcm2835_smi 0x72db83c4	bcm2835_smi_set_address
+EXPORT_SYMBOL drivers/misc/bcm2835_smi 0xa00dc18f	bcm2835_smi_write_buf
+EXPORT_SYMBOL drivers/misc/bcm2835_smi 0xab7a4d1d	bcm2835_smi_set_regs_from_settings
+EXPORT_SYMBOL drivers/misc/bcm2835_smi 0xb33bd6cb	bcm2835_smi_read_buf
+EXPORT_SYMBOL drivers/misc/bcm2835_smi 0xf6720336	bcm2835_smi_get_settings_from_regs
 EXPORT_SYMBOL drivers/misc/c2port/core 0x446ba465	c2port_device_unregister
 EXPORT_SYMBOL drivers/misc/c2port/core 0x884fb95b	c2port_device_register
 EXPORT_SYMBOL drivers/mmc/host/dw_mmc 0x00863089	dw_mci_suspend
@@ -4661,6 +4668,7 @@ EXPORT_SYMBOL vmlinux 0x16a2e4f5	blk_queue_make_request
 EXPORT_SYMBOL vmlinux 0x16d9d2f8	mmc_wait_for_req
 EXPORT_SYMBOL vmlinux 0x16dc4e55	snd_ctl_new1
 EXPORT_SYMBOL vmlinux 0x16f524a7	atomic_dec_and_mutex_lock
+EXPORT_SYMBOL vmlinux 0x170caf86	bcm_dmaman_probe
 EXPORT_SYMBOL vmlinux 0x1725c45d	tty_mutex
 EXPORT_SYMBOL vmlinux 0x172ec730	DWC_WORKQ_PENDING
 EXPORT_SYMBOL vmlinux 0x1753012b	netdev_master_upper_dev_link_private
@@ -4977,6 +4985,7 @@ EXPORT_SYMBOL vmlinux 0x2a15bec9	devfreq_interval_update
 EXPORT_SYMBOL vmlinux 0x2a28d93d	tcp_disconnect
 EXPORT_SYMBOL vmlinux 0x2a2e4524	twl6030_mmc_card_detect
 EXPORT_SYMBOL vmlinux 0x2a3aa678	_test_and_clear_bit
+EXPORT_SYMBOL vmlinux 0x2a3e0046	bcm_dmaman_remove
 EXPORT_SYMBOL vmlinux 0x2a58d9ef	tcf_register_action
 EXPORT_SYMBOL vmlinux 0x2a597624	unregister_netdev
 EXPORT_SYMBOL vmlinux 0x2a6d2534	tcp_check_req
