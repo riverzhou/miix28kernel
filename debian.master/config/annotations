@@ -1030,7 +1030,7 @@ CONFIG_LEDS_ASIC3				y
 CONFIG_LEDS_SYSCON				y
 
 # Menu: Device Drivers >> LED Support >> LED Class Support >> LED Trigger support
-#CONFIG_LEDS_TRIGGER_HEARTBEAT p policy<(arch armel armhf &/ value y) | value m> note<enables early heartbeat LEDs>
+CONFIG_LEDS_TRIGGER_HEARTBEAT			p mark<ENFORCED> policy<{'armhf': 'y', '*': 'm'}>
 CONFIG_LEDS_TRIGGERS				y
 CONFIG_LEDS_TRIGGER_CPU				y
 
