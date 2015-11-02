@@ -50,19 +50,12 @@ $(stampdir)/stamp-build-%: $(stampdir)/stamp-prepare-%
 	@echo Debug: $@ build_image $(build_image) bldimg $(bldimg)
 	$(build_cd) $(kmake) $(build_O) $(conc_level) $(bldimg) modules $(if $(filter true,$(do_dtbs)),dtbs)
 ifeq ($(do_zfs),true)
-	#
-	# SPL/ZFS wants a fully built kernel before you can configure and build.
-	# It seems to be impossible to tease out the application configuration
-	# from the modules, but at least one can build just the modules.
-	#
 	install -d $(builddir)/build-$*/spl
-	rsync -a --exclude=dkms.conf --delete spl/ $(builddir)/build-$*/spl/
-	cd $(builddir)/build-$*/spl; sh autogen.sh; sh configure $(splopts)
+	rsync -a --delete spl/ $(builddir)/build-$*/spl/
 	$(kmake) -C $(builddir)/build-$*/spl/module $(conc_level)
 
 	install -d $(builddir)/build-$*/zfs
-	rsync -a --exclude=dkms.conf --delete zfs/ $(builddir)/build-$*/zfs/
-	cd $(builddir)/build-$*/zfs; sh autogen.sh; sh configure $(zfsopts)
+	rsync -a --delete zfs/ $(builddir)/build-$*/zfs/
 	$(kmake) -C $(builddir)/build-$*/zfs/module $(conc_level)
 endif
 	@touch $@
