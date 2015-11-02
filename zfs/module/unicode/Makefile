@@ -1,0 +1,11 @@
+src = /home/rtg/ukb/xenial/amd64/master-next/ubuntu-xenial/debian/build/build-generic/zfs/module/unicode
+obj = /home/rtg/ukb/xenial/amd64/master-next/ubuntu-xenial/debian/build/build-generic/zfs/module/unicode
+
+MODULE := zunicode
+
+EXTRA_CFLAGS = $(ZFS_MODULE_CFLAGS)  -Wno-unused-but-set-variable -Wno-bool-compare -DHAVE_SPL -D_KERNEL -DTEXT_DOMAIN=\"zfs-linux-kernel\" -DNDEBUG 
+
+obj-$(CONFIG_ZFS) := $(MODULE).o
+
+$(MODULE)-objs += u8_textprep.o
+$(MODULE)-objs += uconv.o
