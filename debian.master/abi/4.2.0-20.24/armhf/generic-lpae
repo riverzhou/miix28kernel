@@ -11740,6 +11740,7 @@ EXPORT_SYMBOL_GPL drivers/net/ethernet/mellanox/mlx4/mlx4_core 0xfb6b537b	mlx4_v
 EXPORT_SYMBOL_GPL drivers/net/ethernet/mellanox/mlx4/mlx4_core 0xfc01a757	mlx4_multicast_attach
 EXPORT_SYMBOL_GPL drivers/net/ethernet/mellanox/mlx4/mlx4_core 0xfe29311b	mlx4_bf_alloc
 EXPORT_SYMBOL_GPL drivers/net/ethernet/mellanox/mlx5/core/mlx5_core 0x0569b214	mlx5_query_hca_vport_gid
+EXPORT_SYMBOL_GPL drivers/net/ethernet/mellanox/mlx5/core/mlx5_core 0x09504852	mlx5_query_port_admin_status
 EXPORT_SYMBOL_GPL drivers/net/ethernet/mellanox/mlx5/core/mlx5_core 0x09543b3d	mlx5_fill_page_array
 EXPORT_SYMBOL_GPL drivers/net/ethernet/mellanox/mlx5/core/mlx5_core 0x10d1b678	mlx5_query_port_max_mtu
 EXPORT_SYMBOL_GPL drivers/net/ethernet/mellanox/mlx5/core/mlx5_core 0x1343ed32	mlx5_core_create_qp
@@ -11750,6 +11751,7 @@ EXPORT_SYMBOL_GPL drivers/net/ethernet/mellanox/mlx5/core/mlx5_core 0x5545f2b3	m
 EXPORT_SYMBOL_GPL drivers/net/ethernet/mellanox/mlx5/core/mlx5_core 0x56018e0e	mlx5_query_hca_vport_system_image_guid
 EXPORT_SYMBOL_GPL drivers/net/ethernet/mellanox/mlx5/core/mlx5_core 0x5679ab09	mlx5_set_port_caps
 EXPORT_SYMBOL_GPL drivers/net/ethernet/mellanox/mlx5/core/mlx5_core 0x607e63dd	mlx5_query_hca_vport_context
+EXPORT_SYMBOL_GPL drivers/net/ethernet/mellanox/mlx5/core/mlx5_core 0x61df228f	mlx5_set_port_admin_status
 EXPORT_SYMBOL_GPL drivers/net/ethernet/mellanox/mlx5/core/mlx5_core 0x644647a9	mlx5_query_port_vl_hw_cap
 EXPORT_SYMBOL_GPL drivers/net/ethernet/mellanox/mlx5/core/mlx5_core 0x66086fe5	mlx5_core_access_reg
 EXPORT_SYMBOL_GPL drivers/net/ethernet/mellanox/mlx5/core/mlx5_core 0x6608b722	mlx5_create_map_eq
