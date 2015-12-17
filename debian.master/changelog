@@ -1,3 +1,17 @@
+linux (4.2.0-22.27) wily; urgency=low
+
+  [ Kamal Mostafa ]
+
+  * Release Tracking Bug
+    - LP: #1527391
+
+  [ Jann Horn ]
+
+  * ptrace: being capable wrt a process requires mapped uids/gids
+    - LP: #1527374
+
+ -- Kamal Mostafa <kamal@canonical.com>  Thu, 17 Dec 2015 12:54:53 -0800
+
 linux (4.2.0-22.26) wily; urgency=low
 
   [ Upstream Kernel Changes ]
