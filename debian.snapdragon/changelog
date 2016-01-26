@@ -1,4 +1,4 @@
-linux-dragon410c (4.2.0-2011.11) xenial; urgency=low
+linux-snapdragon (4.2.0-2011.11) xenial; urgency=low
 
   [ Upstream Kernel Changes ]
 
@@ -8,7 +8,7 @@ linux-dragon410c (4.2.0-2011.11) xenial; urgency=low
 
  -- Paolo Pisati <paolo.pisati@canonical.com>  Mon, 25 Jan 2016 11:51:37 +0100
 
-linux-dragon410c (4.2.0-2010.10) xenial; urgency=low
+linux-snapdragon (4.2.0-2010.10) xenial; urgency=low
 
   [ Paolo Pisati ]
 
