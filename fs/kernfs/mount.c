@@ -16,6 +16,7 @@
 #include <linux/pagemap.h>
 #include <linux/namei.h>
 #include <linux/seq_file.h>
+#include <linux/user_namespace.h>
 
 #include "kernfs-internal.h"
 
