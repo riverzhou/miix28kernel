@@ -3,7 +3,7 @@ Section: devel
 Priority: optional
 Maintainer: Ubuntu Kernel Team <kernel-team@lists.ubuntu.com>
 Standards-Version: 3.8.4.0
-Build-Depends: debhelper (>= 5), cpio, module-init-tools, kernel-wedge (>= 2.24ubuntu1), libelf-dev, libiberty-dev, rsync, libdw-dev, python-dev, flex, bison, xmlto, docbook-utils, ghostscript, transfig, bzip2, sharutils, asciidoc, gcc-4.9
+Build-Depends: debhelper (>= 5), cpio, kmod | module-init-tools, kernel-wedge (>= 2.24ubuntu1), libelf-dev, libiberty-dev, rsync, libdw-dev, python-dev, flex, bison, xmlto, docbook-utils, ghostscript, transfig, bzip2, sharutils, asciidoc, gcc-4.9
 Vcs-Git: git://git.launchpad.net/~ubuntu-kernel/ubuntu/+source/linux/+git/xenial
 
 Package: SRCPKGNAME-headers-PKGVER-ABINUM
