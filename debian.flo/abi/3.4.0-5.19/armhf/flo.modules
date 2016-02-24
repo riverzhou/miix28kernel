@@ -1,8 +1,5 @@
-af_alg
 ah4
 ah6
-algif_hash
-algif_skcipher
 ansi_cprng
 anubis
 arptable_filter
@@ -25,6 +22,7 @@ fcrypt
 gcm
 gf128mul
 ghash-generic
+hci_vhci
 ip6_queue
 ip6table_filter
 ip6table_mangle
