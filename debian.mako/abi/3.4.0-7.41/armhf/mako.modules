@@ -1,9 +1,6 @@
-af_alg
 af_key
 ah4
 ah6
-algif_hash
-algif_skcipher
 ansi_cprng
 anubis
 arptable_filter
@@ -26,6 +23,7 @@ fcrypt
 gcm
 gf128mul
 ghash-generic
+hci_vhci
 ip6_queue
 ip6table_filter
 ip6table_mangle
@@ -68,11 +66,9 @@ lttng-lib-ring-buffer
 lttng-probe-asoc
 lttng-probe-block
 lttng-probe-compaction
-lttng-probe-ext3
 lttng-probe-ext4
 lttng-probe-gpio
 lttng-probe-irq
-lttng-probe-jbd
 lttng-probe-jbd2
 lttng-probe-kmem
 lttng-probe-lttng
