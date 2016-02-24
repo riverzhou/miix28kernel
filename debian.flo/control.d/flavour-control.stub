@@ -26,7 +26,7 @@ Architecture: ARCH
 Section: admin
 Priority: optional
 Pre-Depends: dpkg (>= 1.10.24)
-Depends: ${misc:Depends}, ${shlibs:Depends}, initramfs-tools (>= 0.36ubuntu6), coreutils | fileutils (>= 4.0), module-init-tools (>= 3.3-pre11-4ubuntu3), wireless-crda
+Depends: ${misc:Depends}, ${shlibs:Depends}, kmod | initramfs-tools (>= 0.36ubuntu6), coreutils | fileutils (>= 4.0), module-init-tools (>= 3.3-pre11-4ubuntu3), wireless-crda
 Conflicts: hotplug (<< 0.0.20040105-1)
 Recommends: BOOTLOADER
 Suggests: fdutils, SRCPKGNAME-source-PKGVER
