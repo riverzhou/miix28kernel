@@ -3,8 +3,8 @@ build_arch	= arm64
 header_arch	= arm64
 defconfig	= defconfig
 flavours	= generic
-build_image	= Image
-kernel_file	= arch/$(build_arch)/boot/Image
+build_image	= Image.gz
+kernel_file	= arch/$(build_arch)/boot/Image.gz
 install_file	= vmlinuz
 no_dumpfile = true
 
