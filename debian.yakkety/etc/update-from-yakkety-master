@@ -15,7 +15,7 @@ TARGET_RELEASE_NUMBER=16.04
 DEBIAN_TARGET=debian.${TARGET_RELEASE_BRANCH}
 
 DEF_REPO=git://git.launchpad.net/~ubuntu-kernel/ubuntu/+source/linux/+git/${SOURCE_RELEASE}
-RELEASE_REPO="${DEF_REPO}"
+RELEASE_REPO=${_DEF_REPO:=${DEF_REPO}}
 DEF_ARCHES="i386 amd64 armhf arm64 ppc64el powerpc"
 FOREIGN_ARCHES=
 
