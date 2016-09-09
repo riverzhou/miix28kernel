@@ -1,4 +1,11 @@
-linux-lts-yakkety (4.8.0-6.7~16.04.1) xenial; urgency=low
+linux-lts-yakkety (4.8.0-7.8~16.04.1) xenial; urgency=low
+
+  * Miscellaneous Ubuntu changes
+    - [Debian] Use src_pkg_name when constructing udeb control files
+
+ -- Tim Gardner <tim.gardner@canonical.com>  Fri, 09 Sep 2016 07:26:25 -0600
+
+linux (4.8.0-6.7) yakkety; urgency=low
 
   * Enable virtual scsi server driver for Power (LP: #1615665)
     - SAUCE: Ibmvscsis: Properly deregister target sessions
