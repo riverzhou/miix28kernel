@@ -1,4 +1,21 @@
-linux-lts-yakkety (4.8.0-7.8~16.04.1) xenial; urgency=low
+linux-lts-yakkety (4.8.0-8.9~16.04.1) xenial; urgency=low
+
+  * New device ID for Kabypoint (LP: #1622469)
+    - mfd: lpss: Add Intel Kaby Lake PCH-H PCI IDs
+    - SAUCE: i2c: i801: Add support for Kaby Lake PCH-H
+
+  * Miscellaneous Ubuntu changes
+    - rebase to v4.8-rc6
+    - SAUCE: (noup) Update spl to 0.6.5.8-0ubuntu1, zfs to 0.6.5.8-0ubuntu1
+
+  [ Upstream Kernel Changes ]
+
+  * rebase to v4.8-rc6
+    - LP: #1617900
+
+ -- Tim Gardner <tim.gardner@canonical.com>  Fri, 09 Sep 2016 10:53:40 -0600
+
+linux (4.8.0-7.8) yakkety; urgency=low
 
   * Miscellaneous Ubuntu changes
     - [Debian] Use src_pkg_name when constructing udeb control files
