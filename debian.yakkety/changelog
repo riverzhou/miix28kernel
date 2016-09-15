@@ -1,4 +1,22 @@
-linux-lts-yakkety (4.8.0-8.9~16.04.1) xenial; urgency=low
+linux-lts-yakkety (4.8.0-9.10~16.04.1) xenial; urgency=low
+
+  * Miscellaneous Ubuntu changes
+    - [Config] arm64: CONFIG_ARCH_THUNDER=y
+    - [Config] arm64: CONFIG_PCI_HOST_THUNDER_*=y
+    - [Config] arm64: CONFIG_NUMA_BALANCING_DEFAULT_ENABLED=y
+    - [Config] arm64: CONFIG_DRM_AST=m
+    - [Config] arm64: CONFIG_FRAMEBUFFER_CONSOLE=y
+    - d-i: initrd needs ext4 and scsi modules
+    - SAUCE: AUFS aufs4.x-rcN 20160912
+    - [Config] Enable CONFIG_GPIO_XGENE*
+    - [Config] Disable CONFIG_POWER_RESET_XGENE
+    - [Config] CONFIG_EDAC_XGENE=m
+    - [Config] CONFIG_ARM64_ACPI_PARKING_PROTOCOL=y
+    - [Config] CONFIG_XGENE_DMA=m
+
+ -- Tim Gardner <tim.gardner@canonical.com>  Mon, 12 Sep 2016 10:26:12 -0600
+
+linux (4.8.0-8.9) yakkety; urgency=low
 
   * New device ID for Kabypoint (LP: #1622469)
     - mfd: lpss: Add Intel Kaby Lake PCH-H PCI IDs
