@@ -1,4 +1,12 @@
-linux-lts-yakkety (4.8.0-9.10~16.04.1) xenial; urgency=low
+linux-lts-yakkety (4.8.0-10.11~16.04.1) xenial; urgency=low
+
+  * Miscellaneous Ubuntu changes
+    - ubuntu: vbox -- update to 5.1.6-dfsg-1
+    - SAUCE: Enable vbox build
+
+ -- Tim Gardner <tim.gardner@canonical.com>  Thu, 15 Sep 2016 07:10:51 -0600
+
+linux (4.8.0-9.10) yakkety; urgency=low
 
   * Miscellaneous Ubuntu changes
     - [Config] arm64: CONFIG_ARCH_THUNDER=y
