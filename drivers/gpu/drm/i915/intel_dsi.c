@@ -376,6 +376,7 @@ static void intel_dsi_port_enable(struct intel_encoder *encoder)
 	struct drm_i915_private *dev_priv = dev->dev_private;
 	struct intel_crtc *intel_crtc = to_intel_crtc(encoder->base.crtc);
 	struct intel_dsi *intel_dsi = enc_to_intel_dsi(&encoder->base);
+	struct intel_connector *intel_connector = intel_dsi->attached_connector;
 	enum port port;
 	u32 temp;
 	u32 port_ctrl;
@@ -408,6 +409,8 @@ static void intel_dsi_port_enable(struct intel_encoder *encoder)
 		I915_WRITE(port_ctrl, temp | DPI_ENABLE);
 		POSTING_READ(port_ctrl);
 	}
+
+	intel_panel_enable_backlight(intel_connector);
 }
 
 static void intel_dsi_port_disable(struct intel_encoder *encoder)
@@ -464,6 +467,7 @@ static void intel_dsi_pre_enable(struct intel_encoder *encoder)
 	struct drm_i915_private *dev_priv = dev->dev_private;
 	struct intel_dsi *intel_dsi = enc_to_intel_dsi(&encoder->base);
 	struct intel_crtc *intel_crtc = to_intel_crtc(encoder->base.crtc);
+	struct intel_connector *intel_connector = intel_dsi->attached_connector;
 	enum pipe pipe = intel_crtc->pipe;
 	enum port port;
 	u32 tmp;
@@ -475,6 +479,8 @@ static void intel_dsi_pre_enable(struct intel_encoder *encoder)
 		gpiod_set_value_cansleep(intel_dsi->gpio_panel, 1);
 
 	msleep(intel_dsi->panel_on_delay);
+
+	intel_panel_disable_backlight(intel_connector);
 
 	if (IS_VALLEYVIEW(dev)) {
 		/*
@@ -1069,6 +1075,7 @@ static void intel_dsi_connector_destroy(struct drm_connector *connector)
 
 	DRM_DEBUG_KMS("\n");
 	intel_panel_fini(&intel_connector->panel);
+	intel_panel_destroy_backlight(connector);
 	drm_connector_cleanup(connector);
 	kfree(connector);
 }
@@ -1205,6 +1212,7 @@ void intel_dsi_init(struct drm_device *dev)
 	 * In case of BYT with CRC PMIC, we need to use GPIO for
 	 * Panel control.
 	 */
+#if 0	
 	if (dev_priv->vbt.dsi.config->pwm_blc == PPS_BLC_PMIC) {
 		intel_dsi->gpio_panel =
 			gpiod_get(dev->dev, "panel", GPIOD_OUT_HIGH);
@@ -1214,6 +1222,7 @@ void intel_dsi_init(struct drm_device *dev)
 			intel_dsi->gpio_panel = NULL;
 		}
 	}
+#endif
 
 	intel_encoder->type = INTEL_OUTPUT_DSI;
 	intel_encoder->cloneable = 0;
