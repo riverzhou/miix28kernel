@@ -1,4 +1,51 @@
-linux-lts-yakkety (4.8.0-16.17~16.04.1) xenial; urgency=low
+linux-lts-yakkety (4.8.0-17.18~16.04.1) xenial; urgency=low
+
+  [ Tim Gardner ]
+
+  * Release Tracking Bug
+    - LP: #1627573
+
+  * [Yakkety] Fix up ATA_GENERIC to match annotations file. (LP: #1627322)
+    - [Config] Add d-i support for ata_generic
+
+  * [Yakkety] Fix up CONFIG_BLK_DEV_SD to match annotations (LP: #1627330)
+    - [Config] CONFIG_BLK_DEV_SD=y,CONFIG_BLK_DEV_SR=y for all but s390x
+
+  * [Yakkety] Fix up ATA_PIIX to match annotations file (LP: #1627324)
+    - [Config] CONFIG_ATA_PIIX=y for amd64/i386
+
+  * Yakkety - USB drivers must be built in (LP: #1627323)
+    - [Config] Added enforcement annotations for USB drivers
+
+  * Yakkety: USB drivers must be built-in to preserve probe ordering
+    (LP: #1627572)
+    - [Config] Build-in basic USB drivers
+
+  * 4.8.0-16.17: genirq: Flags mismatch serial vs goldfish_pdev_bus
+    (LP: #1627052)
+    - [Config] CONFIG_GOLDFISH=n
+
+  * [Ubuntu16.10]KV4.8: kernel livepatch config options are not set
+    (LP: #1626983)
+    - [Config] CONFIG_KALLSYMS_ALL=y
+
+  * yakkety 4.8, remove module noise kernel-4.8 (LP: #1626104)
+    - Revert "UBUNTU: SAUCE: Clear Linux: bootstats: add printk's to measure boot
+      time in more detail"
+
+  * Permission denied in CIFS with kernel 4.4.0-38 (LP: #1626112)
+    - SAUCE: Fix regression which breaks DFS mounting
+
+  * Miscellaneous Ubuntu changes
+    - rebase to v4.8-rc8
+
+  [ Upstream Kernel Changes ]
+
+  * rebase to v4.8-rc8
+
+ -- Tim Gardner <tim.gardner@canonical.com>  Fri, 23 Sep 2016 06:46:03 -0600
+
+linux (4.8.0-16.17) yakkety; urgency=low
 
   [ Tim Gardner ]
 
