@@ -1,33 +1,83 @@
-linux-lts-yakkety (4.8.0-17.18~16.04.1) xenial; urgency=low
+linux-lts-yakkety (4.8.0-19.21~16.04.1) xenial; urgency=low
 
   [ Tim Gardner ]
 
   * Release Tracking Bug
-    - LP: #1627573
+    - LP: #1629057
+
+  * 4.8.0 kernels do not complete boot process on VM (LP: #1627198)
+    - [Config] CONFIG_HARDENED_USERCOPY_PAGESPAN=n
+
+  * mount-image-callback cannot mount partitioned disk image (LP: #1628336)
+    - SAUCE: nbd: Only delay uevent until connected
+
+  * Support snaps inside of lxd containers (LP: #1611078)
+    - apparmor: add interface to be able to grab loaded policy
+    - securityfs: update interface to allow inode_ops, and setup from vfs fns
+    - apparmor: refactor aa_prepare_ns into prepare_ns and create_ns routines
+    - apparmor: add __aa_find_ns fn
+    - apparmor: add mkdir/rmdir interface to manage policy namespaces
+    - apparmor: fix oops in pivot_root mediation
+    - apparmor: fix warning that fn build_pivotroot discards const
+    - apparmor: add interface to advertise status of current task stacking
+    - apparmor: update policy permissions to consider ns being viewed/managed
+    - apparmor: add per ns policy management interface
+    - apparmor: bump domain stacking version to 1.2
+
+  * linux-image-extra-4.8.0-17-generic does not provide many sound card modules
+    (LP: #1628523)
+    - [Config] CONFIG_ZONE_DMA=y for generic
+
+  * Yakkety - disable ARCH_ZX (LP: #1628503)
+    - [Config] armhf: disable ARCH_ZX
+
+  * Enable switchdev config parameter for Yakkety (LP: #1628241)
+    - [Config] CONFIG_NET_SWITCHDEV=y for amd64/arm64
+
+  * Ubuntu 16.10 kernel v4.8: Installation failing on Habanero with Shiner card
+    (LP: #1628009)
+    - firmware: Update bnx2x to 7.13.1.0
+
+  * vNIC driver missing in 4.8 kernel package (LP: #1628187)
+    - [Config] Enable CONFIG_IBMVNIC=m
+
+  * Yakkety - armhf: MFD_TPS65217 and REGULATOR_TPS65217 are boot essential
+    (LP: #1628112)
+    - [Config] armhf: MFD_TPS65217=y && REGULATOR_TPS65217=y
+
+  * Miscellaneous Ubuntu changes
+    - Rebase to v4.8-rc8
+    - [Config] skip Ubuntu-4.8.0-18.20
+    - [Config] missing modules in armhf/s390x
+
+  * Miscellaneous Ubuntu changes
+    - rebase to v4.8-rc8
+
+ -- Leann Ogasawara <leann.ogasawara@canonical.com>  Sun, 25 Sep 2016 12:13:35 -0700
+
+linux (4.8.0-17.19) yakkety; urgency=low
+
+  * Release Tracking Bug
+    - LP: #1627387
+
+  * build squashfs into xenial kernels by default (LP: #1593134)
+    - Remove squashfs udeb
 
   * [Yakkety] Fix up ATA_GENERIC to match annotations file. (LP: #1627322)
-    - [Config] Add d-i support for ata_generic
+    - Add d-i support for ata_generic
 
   * [Yakkety] Fix up CONFIG_BLK_DEV_SD to match annotations (LP: #1627330)
-    - [Config] CONFIG_BLK_DEV_SD=y,CONFIG_BLK_DEV_SR=y for all but s390x
+    - [Config] Enforce CONFIG_BLK_DEV_SD=y,CONFIG_BLK_DEV_SR=y
 
   * [Yakkety] Fix up ATA_PIIX to match annotations file (LP: #1627324)
-    - [Config] CONFIG_ATA_PIIX=y for amd64/i386
+    - [Config] Enforce CONFIG_ATA_PIIX=y for amd64/i386
 
   * Yakkety - USB drivers must be built in (LP: #1627323)
-    - [Config] Added enforcement annotations for USB drivers
-
-  * Yakkety: USB drivers must be built-in to preserve probe ordering
-    (LP: #1627572)
-    - [Config] Build-in basic USB drivers
+    - Update annotation enforcement for CONFIG_USB_[E|O|U|X]HCI_HCD
 
   * 4.8.0-16.17: genirq: Flags mismatch serial vs goldfish_pdev_bus
     (LP: #1627052)
     - [Config] CONFIG_GOLDFISH=n
-
-  * [Ubuntu16.10]KV4.8: kernel livepatch config options are not set
-    (LP: #1626983)
-    - [Config] CONFIG_KALLSYMS_ALL=y
 
   * yakkety 4.8, remove module noise kernel-4.8 (LP: #1626104)
     - Revert "UBUNTU: SAUCE: Clear Linux: bootstats: add printk's to measure boot
@@ -37,13 +87,18 @@ linux-lts-yakkety (4.8.0-17.18~16.04.1) xenial; urgency=low
     - SAUCE: Fix regression which breaks DFS mounting
 
   * Miscellaneous Ubuntu changes
-    - rebase to v4.8-rc8
+    - [Config] apply xenial configuration annotations
+    - s390x -- DEBUG_RODATA is now valid
+    - [Config] s390x -- CONFIG_SQUASHFS=y
+    - [Config] s390x -- CONFIG_ECRYPT_FS=y
+    - [Config] Enable CONFIG_ACPI_PCI_SLOT=y for arm64
+    - [Config] Enable CONFIG_ACPI_HED=y for arm64
+    - [Config] Enable CONFIG_QUICC_ENGINE=y
 
-  [ Upstream Kernel Changes ]
+  * Miscellaneous upstream changes
+    - annotations: pull back to xenial
 
-  * rebase to v4.8-rc8
-
- -- Tim Gardner <tim.gardner@canonical.com>  Fri, 23 Sep 2016 06:46:03 -0600
+ -- Leann Ogasawara <leann.ogasawara@canonical.com>  Sat, 24 Sep 2016 21:31:31 -0700
 
 linux (4.8.0-16.17) yakkety; urgency=low
 
