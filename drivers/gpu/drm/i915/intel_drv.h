@@ -971,7 +971,7 @@ void gen8_irq_power_well_post_enable(struct drm_i915_private *dev_priv,
 
 /* intel_crt.c */
 void intel_crt_init(struct drm_device *dev);
-
+void intel_crt_reset(struct drm_encoder *encoder);
 
 /* intel_ddi.c */
 void intel_prepare_ddi(struct drm_device *dev);
@@ -1246,6 +1246,8 @@ void intel_dsi_init(struct drm_device *dev);
 
 /* intel_dvo.c */
 void intel_dvo_init(struct drm_device *dev);
+/* intel_hotplug.c */
+void intel_hpd_poll_init(struct drm_i915_private *dev_priv);
 
 
 /* legacy fbdev emulation in intel_fbdev.c */
