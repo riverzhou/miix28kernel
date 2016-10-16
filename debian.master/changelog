@@ -1,3 +1,16 @@
+linux (4.4.0-43.63) xenial; urgency=low
+
+  [ Seth Forshee ]
+
+  * Release Tracking Bug
+    - LP: #1632375
+
+  * kswapd0 100% CPU usage (LP: #1518457)
+    - SAUCE: (no-up) If zone is so small that watermarks are the same, stop zone
+      balance.
+
+ -- Seth Forshee <seth.forshee@canonical.com>  Tue, 11 Oct 2016 07:54:56 -0500
+
 linux (4.4.0-42.62) xenial; urgency=low
 
   * Fix GRO recursion overflow for tunneling protocols (LP: #1631287)
