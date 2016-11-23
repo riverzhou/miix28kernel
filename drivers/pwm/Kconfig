@@ -240,27 +240,21 @@ config PWM_LPC32XX
 	  will be called pwm-lpc32xx.
 
 config PWM_LPSS
-	tristate
+	bool
 
 config PWM_LPSS_PCI
-	tristate "Intel LPSS PWM PCI driver"
+	bool "Intel LPSS PWM PCI driver"
 	depends on X86 && PCI
 	select PWM_LPSS
 	help
 	  The PCI driver for Intel Low Power Subsystem PWM controller.
 
-	  To compile this driver as a module, choose M here: the module
-	  will be called pwm-lpss-pci.
-
 config PWM_LPSS_PLATFORM
-	tristate "Intel LPSS PWM platform driver"
+	bool "Intel LPSS PWM platform driver"
 	depends on X86 && ACPI
 	select PWM_LPSS
 	help
 	  The platform driver for Intel Low Power Subsystem PWM controller.
-
-	  To compile this driver as a module, choose M here: the module
-	  will be called pwm-lpss-platform.
 
 config PWM_MESON
 	tristate "Amlogic Meson PWM driver"

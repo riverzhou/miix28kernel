@@ -161,6 +161,12 @@ static const struct pwm_ops pwm_lpss_ops = {
 	.owner = THIS_MODULE,
 };
 
+/* PWM consumed by the Intel GFX */
+static struct pwm_lookup pwm_lpss_lookup[] = {
+	PWM_LOOKUP("pwm-lpss", 0, "0000:00:02.0", "pwm_backlight", 0,
+		   PWM_POLARITY_NORMAL),
+};
+
 struct pwm_lpss_chip *pwm_lpss_probe(struct device *dev, struct resource *r,
 				     const struct pwm_lpss_boardinfo *info)
 {
@@ -193,12 +199,17 @@ struct pwm_lpss_chip *pwm_lpss_probe(struct device *dev, struct resource *r,
 		return ERR_PTR(ret);
 	}
 
+	/* Add lookup table for pwm_backlight */
+	pwm_lpss_lookup[0].provider = dev_name(dev);
+	pwm_add_table(pwm_lpss_lookup, ARRAY_SIZE(pwm_lpss_lookup));
+
 	return lpwm;
 }
 EXPORT_SYMBOL_GPL(pwm_lpss_probe);
 
 int pwm_lpss_remove(struct pwm_lpss_chip *lpwm)
 {
+	pwm_remove_table(pwm_lpss_lookup, ARRAY_SIZE(pwm_lpss_lookup));
 	return pwmchip_remove(&lpwm->chip);
 }
 EXPORT_SYMBOL_GPL(pwm_lpss_remove);
