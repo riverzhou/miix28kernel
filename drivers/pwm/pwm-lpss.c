@@ -135,6 +135,33 @@ static int pwm_lpss_config(struct pwm_chip *chip, struct pwm_device *pwm,
 	return 0;
 }
 
+static void pwm_lpss_get_state(struct pwm_chip *chip, struct pwm_device *pwm,
+			       struct pwm_state *state)
+{
+	struct pwm_lpss_chip *lpwm = to_lpwm(chip);
+	unsigned long base_unit_range, freq;
+	unsigned long long base_unit, on_time_div;
+	u32 ctrl;
+
+	base_unit_range = BIT(lpwm->info->base_unit_bits);
+
+	ctrl = pwm_lpss_read(pwm);
+	on_time_div = ctrl & PWM_ON_TIME_DIV_MASK;
+	base_unit = (ctrl >> PWM_BASE_UNIT_SHIFT) & (base_unit_range - 1);
+
+	freq = base_unit * lpwm->info->clk_rate / base_unit_range;
+	if (freq == 0)
+		freq = 1;
+
+	state->period = NSEC_PER_SEC / freq;
+	state->duty_cycle = state->period * on_time_div / 255ULL;
+	state->polarity = PWM_POLARITY_NORMAL;
+	state->enabled = (ctrl & PWM_ENABLE) ? true : false;
+
+	if (state->enabled)
+		pm_runtime_get_sync(chip->dev);
+}
+
 static int pwm_lpss_enable(struct pwm_chip *chip, struct pwm_device *pwm)
 {
 	pm_runtime_get_sync(chip->dev);
@@ -156,6 +183,7 @@ static void pwm_lpss_disable(struct pwm_chip *chip, struct pwm_device *pwm)
 
 static const struct pwm_ops pwm_lpss_ops = {
 	.config = pwm_lpss_config,
+	.get_state = pwm_lpss_get_state,
 	.enable = pwm_lpss_enable,
 	.disable = pwm_lpss_disable,
 	.owner = THIS_MODULE,
