@@ -661,7 +661,10 @@ static void intel_dsi_pre_enable(struct intel_encoder *encoder,
 	/* put device in ready state */
 	intel_dsi_device_ready(encoder);
 
-	drm_panel_prepare(intel_dsi->panel);
+	intel_dsi_exec_vbt_sequence(intel_dsi, MIPI_SEQ_ASSERT_RESET);
+	intel_dsi_exec_vbt_sequence(intel_dsi, MIPI_SEQ_POWER_ON);
+	intel_dsi_exec_vbt_sequence(intel_dsi, MIPI_SEQ_DEASSERT_RESET);
+	intel_dsi_exec_vbt_sequence(intel_dsi, MIPI_SEQ_INIT_OTP);
 
 	/* Enable port in pre-enable phase itself because as per hw team
 	 * recommendation, port should be enabled befor plane & pipe */
@@ -674,7 +677,8 @@ static void intel_dsi_pre_enable(struct intel_encoder *encoder,
 			dpi_send_cmd(intel_dsi, TURN_ON, false, port);
 		msleep(100);
 
-		drm_panel_enable(intel_dsi->panel);
+		intel_dsi_exec_vbt_sequence(intel_dsi, MIPI_SEQ_DISPLAY_ON);
+		intel_dsi_exec_vbt_sequence(intel_dsi, MIPI_SEQ_BACKLIGHT_ON);
 
 		intel_dsi_port_enable(encoder);
 	}
@@ -737,7 +741,8 @@ static void intel_dsi_post_disable(struct intel_encoder *encoder,
 	 * if disable packets are sent before sending shutdown packet then in
 	 * some next enable sequence send turn on packet error is observed
 	 */
-	drm_panel_disable(intel_dsi->panel);
+	intel_dsi_exec_vbt_sequence(intel_dsi, MIPI_SEQ_BACKLIGHT_OFF);
+	intel_dsi_exec_vbt_sequence(intel_dsi, MIPI_SEQ_DISPLAY_OFF);
 
 	intel_dsi_clear_device_ready(encoder);
 
@@ -751,7 +756,8 @@ static void intel_dsi_post_disable(struct intel_encoder *encoder,
 		I915_WRITE(DSPCLK_GATE_D, val);
 	}
 
-	drm_panel_unprepare(intel_dsi->panel);
+	intel_dsi_exec_vbt_sequence(intel_dsi, MIPI_SEQ_ASSERT_RESET);
+	intel_dsi_exec_vbt_sequence(intel_dsi, MIPI_SEQ_POWER_OFF);
 
 	msleep(intel_dsi->panel_off_delay);
 
