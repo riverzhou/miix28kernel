@@ -752,6 +752,7 @@ static void intel_dsi_post_disable(struct intel_encoder *encoder,
 	 * XXX spec specifies SHUTDOWN before MIPI_SEQ_DISPLAY_OFF for
 	 * v3 VBTs, but not for v2 VBTs?
 	 */
+	intel_dsi_exec_vbt_sequence(intel_dsi, MIPI_SEQ_TEAR_OFF);
 	intel_dsi_exec_vbt_sequence(intel_dsi, MIPI_SEQ_DISPLAY_OFF);
 
 	/* Transition to LP-00 */
