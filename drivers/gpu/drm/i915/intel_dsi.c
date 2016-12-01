@@ -556,6 +556,74 @@ static void intel_dsi_prepare(struct intel_encoder *intel_encoder,
 			      struct intel_crtc_state *pipe_config);
 static void intel_dsi_unprepare(struct intel_encoder *encoder);
 
+/*
+ * Panel enable/disable sequences from the VBT spec.
+ *
+ * Note the spec has AssertReset / DeassertReset swapped from their
+ * usual naming. We use the normal names to avoid confusion (so below
+ * they are swapped compared to the spec).
+ *
+ * v2 sequence for video mode:
+ * - power on
+ * - wait t1+t2
+ * - MIPIDeassertResetPin
+ * - clk/data lines to lp-11
+ * - MIPISendInitialDcsCmds
+ * - turn on DPI
+ * - MIPIDisplayOn
+ * - wait t5
+ * - backlight on
+ * ...
+ * - backlight off
+ * - wait t6
+ * - MIPIDisplayOff
+ * - turn off DPI
+ * - clk/data lines to lp-00
+ * - MIPIAssertResetPin
+ * - wait t3
+ * - power off
+ * - wait t4
+ *
+ * v3 sequence for video mode:
+ * - MIPIPanelPowerOn
+ * - MIPIDeassertResetPin
+ * - set clk/data lines to lp-11
+ * - MIPISendInitialDcsCmds (LP)
+ * - turn on DPI
+ * - MIPITearOn (command mode only) + MIPIDisplayOn (LP and HS)
+ * - MIPIBacklightOn
+ * ...
+ * - MIPIBacklightOff
+ * - turn off DPI
+ * - MIPITearOff + MIPIDisplayOff (LP)
+ * - clk/data lines to lp-00
+ * - MIPIAssertResetPin
+ * - MIPIPanelPowerOff
+ *
+ * sequence for command mode:
+ * - power on
+ * - wait t1+t2
+ * - MIPIDeassertResetPin
+ * - clk/data lines to lp-11
+ * - MIPISendInitialDcsCmds
+ * - MIPITearOn
+ * - MIPIDisplayOn
+ * - set pipe to dsr mode
+ * - wait t5
+ * - backlight on
+ * ... issue write_mem_start/write_mem_continue commands ...
+ * - backlight off
+ * - wait t6
+ * - disable pipe dsr mode
+ * - MIPITearOff
+ * - MIPIDisplayOff
+ * - clk/data lines to lp-00
+ * - MIPIAssertResetPin
+ * - wait t3
+ * - power off
+ * - wait t4
+ */
+
 static void intel_dsi_pre_enable(struct intel_encoder *encoder,
 				 struct intel_crtc_state *pipe_config,
 				 struct drm_connector_state *conn_state)
