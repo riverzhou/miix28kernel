@@ -713,6 +713,11 @@ static void intel_dsi_pre_disable(struct intel_encoder *encoder,
 	intel_dsi_exec_vbt_sequence(intel_dsi, MIPI_SEQ_BACKLIGHT_OFF);
 	intel_panel_disable_backlight(intel_dsi->attached_connector);
 
+	/*
+	 * XXX: According to the spec we should send SHUTDOWN before
+	 * MIPI_SEQ_DISPLAY_OFF only for v3+ VBTs, but testing in the field
+	 * has shown that we should do this for v2 VBTs too?
+	 */
 	if (is_vid_mode(intel_dsi)) {
 		/* Send Shutdown command to the panel in LP mode */
 		for_each_dsi_port(port, intel_dsi->ports)
@@ -744,6 +749,8 @@ static void intel_dsi_post_disable(struct intel_encoder *encoder,
 	/*
 	 * if disable packets are sent before sending shutdown packet then in
 	 * some next enable sequence send turn on packet error is observed
+	 * XXX spec specifies SHUTDOWN before MIPI_SEQ_DISPLAY_OFF for
+	 * v3 VBTs, but not for v2 VBTs?
 	 */
 	intel_dsi_exec_vbt_sequence(intel_dsi, MIPI_SEQ_DISPLAY_OFF);
 
