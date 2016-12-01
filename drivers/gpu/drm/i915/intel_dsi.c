@@ -679,12 +679,13 @@ static void intel_dsi_pre_enable(struct intel_encoder *encoder,
 		msleep(100);
 
 		intel_dsi_exec_vbt_sequence(intel_dsi, MIPI_SEQ_DISPLAY_ON);
-		intel_dsi_exec_vbt_sequence(intel_dsi, MIPI_SEQ_BACKLIGHT_ON);
 
 		intel_dsi_port_enable(encoder);
 	}
 
+	/* Enable backlight, both pwm and VBT */
 	intel_panel_enable_backlight(intel_dsi->attached_connector);
+	intel_dsi_exec_vbt_sequence(intel_dsi, MIPI_SEQ_BACKLIGHT_ON);
 }
 
 static void intel_dsi_enable_nop(struct intel_encoder *encoder,
@@ -708,6 +709,8 @@ static void intel_dsi_pre_disable(struct intel_encoder *encoder,
 
 	DRM_DEBUG_KMS("\n");
 
+	/* Disable backlight, both VBT and pwm */
+	intel_dsi_exec_vbt_sequence(intel_dsi, MIPI_SEQ_BACKLIGHT_OFF);
 	intel_panel_disable_backlight(intel_dsi->attached_connector);
 
 	if (is_vid_mode(intel_dsi)) {
@@ -742,7 +745,6 @@ static void intel_dsi_post_disable(struct intel_encoder *encoder,
 	 * if disable packets are sent before sending shutdown packet then in
 	 * some next enable sequence send turn on packet error is observed
 	 */
-	intel_dsi_exec_vbt_sequence(intel_dsi, MIPI_SEQ_BACKLIGHT_OFF);
 	intel_dsi_exec_vbt_sequence(intel_dsi, MIPI_SEQ_DISPLAY_OFF);
 
 	/* Transition to LP-00 */
