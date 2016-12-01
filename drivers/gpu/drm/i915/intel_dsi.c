@@ -641,14 +641,6 @@ static void intel_dsi_pre_enable(struct intel_encoder *encoder,
 	intel_disable_dsi_pll(encoder);
 	intel_enable_dsi_pll(encoder, pipe_config);
 
-	intel_dsi_prepare(encoder, pipe_config);
-
-	/* Power on, try both CRC pmic gpio and VBT */
-	if (intel_dsi->gpio_panel)
-		gpiod_set_value_cansleep(intel_dsi->gpio_panel, 1);
-	intel_dsi_exec_vbt_sequence(intel_dsi, MIPI_SEQ_POWER_ON);
-	msleep(intel_dsi->panel_on_delay);
-
 	if (IS_VALLEYVIEW(dev_priv) || IS_CHERRYVIEW(dev_priv)) {
 		u32 val;
 
@@ -657,6 +649,14 @@ static void intel_dsi_pre_enable(struct intel_encoder *encoder,
 		val |= DPOUNIT_CLOCK_GATE_DISABLE;
 		I915_WRITE(DSPCLK_GATE_D, val);
 	}
+
+	intel_dsi_prepare(encoder, pipe_config);
+
+	/* Power on, try both CRC pmic gpio and VBT */
+	if (intel_dsi->gpio_panel)
+		gpiod_set_value_cansleep(intel_dsi->gpio_panel, 1);
+	intel_dsi_exec_vbt_sequence(intel_dsi, MIPI_SEQ_POWER_ON);
+	msleep(intel_dsi->panel_on_delay);
 
 	/* put device in ready state */
 	intel_dsi_device_ready(encoder);
