@@ -467,6 +467,14 @@ static int silead_ts_probe(struct i2c_client *client,
 
 	/* Power GPIO pin */
 	data->gpio_power = devm_gpiod_get_optional(dev, "power", GPIOD_OUT_LOW);
+#ifdef CONFIG_ACPI
+	/*
+	 * ACPI gpios may return -EBUSY this means that the gpio is owned by
+	 * the ACPI code, and will be set / cleared by the ACPI code.
+	 */
+	if (IS_ERR(data->gpio_power) && PTR_ERR(data->gpio_power) == -EBUSY)
+		data->gpio_power = NULL;
+#endif
 	if (IS_ERR(data->gpio_power)) {
 		if (PTR_ERR(data->gpio_power) != -EPROBE_DEFER)
 			dev_err(dev, "Shutdown GPIO request failed\n");
