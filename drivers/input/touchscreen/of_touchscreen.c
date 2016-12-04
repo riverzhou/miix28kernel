@@ -116,12 +116,12 @@ void touchscreen_parse_properties(struct input_dev *input, bool multitouch,
 
 	prop->max_x = input_abs_get_max(input, axis);
 	prop->max_y = input_abs_get_max(input, axis + 1);
-	prop->invert_x =
-		device_property_read_bool(dev, "touchscreen-inverted-x");
-	prop->invert_y =
-		device_property_read_bool(dev, "touchscreen-inverted-y");
-	prop->swap_x_y =
-		device_property_read_bool(dev, "touchscreen-swapped-x-y");
+	if (device_property_read_bool(dev, "touchscreen-inverted-x"))
+		prop->invert_x = true;
+	if (device_property_read_bool(dev, "touchscreen-inverted-y"))
+		prop->invert_y = true;
+	if (device_property_read_bool(dev, "touchscreen-swapped-x-y"))
+		prop->swap_x_y = true;
 
 	if (prop->swap_x_y)
 		swap(input->absinfo[axis], input->absinfo[axis + 1]);
