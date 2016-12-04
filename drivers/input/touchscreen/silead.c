@@ -99,8 +99,10 @@ static int silead_ts_request_input_dev(struct silead_ts_data *data)
 		return -ENOMEM;
 	}
 
-	input_set_abs_params(data->input, ABS_MT_POSITION_X, 0, 4095, 0, 0);
-	input_set_abs_params(data->input, ABS_MT_POSITION_Y, 0, 4095, 0, 0);
+	input_set_abs_params(data->input, ABS_MT_POSITION_X, 0,
+			     data->prop.max_x, 0, 0);
+	input_set_abs_params(data->input, ABS_MT_POSITION_Y, 0,
+			     data->prop.max_y, 0, 0);
 	touchscreen_parse_properties(data->input, true, &data->prop);
 
 	input_mt_init_slots(data->input, data->max_fingers,
@@ -454,6 +456,8 @@ static int silead_ts_probe(struct i2c_client *client,
 
 	i2c_set_clientdata(client, data);
 	data->client = client;
+	data->prop.max_x = 4095;
+	data->prop.max_y = 4095;
 
 	error = silead_ts_set_default_fw_name(data, id);
 	if (error)
