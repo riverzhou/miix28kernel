@@ -517,6 +517,7 @@ enum axp809_irqs {
 struct axp20x_dev {
 	struct device			*dev;
 	int				irq;
+	unsigned long			irq_flags;
 	struct regmap			*regmap;
 	struct regmap_irq_chip_data	*regmap_irqc;
 	long				variant;
