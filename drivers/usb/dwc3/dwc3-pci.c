@@ -25,6 +25,7 @@
 #include <linux/gpio/consumer.h>
 #include <linux/acpi.h>
 #include <linux/delay.h>
+#include <linux/idr.h>
 
 #define PCI_DEVICE_ID_SYNOPSYS_HAPSUSB3		0xabcd
 #define PCI_DEVICE_ID_SYNOPSYS_HAPSUSB3_AXI	0xabce
@@ -47,6 +48,8 @@ static const struct acpi_gpio_mapping acpi_dwc3_byt_gpios[] = {
 	{ "cs-gpios", &cs_gpios, 1 },
 	{ },
 };
+
+static DEFINE_IDA(dwc3_platform_devid_ida);
 
 static int dwc3_pci_quirks(struct pci_dev *pdev, struct platform_device *dwc3)
 {
@@ -141,7 +144,7 @@ static int dwc3_pci_probe(struct pci_dev *pci,
 {
 	struct resource		res[2];
 	struct platform_device	*dwc3;
-	int			ret;
+	int			pdev_id, ret;
 	struct device		*dev = &pci->dev;
 
 	ret = pcim_enable_device(pci);
@@ -152,7 +155,11 @@ static int dwc3_pci_probe(struct pci_dev *pci,
 
 	pci_set_master(pci);
 
-	dwc3 = platform_device_alloc("dwc3", PLATFORM_DEVID_AUTO);
+	pdev_id = ida_simple_get(&dwc3_platform_devid_ida, 0, 0, GFP_KERNEL);
+	if (pdev_id < 0)
+		pdev_id = PLATFORM_DEVID_AUTO;
+
+	dwc3 = platform_device_alloc("dwc3", pdev_id);
 	if (!dwc3) {
 		dev_err(dev, "couldn't allocate dwc3 device\n");
 		return -ENOMEM;
