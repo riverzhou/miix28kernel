@@ -489,4 +489,14 @@ config PHY_NS2_PCIE
 	help
 	  Enable this to support the Broadcom Northstar2 PCIe PHY.
 	  If unsure, say N.
+
+config PHY_INTEL_CHT_USB
+	tristate "Intel Cherrytrail USB PHY driver"
+	depends on EXTCON && X86
+	select GENERIC_PHY
+	help
+	  Enable this to support the OTG USB PHY muxing and Vbus valid bits
+	  in the Intel Vendor Defined XHCI extended capabilities region found
+	  on Cherrytrail SoCs. If unsure, say N.
+
 endmenu
