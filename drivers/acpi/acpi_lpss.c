@@ -84,6 +84,7 @@ static const struct lpss_device_desc lpss_dma_desc = {
 };
 
 struct lpss_private_data {
+	struct acpi_device *adev;
 	void __iomem *mmio_base;
 	resource_size_t mmio_size;
 	unsigned int fixed_clk_rate;
@@ -154,6 +155,33 @@ static void byt_i2c_setup(struct lpss_private_data *pdata)
 	writel(0, pdata->mmio_base + LPSS_I2C_ENABLE);
 }
 
+static void byt_sdio_setup(struct lpss_private_data *pdata)
+{
+	unsigned long long adr;
+	acpi_status status;
+	struct device *dev;
+
+	/*
+	 * Some firmware has a broken _ADR 0 enter for the 80860F14:2
+	 * device, which causes it to get seen as the firmware_node
+	 * for the pci host bridge, rather then a stand alone device.
+	 *
+	 * Check if this is the case, and if it is remove the link.
+	 */
+	if (strcmp(acpi_device_uid(pdata->adev), "2") != 0)
+		return;
+
+	status = acpi_evaluate_integer(pdata->adev->handle, "_ADR", NULL, &adr);
+	if (ACPI_FAILURE(status) || adr != 0)
+		return;
+
+	dev = acpi_get_first_physical_node(pdata->adev);
+	if (!dev)
+		return;
+
+	acpi_unbind_one(dev);
+}
+
 static const struct lpss_device_desc lpt_dev_desc = {
 	.flags = LPSS_CLK | LPSS_CLK_GATE | LPSS_CLK_DIVIDER | LPSS_LTR,
 	.prv_offset = 0x800,
@@ -217,6 +245,7 @@ static const struct lpss_device_desc byt_spi_dev_desc = {
 
 static const struct lpss_device_desc byt_sdio_dev_desc = {
 	.flags = LPSS_CLK,
+	.setup = byt_sdio_setup,
 };
 
 static const struct lpss_device_desc byt_i2c_dev_desc = {
@@ -425,6 +454,7 @@ static int acpi_lpss_create_device(struct acpi_device *adev,
 		goto err_out;
 	}
 
+	pdata->adev = adev;
 	pdata->dev_desc = dev_desc;
 
 	if (dev_desc->setup)
