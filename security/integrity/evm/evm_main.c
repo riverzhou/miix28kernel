@@ -145,6 +145,10 @@ static enum integrity_status evm_verify_hmac(struct dentry *dentry,
 	/* check value type */
 	switch (xattr_data->type) {
 	case EVM_XATTR_HMAC:
+		if (xattr_len != sizeof(struct evm_ima_xattr_data)) {
+			evm_status = INTEGRITY_FAIL;
+			goto out;
+		}
 		rc = evm_calc_hmac(dentry, xattr_name, xattr_value,
 				   xattr_value_len, calc.digest);
 		if (rc)
@@ -279,7 +283,7 @@ static int evm_protect_xattr(struct dentry *dentry, const char *xattr_name,
 	enum integrity_status evm_status;
 
 	if (strcmp(xattr_name, XATTR_NAME_EVM) == 0) {
-		if (!ns_capable(dentry->d_sb->s_user_ns, CAP_SYS_ADMIN))
+		if (!capable(CAP_SYS_ADMIN))
 			return -EPERM;
 	} else if (!evm_protected_xattr(xattr_name)) {
 		if (!posix_xattr_acl(xattr_name))

@@ -18,38 +18,25 @@
 
 static bool chown_ok(const struct inode *inode, kuid_t uid)
 {
-	struct user_namespace *user_ns;
-
-	if (uid_eq(current_fsuid(), inode->i_uid) && uid_eq(uid, inode->i_uid))
+	if (uid_eq(current_fsuid(), inode->i_uid) &&
+	    uid_eq(uid, inode->i_uid))
 		return true;
 	if (capable_wrt_inode_uidgid(inode, CAP_CHOWN))
 		return true;
-
-	user_ns = inode->i_sb->s_user_ns;
-	if (!uid_valid(inode->i_uid) &&
-	    (!gid_valid(inode->i_gid) || kgid_has_mapping(user_ns, inode->i_gid)) &&
-	    ns_capable(user_ns, CAP_CHOWN))
+	if (ns_capable(inode->i_sb->s_user_ns, CAP_CHOWN))
 		return true;
-
 	return false;
 }
 
 static bool chgrp_ok(const struct inode *inode, kgid_t gid)
 {
-	struct user_namespace *user_ns;
-
 	if (uid_eq(current_fsuid(), inode->i_uid) &&
 	    (in_group_p(gid) || gid_eq(gid, inode->i_gid)))
 		return true;
 	if (capable_wrt_inode_uidgid(inode, CAP_CHOWN))
 		return true;
-
-	user_ns = inode->i_sb->s_user_ns;
-	if (!gid_valid(inode->i_gid) &&
-	    (!uid_valid(inode->i_uid) || kuid_has_mapping(user_ns, inode->i_uid)) &&
-	    ns_capable(user_ns, CAP_CHOWN))
+	if (ns_capable(inode->i_sb->s_user_ns, CAP_CHOWN))
 		return true;
-
 	return false;
 }
 
@@ -78,17 +65,6 @@ int inode_change_ok(const struct inode *inode, struct iattr *attr)
 		if (error)
 			return error;
 	}
-
-	/*
-	 * Verify that uid/gid changes are valid in the target namespace
-	 * of the superblock. This cannot be overriden using ATTR_FORCE.
-	 */
-	if (ia_valid & ATTR_UID &&
-	    from_kuid(inode->i_sb->s_user_ns, attr->ia_uid) == (uid_t)-1)
-		return -EOVERFLOW;
-	if (ia_valid & ATTR_GID &&
-	    from_kgid(inode->i_sb->s_user_ns, attr->ia_gid) == (gid_t)-1)
-		return -EOVERFLOW;
 
 	/* If force is set do it anyway. */
 	if (ia_valid & ATTR_FORCE)
@@ -244,6 +220,21 @@ int notify_change(struct dentry * dentry, struct iattr * attr, struct inode **de
 			return -EPERM;
 	}
 
+	/*
+	 * If utimes(2) and friends are called with times == NULL (or both
+	 * times are UTIME_NOW), then we need to check for write permission
+	 */
+	if (ia_valid & ATTR_TOUCH) {
+		if (IS_IMMUTABLE(inode))
+			return -EPERM;
+
+		if (!inode_owner_or_capable(inode)) {
+			error = inode_permission(inode, MAY_WRITE);
+			if (error)
+				return error;
+		}
+	}
+
 	if ((ia_valid & ATTR_MODE)) {
 		umode_t amode = attr->ia_mode;
 		/* Flag setting protected by i_mutex */
@@ -296,6 +287,25 @@ int notify_change(struct dentry * dentry, struct iattr * attr, struct inode **de
 	}
 	if (!(attr->ia_valid & ~(ATTR_KILL_SUID | ATTR_KILL_SGID)))
 		return 0;
+
+	/*
+	 * Verify that uid/gid changes are valid in the target
+	 * namespace of the superblock.
+	 */
+	if (ia_valid & ATTR_UID &&
+	    !kuid_has_mapping(inode->i_sb->s_user_ns, attr->ia_uid))
+		return -EOVERFLOW;
+	if (ia_valid & ATTR_GID &&
+	    !kgid_has_mapping(inode->i_sb->s_user_ns, attr->ia_gid))
+		return -EOVERFLOW;
+
+	/* Don't allow modifications of files with invalid uids or
+	 * gids unless those uids & gids are being made valid.
+	 */
+	if (!(ia_valid & ATTR_UID) && !uid_valid(inode->i_uid))
+		return -EOVERFLOW;
+	if (!(ia_valid & ATTR_GID) && !gid_valid(inode->i_gid))
+		return -EOVERFLOW;
 
 	error = security_inode_setattr(dentry, attr);
 	if (error)

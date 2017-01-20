@@ -190,11 +190,21 @@ static int _omap_device_notifier_call(struct notifier_block *nb,
 {
 	struct platform_device *pdev = to_platform_device(dev);
 	struct omap_device *od;
+	int err;
 
 	switch (event) {
-	case BUS_NOTIFY_DEL_DEVICE:
+	case BUS_NOTIFY_REMOVED_DEVICE:
 		if (pdev->archdata.od)
 			omap_device_delete(pdev->archdata.od);
+		break;
+	case BUS_NOTIFY_UNBOUND_DRIVER:
+		od = to_omap_device(pdev);
+		if (od && (od->_state == OMAP_DEVICE_STATE_ENABLED)) {
+			dev_info(dev, "enabled after unload, idling\n");
+			err = omap_device_idle(pdev);
+			if (err)
+				dev_err(dev, "failed to idle\n");
+		}
 		break;
 	case BUS_NOTIFY_ADD_DEVICE:
 		if (pdev->dev.of_node)
@@ -257,7 +267,7 @@ static int _omap_device_idle_hwmods(struct omap_device *od)
  * function returns a value different than the value the caller got
  * the last time it called this function.
  *
- * If any hwmods exist for the omap_device assoiated with @pdev,
+ * If any hwmods exist for the omap_device associated with @pdev,
  * return the context loss counter for that hwmod, otherwise return
  * zero.
  */

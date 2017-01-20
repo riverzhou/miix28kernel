@@ -514,7 +514,6 @@ static inline void napi_enable(struct napi_struct *n)
 	clear_bit(NAPI_STATE_NPSVC, &n->state);
 }
 
-#ifdef CONFIG_SMP
 /**
  *	napi_synchronize - wait until NAPI is not running
  *	@n: napi context
@@ -525,12 +524,12 @@ static inline void napi_enable(struct napi_struct *n)
  */
 static inline void napi_synchronize(const struct napi_struct *n)
 {
-	while (test_bit(NAPI_STATE_SCHED, &n->state))
-		msleep(1);
+	if (IS_ENABLED(CONFIG_SMP))
+		while (test_bit(NAPI_STATE_SCHED, &n->state))
+			msleep(1);
+	else
+		barrier();
 }
-#else
-# define napi_synchronize(n)	barrier()
-#endif
 
 enum netdev_queue_state_t {
 	__QUEUE_STATE_DRV_XOFF,
@@ -2078,7 +2077,7 @@ static inline struct sk_buff **call_gro_receive(gro_receive_t cb,
 						struct sk_buff **head,
 						struct sk_buff *skb)
 {
-	if (gro_recursion_inc_test(skb)) {
+	if (unlikely(gro_recursion_inc_test(skb))) {
 		NAPI_GRO_CB(skb)->flush |= 1;
 		return NULL;
 	}
@@ -2130,6 +2129,22 @@ struct udp_offload {
 	u8			 ipproto;
 	struct udp_offload_callbacks callbacks;
 };
+
+typedef struct sk_buff **(*gro_receive_udp_t)(struct sk_buff **,
+					      struct sk_buff *,
+					      struct udp_offload *);
+static inline struct sk_buff **call_gro_receive_udp(gro_receive_udp_t cb,
+						    struct sk_buff **head,
+						    struct sk_buff *skb,
+						    struct udp_offload *uoff)
+{
+	if (unlikely(gro_recursion_inc_test(skb))) {
+		NAPI_GRO_CB(skb)->flush |= 1;
+		return NULL;
+	}
+
+	return cb(head, skb, uoff);
+}
 
 /* often modified stats are per cpu, other are shared (netdev->stats) */
 struct pcpu_sw_netstats {
@@ -3108,6 +3123,7 @@ static inline void napi_free_frags(struct napi_struct *napi)
 	napi->skb = NULL;
 }
 
+bool netdev_is_rx_handler_busy(struct net_device *dev);
 int netdev_rx_handler_register(struct net_device *dev,
 			       rx_handler_func_t *rx_handler,
 			       void *rx_handler_data);

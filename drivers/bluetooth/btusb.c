@@ -247,6 +247,7 @@ static const struct usb_device_id blacklist_table[] = {
 
 	/* QCA ROME chipset */
 	{ USB_DEVICE(0x0cf3, 0xe007), .driver_info = BTUSB_QCA_ROME },
+	{ USB_DEVICE(0x0cf3, 0xe009), .driver_info = BTUSB_QCA_ROME },
 	{ USB_DEVICE(0x0cf3, 0xe300), .driver_info = BTUSB_QCA_ROME },
 	{ USB_DEVICE(0x0cf3, 0xe360), .driver_info = BTUSB_QCA_ROME },
 
@@ -1036,6 +1037,10 @@ static int btusb_open(struct hci_dev *hdev)
 
 	BT_DBG("%s", hdev->name);
 
+	err = usb_autopm_get_interface(data->intf);
+	if (err < 0)
+		return err;
+
 	/* Patching USB firmware files prior to starting any URBs of HCI path
 	 * It is more safe to use USB bulk channel for downloading USB patch
 	 */
@@ -1044,10 +1049,6 @@ static int btusb_open(struct hci_dev *hdev)
 		if (err < 0)
 			return err;
 	}
-
-	err = usb_autopm_get_interface(data->intf);
-	if (err < 0)
-		return err;
 
 	data->intf->needs_remote_wakeup = 1;
 
@@ -2975,9 +2976,13 @@ static int btusb_probe(struct usb_interface *intf,
 	}
 
 	if (id->driver_info & BTUSB_MARVELL) {
+		struct pci_dev *pdev;
 		hdev->set_bdaddr = btusb_set_bdaddr_marvell;
-		if (pci_get_subsys(PCI_ANY_ID, PCI_ANY_ID, 0x1028, 0x0720, NULL) ||
-			pci_get_subsys(PCI_ANY_ID, PCI_ANY_ID, 0x1028, 0x0733, NULL)) {
+		pdev = pci_get_subsys(PCI_ANY_ID, PCI_ANY_ID, 0x1028, 0x0720, NULL);
+		if (!pdev)
+			pdev = pci_get_subsys(PCI_ANY_ID, PCI_ANY_ID, 0x1028, 0x0733, NULL);
+		if (pdev) {
+			pci_dev_put(pdev);
 			hdev->post_open = btusb_edge_post_open;
 			hdev->shutdown = btusb_edge_shutdown;
 		}

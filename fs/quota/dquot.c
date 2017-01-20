@@ -741,7 +741,7 @@ void dqput(struct dquot *dquot)
 	if (!atomic_read(&dquot->dq_count)) {
 		quota_error(dquot->dq_sb, "trying to free free dquot of %s %d",
 			    quotatypes[dquot->dq_id.type],
-			    from_kqid(dquot->dq_sb->s_user_ns, dquot->dq_id));
+			    from_kqid(&init_user_ns, dquot->dq_id));
 		BUG();
 	}
 #endif
@@ -834,11 +834,8 @@ struct dquot *dqget(struct super_block *sb, struct kqid qid)
 	unsigned int hashent = hashfn(sb, qid);
 	struct dquot *dquot, *empty = NULL;
 
-	/* qid must be valid and must map into sb's userns */
-	if (!qid_valid(qid))
+	if (!qid_has_mapping(sb->s_user_ns, qid))
 		return ERR_PTR(-EINVAL);
-	if (from_kqid(sb->s_user_ns, qid) == (qid_t)-1)
-		return ERR_PTR(-EOVERFLOW);
 
         if (!sb_has_quota_active(sb, qid.type))
 		return ERR_PTR(-ESRCH);
@@ -2234,6 +2231,11 @@ static int vfs_load_quota_inode(struct inode *inode, int type, int format_id,
 	}
 	if (!sb->s_op->quota_write || !sb->s_op->quota_read ||
 	    (type == PRJQUOTA && sb->dq_op->get_projid == NULL)) {
+		error = -EINVAL;
+		goto out_fmt;
+	}
+	/* Filesystems outside of init_user_ns not yet supported */
+	if (sb->s_user_ns != &init_user_ns) {
 		error = -EINVAL;
 		goto out_fmt;
 	}

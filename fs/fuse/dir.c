@@ -13,6 +13,8 @@
 #include <linux/sched.h>
 #include <linux/namei.h>
 #include <linux/slab.h>
+#include <uapi/linux/xattr.h>
+#include <linux/posix_acl_xattr.h>
 
 static bool fuse_use_readdirplus(struct inode *dir, struct dir_context *ctx)
 {
@@ -1697,14 +1699,46 @@ error:
 static int fuse_setattr(struct dentry *entry, struct iattr *attr)
 {
 	struct inode *inode = d_inode(entry);
+	struct file *file = (attr->ia_valid & ATTR_FILE) ? attr->ia_file : NULL;
+	int ret;
 
 	if (!fuse_allow_current_process(get_fuse_conn(inode)))
 		return -EACCES;
 
-	if (attr->ia_valid & ATTR_FILE)
-		return fuse_do_setattr(inode, attr, attr->ia_file);
-	else
-		return fuse_do_setattr(inode, attr, NULL);
+	if (attr->ia_valid & (ATTR_KILL_SUID | ATTR_KILL_SGID)) {
+		int kill;
+
+		attr->ia_valid &= ~(ATTR_KILL_SUID | ATTR_KILL_SGID |
+				    ATTR_MODE);
+		/*
+		 * ia_mode calculation may have used stale i_mode.  Refresh and
+		 * recalculate.
+		 */
+		ret = fuse_do_getattr(inode, NULL, file);
+		if (ret)
+			return ret;
+
+		attr->ia_mode = inode->i_mode;
+		kill = should_remove_suid(entry);
+		if (kill & ATTR_KILL_SUID) {
+			attr->ia_valid |= ATTR_MODE;
+			attr->ia_mode &= ~S_ISUID;
+		}
+		if (kill & ATTR_KILL_SGID) {
+			attr->ia_valid |= ATTR_MODE;
+			attr->ia_mode &= ~S_ISGID;
+		}
+	}
+	if (!attr->ia_valid)
+		return 0;
+
+	ret = fuse_do_setattr(inode, attr, file);
+	if (!ret) {
+		/* Directory mode changed, may need to revalidate access */
+		if (d_is_dir(entry) && (attr->ia_valid & ATTR_MODE))
+			fuse_invalidate_entry_cache(entry);
+	}
+	return ret;
 }
 
 static int fuse_getattr(struct vfsmount *mnt, struct dentry *entry,
@@ -1725,11 +1759,23 @@ static int fuse_setxattr(struct dentry *entry, const char *name,
 	struct inode *inode = d_inode(entry);
 	struct fuse_conn *fc = get_fuse_conn(inode);
 	FUSE_ARGS(args);
+	void *buf = NULL;
 	struct fuse_setxattr_in inarg;
 	int err;
 
 	if (fc->no_setxattr)
 		return -EOPNOTSUPP;
+
+	if (!strcmp(name, XATTR_NAME_POSIX_ACL_ACCESS) ||
+	    !strcmp(name, XATTR_NAME_POSIX_ACL_DEFAULT)) {
+		buf = kmemdup(value, size, GFP_KERNEL);
+		if (!buf)
+			return -ENOMEM;
+		err = posix_acl_fix_xattr_userns(inode->i_sb->s_user_ns,
+						 &init_user_ns, buf, size);
+		if (err)
+			goto out;
+	}
 
 	memset(&inarg, 0, sizeof(inarg));
 	inarg.size = size;
@@ -1742,7 +1788,7 @@ static int fuse_setxattr(struct dentry *entry, const char *name,
 	args.in.args[1].size = strlen(name) + 1;
 	args.in.args[1].value = name;
 	args.in.args[2].size = size;
-	args.in.args[2].value = value;
+	args.in.args[2].value = buf ? buf : value;
 	err = fuse_simple_request(fc, &args);
 	if (err == -ENOSYS) {
 		fc->no_setxattr = 1;
@@ -1752,6 +1798,8 @@ static int fuse_setxattr(struct dentry *entry, const char *name,
 		fuse_invalidate_attr(inode);
 		fuse_update_ctime(inode);
 	}
+out:
+	kfree(buf);
 	return err;
 }
 
@@ -1788,13 +1836,38 @@ static ssize_t fuse_getxattr(struct dentry *entry, const char *name,
 		args.out.args[0].value = &outarg;
 	}
 	ret = fuse_simple_request(fc, &args);
-	if (!ret && !size)
-		ret = outarg.size;
+	if (!ret) {
+		if (!size) {
+			ret = outarg.size;
+		} else if (!strcmp(name, XATTR_NAME_POSIX_ACL_ACCESS) ||
+			   !strcmp(name, XATTR_NAME_POSIX_ACL_DEFAULT)) {
+			ret = posix_acl_fix_xattr_userns(&init_user_ns,
+							 inode->i_sb->s_user_ns,
+							 value, size);
+		}
+	}
 	if (ret == -ENOSYS) {
 		fc->no_getxattr = 1;
 		ret = -EOPNOTSUPP;
 	}
 	return ret;
+}
+
+static int fuse_verify_xattr_list(char *list, size_t size)
+{
+	size_t origsize = size;
+
+	while (size) {
+		size_t thislen = strnlen(list, size);
+
+		if (!thislen || thislen == size)
+			return -EIO;
+
+		size -= thislen + 1;
+		list += thislen + 1;
+	}
+
+	return origsize;
 }
 
 static ssize_t fuse_listxattr(struct dentry *entry, char *list, size_t size)
@@ -1832,6 +1905,8 @@ static ssize_t fuse_listxattr(struct dentry *entry, char *list, size_t size)
 	ret = fuse_simple_request(fc, &args);
 	if (!ret && !size)
 		ret = outarg.size;
+	if (ret > 0 && size)
+		ret = fuse_verify_xattr_list(list, ret);
 	if (ret == -ENOSYS) {
 		fc->no_listxattr = 1;
 		ret = -EOPNOTSUPP;

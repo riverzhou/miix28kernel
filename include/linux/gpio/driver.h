@@ -75,6 +75,10 @@ struct seq_file;
  *	initialization, provided by GPIO driver
  * @irq_parent: GPIO IRQ chip parent/bank linux irq number,
  *	provided by GPIO driver
+ * @irq_need_valid_mask: If set core allocates @irq_valid_mask with all
+ *	bits set to one
+ * @irq_valid_mask: If not %NULL holds bitmask of GPIOs which are valid to
+ *	be included in IRQ domain of the chip
  * @lock_key: per GPIO IRQ chip lockdep class
  *
  * A gpio_chip can help platforms abstract various sources of GPIOs so
@@ -138,6 +142,8 @@ struct gpio_chip {
 	irq_flow_handler_t	irq_handler;
 	unsigned int		irq_default_type;
 	int			irq_parent;
+	bool			irq_need_valid_mask;
+	unsigned long		*irq_valid_mask;
 	struct lock_class_key	*lock_key;
 #endif
 
@@ -174,6 +180,7 @@ extern struct gpio_chip *gpiochip_find(void *data,
 /* lock/unlock as IRQ */
 int gpiochip_lock_as_irq(struct gpio_chip *chip, unsigned int offset);
 void gpiochip_unlock_as_irq(struct gpio_chip *chip, unsigned int offset);
+bool gpiochip_line_is_irq(struct gpio_chip *chip, unsigned int offset);
 
 struct gpio_chip *gpiod_to_chip(const struct gpio_desc *desc);
 

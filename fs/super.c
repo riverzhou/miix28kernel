@@ -466,6 +466,10 @@ struct super_block *sget_userns(struct file_system_type *type,
 	struct super_block *old;
 	int err;
 
+	if (!(flags & MS_KERNMOUNT) &&
+	    !(type->fs_flags & FS_USERNS_MOUNT) &&
+	    !capable(CAP_SYS_ADMIN))
+		return ERR_PTR(-EPERM);
 retry:
 	spin_lock(&sb_lock);
 	if (test) {
@@ -1401,8 +1405,8 @@ int freeze_super(struct super_block *sb)
 		}
 	}
 	/*
-	 * This is just for debugging purposes so that fs can warn if it
-	 * sees write activity when frozen is set to SB_FREEZE_COMPLETE.
+	 * For debugging purposes so that fs can warn if it sees write activity
+	 * when frozen is set to SB_FREEZE_COMPLETE, and for thaw_super().
 	 */
 	sb->s_writers.frozen = SB_FREEZE_COMPLETE;
 	up_write(&sb->s_umount);
@@ -1421,7 +1425,7 @@ int thaw_super(struct super_block *sb)
 	int error;
 
 	down_write(&sb->s_umount);
-	if (sb->s_writers.frozen == SB_UNFROZEN) {
+	if (sb->s_writers.frozen != SB_FREEZE_COMPLETE) {
 		up_write(&sb->s_umount);
 		return -EINVAL;
 	}

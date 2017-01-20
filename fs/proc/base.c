@@ -708,10 +708,15 @@ int proc_setattr(struct dentry *dentry, struct iattr *attr)
 {
 	int error;
 	struct inode *inode = d_inode(dentry);
+	struct user_namespace *s_user_ns;
 
 	if (attr->ia_valid & ATTR_MODE)
 		return -EPERM;
-	if (!uid_valid(inode->i_uid) || !gid_valid(inode->i_gid))
+
+	/* Don't let anyone mess with weird proc files */
+	s_user_ns = inode->i_sb->s_user_ns;
+	if (!kuid_has_mapping(s_user_ns, inode->i_uid) ||
+	    !kgid_has_mapping(s_user_ns, inode->i_gid))
 		return -EPERM;
 
 	error = inode_change_ok(inode, attr);
@@ -1547,18 +1552,13 @@ static const struct file_operations proc_pid_set_comm_operations = {
 static int proc_exe_link(struct dentry *dentry, struct path *exe_path)
 {
 	struct task_struct *task;
-	struct mm_struct *mm;
 	struct file *exe_file;
 
 	task = get_proc_task(d_inode(dentry));
 	if (!task)
 		return -ENOENT;
-	mm = get_task_mm(task);
+	exe_file = get_task_exe_file(task);
 	put_task_struct(task);
-	if (!mm)
-		return -ENOENT;
-	exe_file = get_mm_exe_file(mm);
-	mmput(mm);
 	if (exe_file) {
 		*exe_path = exe_file->f_path;
 		path_get(&exe_file->f_path);

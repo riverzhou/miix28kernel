@@ -29,7 +29,8 @@ int st_sensors_get_buffer_element(struct iio_dev *indio_dev, u8 *buf)
 	struct st_sensor_data *sdata = iio_priv(indio_dev);
 	unsigned int num_data_channels = sdata->num_data_channels;
 	unsigned int byte_for_channel =
-			indio_dev->channels[0].scan_type.storagebits >> 3;
+		DIV_ROUND_UP(indio_dev->channels[0].scan_type.realbits +
+				indio_dev->channels[0].scan_type.shift, 8);
 
 	addr = kmalloc(num_data_channels, GFP_KERNEL);
 	if (!addr) {
@@ -108,13 +109,20 @@ irqreturn_t st_sensors_trigger_handler(int irq, void *p)
 	struct iio_poll_func *pf = p;
 	struct iio_dev *indio_dev = pf->indio_dev;
 	struct st_sensor_data *sdata = iio_priv(indio_dev);
+	s64 timestamp;
+
+	/* If we do timetamping here, do it before reading the values */
+	if (sdata->hw_irq_trigger)
+		timestamp = sdata->hw_timestamp;
+	else
+		timestamp = iio_get_time_ns();
 
 	len = st_sensors_get_buffer_element(indio_dev, sdata->buffer_data);
 	if (len < 0)
 		goto st_sensors_get_buffer_element_error;
 
 	iio_push_to_buffers_with_timestamp(indio_dev, sdata->buffer_data,
-		pf->timestamp);
+					   timestamp);
 
 st_sensors_get_buffer_element_error:
 	iio_trigger_notify_done(indio_dev->trig);

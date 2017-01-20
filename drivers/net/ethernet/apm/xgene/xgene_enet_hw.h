@@ -86,7 +86,7 @@ enum xgene_enet_rm {
 #define RINGADDRL_POS		5
 #define RINGADDRL_LEN		27
 #define RINGADDRH_POS		0
-#define RINGADDRH_LEN		6
+#define RINGADDRH_LEN		7
 #define RINGSIZE_POS		23
 #define RINGSIZE_LEN		3
 #define RINGTYPE_POS		19
@@ -94,9 +94,9 @@ enum xgene_enet_rm {
 #define RINGMODE_POS		20
 #define RINGMODE_LEN		3
 #define RECOMTIMEOUTL_POS	28
-#define RECOMTIMEOUTL_LEN	3
+#define RECOMTIMEOUTL_LEN	4
 #define RECOMTIMEOUTH_POS	0
-#define RECOMTIMEOUTH_LEN	2
+#define RECOMTIMEOUTH_LEN	3
 #define NUMMSGSINQ_POS		1
 #define NUMMSGSINQ_LEN		16
 #define ACCEPTLERR		BIT(19)
@@ -104,6 +104,8 @@ enum xgene_enet_rm {
 #define RECOMBBUF		BIT(27)
 
 #define MAC_OFFSET			0x30
+#define OFFSET_4			0x04
+#define OFFSET_8			0x08
 
 #define BLOCK_ETH_CSR_OFFSET		0x2000
 #define BLOCK_ETH_CLE_CSR_OFFSET	0x6000
@@ -165,6 +167,8 @@ enum xgene_enet_rm {
 #define TX_DV_GATE_EN0			BIT(2)
 #define RX_DV_GATE_EN0			BIT(1)
 #define RESUME_RX0			BIT(0)
+#define ENET_CFGSSQMIFPRESET_ADDR		0x14
+#define ENET_CFGSSQMIWQRESET_ADDR		0x1c
 #define ENET_CFGSSQMIWQASSOC_ADDR		0xe0
 #define ENET_CFGSSQMIFPQASSOC_ADDR		0xdc
 #define ENET_CFGSSQMIQMLITEFPQASSOC_ADDR	0xf0
@@ -201,6 +205,8 @@ enum xgene_enet_rm {
 #define USERINFO_LEN			32
 #define FPQNUM_POS			32
 #define FPQNUM_LEN			12
+#define ELERR_POS                       46
+#define ELERR_LEN                       2
 #define NV_POS				50
 #define NV_LEN				1
 #define LL_POS				51
@@ -295,11 +301,6 @@ enum xgene_enet_ring_bufnum {
 	RING_BUFNUM_INVALID
 };
 
-enum xgene_enet_cmd {
-	XGENE_ENET_WR_CMD = BIT(31),
-	XGENE_ENET_RD_CMD = BIT(30)
-};
-
 enum xgene_enet_err_code {
 	HBF_READ_DATA = 3,
 	HBF_LL_READ = 4,
@@ -345,6 +346,8 @@ void xgene_enet_parse_error(struct xgene_enet_desc_ring *ring,
 int xgene_enet_mdio_config(struct xgene_enet_pdata *pdata);
 void xgene_enet_mdio_remove(struct xgene_enet_pdata *pdata);
 bool xgene_ring_mgr_init(struct xgene_enet_pdata *p);
+int xgene_enet_phy_connect(struct net_device *ndev);
+void xgene_enet_phy_disconnect(struct xgene_enet_pdata *pdata);
 
 extern struct xgene_mac_ops xgene_gmac_ops;
 extern struct xgene_port_ops xgene_gport_ops;

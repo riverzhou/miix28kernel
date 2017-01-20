@@ -630,13 +630,13 @@ static int eeh_reset_device(struct eeh_pe *pe, struct pci_bus *bus)
 		 * rebuilt when adding PCI devices.
 		 */
 		eeh_pe_traverse(pe, eeh_pe_detach_dev, NULL);
+		eeh_pe_state_clear(pe, EEH_PE_PRI_BUS);
 		pcibios_add_pci_devices(bus);
 	} else if (frozen_bus && removed) {
 		pr_info("EEH: Sleep 5s ahead of partial hotplug\n");
 		ssleep(5);
 
 		eeh_pe_traverse(pe, eeh_pe_detach_dev, NULL);
-		eeh_pe_state_clear(pe, EEH_PE_PRI_BUS);
 		pcibios_add_pci_devices(frozen_bus);
 	}
 	eeh_pe_state_clear(pe, EEH_PE_KEEP);
@@ -909,6 +909,14 @@ static void eeh_handle_special_event(void)
 				/* Notify all devices to be down */
 				eeh_pe_state_clear(pe, EEH_PE_PRI_BUS);
 				bus = eeh_pe_bus_get(phb_pe);
+				if (!bus) {
+					pr_err("%s: Cannot find PCI bus for "
+					       "PHB#%d-PE#%x\n",
+					       __func__,
+					       pe->phb->global_number,
+					       pe->addr);
+					break;
+				}
 				eeh_pe_dev_traverse(pe,
 					eeh_report_failure, NULL);
 				pcibios_remove_pci_devices(bus);
