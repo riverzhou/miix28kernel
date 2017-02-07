@@ -256,7 +256,8 @@ static const struct intel_device_info intel_ivybridge_q_info = {
 static const struct intel_device_info intel_valleyview_m_info = {
 	GEN7_FEATURES,
 	.is_mobile = 1,
-	.num_pipes = 2,
+	.num_pipes = 1,
+	.has_hotplug = 0,
 	.is_valleyview = 1,
 	.display_mmio_offset = VLV_DISPLAY_BASE,
 	.has_fbc = 0, /* legal, last one wins */
