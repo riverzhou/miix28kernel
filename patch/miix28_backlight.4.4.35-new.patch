@@ -1,0 +1,391 @@
+diff --git a/drivers/gpu/drm/i915/i915_dma.c b/drivers/gpu/drm/i915/i915_dma.c
+index 61fcb3b22297..a4280ba61e3f 100644
+--- a/drivers/gpu/drm/i915/i915_dma.c
++++ b/drivers/gpu/drm/i915/i915_dma.c
+@@ -536,7 +536,7 @@ static void i915_dump_device_info(struct drm_i915_private *dev_priv)
+ #define SEP_EMPTY
+ #define PRINT_FLAG(name) info->name ? #name "," : ""
+ #define SEP_COMMA ,
+-	DRM_DEBUG_DRIVER("i915 device info: gen=%i, pciid=0x%04x rev=0x%02x flags="
++	DRM_INFO("i915 device info: gen=%i, pciid=0x%04x rev=0x%02x flags="
+ 			 DEV_INFO_FOR_EACH_FLAG(PRINT_S, SEP_EMPTY),
+ 			 info->gen,
+ 			 dev_priv->dev->pdev->device,
+diff --git a/drivers/gpu/drm/i915/i915_drv.c b/drivers/gpu/drm/i915/i915_drv.c
+index ba24384261bb..173b6015d0d9 100644
+--- a/drivers/gpu/drm/i915/i915_drv.c
++++ b/drivers/gpu/drm/i915/i915_drv.c
+@@ -256,7 +256,8 @@ static const struct intel_device_info intel_ivybridge_q_info = {
+ static const struct intel_device_info intel_valleyview_m_info = {
+ 	GEN7_FEATURES,
+ 	.is_mobile = 1,
+-	.num_pipes = 2,
++	.num_pipes = 1,
++	.has_hotplug = 0,
+ 	.is_valleyview = 1,
+ 	.display_mmio_offset = VLV_DISPLAY_BASE,
+ 	.has_fbc = 0, /* legal, last one wins */
+diff --git a/drivers/gpu/drm/i915/i915_drv.h b/drivers/gpu/drm/i915/i915_drv.h
+index 0b5e60f9ab50..47800472c5f1 100644
+--- a/drivers/gpu/drm/i915/i915_drv.h
++++ b/drivers/gpu/drm/i915/i915_drv.h
+@@ -2676,6 +2676,7 @@ struct i915_params {
+ 	bool verbose_state_checks;
+ 	bool nuclear_pageflip;
+ 	int edp_vswing;
++	bool force_backlight_pmic;
+ };
+ extern struct i915_params i915 __read_mostly;
+ 
+diff --git a/drivers/gpu/drm/i915/i915_params.c b/drivers/gpu/drm/i915/i915_params.c
+index 4be13a5eb932..d663ae04e8b8 100644
+--- a/drivers/gpu/drm/i915/i915_params.c
++++ b/drivers/gpu/drm/i915/i915_params.c
+@@ -55,6 +55,7 @@ struct i915_params i915 __read_mostly = {
+ 	.edp_vswing = 0,
+ 	.enable_guc_submission = false,
+ 	.guc_log_level = -1,
++	.force_backlight_pmic = 0,
+ };
+ 
+ module_param_named(modeset, i915.modeset, int, 0400);
+@@ -196,3 +197,8 @@ MODULE_PARM_DESC(enable_guc_submission, "Enable GuC submission (default:false)")
+ module_param_named(guc_log_level, i915.guc_log_level, int, 0400);
+ MODULE_PARM_DESC(guc_log_level,
+ 	"GuC firmware logging level (-1:disabled (default), 0-3:enabled)");
++
++module_param_named(force_backlight_pmic, i915.force_backlight_pmic, bool, 0600);
++MODULE_PARM_DESC(force_backlight_pmic,
++       "Force backlight adjusting through pmic (default: false).");
++
+diff --git a/drivers/gpu/drm/i915/intel_display.c b/drivers/gpu/drm/i915/intel_display.c
+index ed28a77db497..1c0401be7be9 100644
+--- a/drivers/gpu/drm/i915/intel_display.c
++++ b/drivers/gpu/drm/i915/intel_display.c
+@@ -6195,6 +6195,9 @@ static void valleyview_crtc_enable(struct drm_crtc *crtc)
+ 
+ 	for_each_encoder_on_crtc(dev, crtc, encoder)
+ 		encoder->enable(encoder);
++
++	for_each_encoder_on_crtc(dev, crtc, encoder)
++		DRM_INFO("valleyview_crtc_enable encoder: %s ", encoder->base.name);
+ }
+ 
+ static void i9xx_set_pll_dividers(struct intel_crtc *crtc)
+@@ -14088,6 +14091,7 @@ static void intel_setup_outputs(struct drm_device *dev)
+ 
+ 	intel_lvds_init(dev);
+ 
++#if 0
+ 	if (intel_crt_present(dev))
+ 		intel_crt_init(dev);
+ 
+@@ -14245,6 +14249,9 @@ static void intel_setup_outputs(struct drm_device *dev)
+ 	if (SUPPORTS_TV(dev))
+ 		intel_tv_init(dev);
+ 
++#endif
++	intel_dsi_init(dev);
++
+ 	intel_psr_init(dev);
+ 
+ 	for_each_intel_encoder(dev, encoder) {
+diff --git a/drivers/gpu/drm/i915/intel_dsi.c b/drivers/gpu/drm/i915/intel_dsi.c
+index 170ae6f4866e..900d14217b12 100644
+--- a/drivers/gpu/drm/i915/intel_dsi.c
++++ b/drivers/gpu/drm/i915/intel_dsi.c
+@@ -376,6 +376,7 @@ static void intel_dsi_port_enable(struct intel_encoder *encoder)
+ 	struct drm_i915_private *dev_priv = dev->dev_private;
+ 	struct intel_crtc *intel_crtc = to_intel_crtc(encoder->base.crtc);
+ 	struct intel_dsi *intel_dsi = enc_to_intel_dsi(&encoder->base);
++	struct intel_connector *intel_connector = intel_dsi->attached_connector;
+ 	enum port port;
+ 	u32 temp;
+ 	u32 port_ctrl;
+@@ -408,6 +409,8 @@ static void intel_dsi_port_enable(struct intel_encoder *encoder)
+ 		I915_WRITE(port_ctrl, temp | DPI_ENABLE);
+ 		POSTING_READ(port_ctrl);
+ 	}
++
++	intel_panel_enable_backlight(intel_connector);
+ }
+ 
+ static void intel_dsi_port_disable(struct intel_encoder *encoder)
+@@ -464,6 +467,7 @@ static void intel_dsi_pre_enable(struct intel_encoder *encoder)
+ 	struct drm_i915_private *dev_priv = dev->dev_private;
+ 	struct intel_dsi *intel_dsi = enc_to_intel_dsi(&encoder->base);
+ 	struct intel_crtc *intel_crtc = to_intel_crtc(encoder->base.crtc);
++	struct intel_connector *intel_connector = intel_dsi->attached_connector;
+ 	enum pipe pipe = intel_crtc->pipe;
+ 	enum port port;
+ 	u32 tmp;
+@@ -476,6 +480,8 @@ static void intel_dsi_pre_enable(struct intel_encoder *encoder)
+ 
+ 	msleep(intel_dsi->panel_on_delay);
+ 
++	intel_panel_disable_backlight(intel_connector);
++
+ 	if (IS_VALLEYVIEW(dev)) {
+ 		/*
+ 		 * Disable DPOunit clock gating, can stall pipe
+@@ -1069,6 +1075,7 @@ static void intel_dsi_connector_destroy(struct drm_connector *connector)
+ 
+ 	DRM_DEBUG_KMS("\n");
+ 	intel_panel_fini(&intel_connector->panel);
++	intel_panel_destroy_backlight(connector);
+ 	drm_connector_cleanup(connector);
+ 	kfree(connector);
+ }
+@@ -1205,6 +1212,7 @@ void intel_dsi_init(struct drm_device *dev)
+ 	 * In case of BYT with CRC PMIC, we need to use GPIO for
+ 	 * Panel control.
+ 	 */
++#if 0	
+ 	if (dev_priv->vbt.dsi.config->pwm_blc == PPS_BLC_PMIC) {
+ 		intel_dsi->gpio_panel =
+ 			gpiod_get(dev->dev, "panel", GPIOD_OUT_HIGH);
+@@ -1214,6 +1222,7 @@ void intel_dsi_init(struct drm_device *dev)
+ 			intel_dsi->gpio_panel = NULL;
+ 		}
+ 	}
++#endif
+ 
+ 	intel_encoder->type = INTEL_OUTPUT_DSI;
+ 	intel_encoder->cloneable = 0;
+diff --git a/drivers/gpu/drm/i915/intel_panel.c b/drivers/gpu/drm/i915/intel_panel.c
+index a24df35e11e7..2524fe445a57 100644
+--- a/drivers/gpu/drm/i915/intel_panel.c
++++ b/drivers/gpu/drm/i915/intel_panel.c
+@@ -33,6 +33,7 @@
+ #include <linux/kernel.h>
+ #include <linux/moduleparam.h>
+ #include <linux/pwm.h>
++#include <linux/mfd/intel_soc_pmic.h>
+ #include "intel_drv.h"
+ 
+ #define CRC_PMIC_PWM_PERIOD_NS	21333
+@@ -541,7 +542,7 @@ static u32 bxt_get_backlight(struct intel_connector *connector)
+ 
+ 	return I915_READ(BXT_BLC_PWM_DUTY(panel->backlight.controller));
+ }
+-
++#if 0
+ static u32 pwm_get_backlight(struct intel_connector *connector)
+ {
+ 	struct intel_panel *panel = &connector->panel;
+@@ -550,6 +551,11 @@ static u32 pwm_get_backlight(struct intel_connector *connector)
+ 	duty_ns = pwm_get_duty_cycle(panel->backlight.pwm);
+ 	return DIV_ROUND_UP(duty_ns * 100, CRC_PMIC_PWM_PERIOD_NS);
+ }
++#endif
++static u32 vlv_pmic_get_backlight(struct intel_connector *connector)
++{
++	return intel_soc_pmic_readb(0x4E);
++}
+ 
+ static u32 intel_panel_get_backlight(struct intel_connector *connector)
+ {
+@@ -639,7 +645,7 @@ static void bxt_set_backlight(struct intel_connector *connector, u32 level)
+ 
+ 	I915_WRITE(BXT_BLC_PWM_DUTY(panel->backlight.controller), level);
+ }
+-
++#if 0
+ static void pwm_set_backlight(struct intel_connector *connector, u32 level)
+ {
+ 	struct intel_panel *panel = &connector->panel;
+@@ -647,6 +653,11 @@ static void pwm_set_backlight(struct intel_connector *connector, u32 level)
+ 
+ 	pwm_config(panel->backlight.pwm, duty_ns, CRC_PMIC_PWM_PERIOD_NS);
+ }
++#endif
++static void vlv_pmic_set_backlight(struct intel_connector *connector, u32 level)
++{
++	intel_soc_pmic_writeb(0x4E, level);
++}
+ 
+ static void
+ intel_panel_actually_set_backlight(struct intel_connector *connector, u32 level)
+@@ -817,7 +828,7 @@ static void bxt_disable_backlight(struct intel_connector *connector)
+ 		I915_WRITE(UTIL_PIN_CTL, val);
+ 	}
+ }
+-
++#if 0
+ static void pwm_disable_backlight(struct intel_connector *connector)
+ {
+ 	struct intel_panel *panel = &connector->panel;
+@@ -827,6 +838,14 @@ static void pwm_disable_backlight(struct intel_connector *connector)
+ 	usleep_range(2000, 3000);
+ 	pwm_disable(panel->backlight.pwm);
+ }
++#endif
++static void vlv_pmic_disable_backlight(struct intel_connector *connector)
++{
++	intel_panel_actually_set_backlight(connector, 0);
++
++	intel_soc_pmic_writeb(0x51, 0x00);
++	intel_soc_pmic_writeb(0x4B, 0x7F);
++}
+ 
+ void intel_panel_disable_backlight(struct intel_connector *connector)
+ {
+@@ -1091,7 +1110,7 @@ static void bxt_enable_backlight(struct intel_connector *connector)
+ 	I915_WRITE(BXT_BLC_PWM_CTL(panel->backlight.controller),
+ 			pwm_ctl | BXT_BLC_PWM_ENABLE);
+ }
+-
++#if 0
+ static void pwm_enable_backlight(struct intel_connector *connector)
+ {
+ 	struct intel_panel *panel = &connector->panel;
+@@ -1099,6 +1118,17 @@ static void pwm_enable_backlight(struct intel_connector *connector)
+ 	pwm_enable(panel->backlight.pwm);
+ 	intel_panel_actually_set_backlight(connector, panel->backlight.level);
+ }
++#endif
++static void vlv_pmic_enable_backlight(struct intel_connector *connector)
++{
++	struct intel_panel *panel = &connector->panel;
++
++	intel_soc_pmic_writeb(0x4B, 0xFF);
++	intel_soc_pmic_writeb(0x4E, 0xFF);
++	intel_soc_pmic_writeb(0x51, 0x01);
++
++	intel_panel_actually_set_backlight(connector, panel->backlight.level);
++}
+ 
+ void intel_panel_enable_backlight(struct intel_connector *connector)
+ {
+@@ -1646,7 +1676,7 @@ bxt_setup_backlight(struct intel_connector *connector, enum pipe unused)
+ 
+ 	return 0;
+ }
+-
++#if 0
+ static int pwm_setup_backlight(struct intel_connector *connector,
+ 			       enum pipe pipe)
+ {
+@@ -1680,6 +1710,20 @@ static int pwm_setup_backlight(struct intel_connector *connector,
+ 
+ 	return 0;
+ }
++#endif
++static int vlv_pmic_setup_backlight(struct intel_connector *connector,enum pipe pipe)
++{
++        struct intel_panel *panel = &connector->panel;
++ 
++        DRM_INFO("vlv_pmic_setup_backlight\n");
++        panel->backlight.present = 1;
++        panel->backlight.min = 0x00;
++        panel->backlight.max = 0xFF;
++        panel->backlight.level = 20;
++        panel->backlight.enabled = 1;
++ 
++        return 0;
++}
+ 
+ int intel_panel_setup_backlight(struct drm_connector *connector, enum pipe pipe)
+ {
+@@ -1742,7 +1786,7 @@ intel_panel_init_backlight_funcs(struct intel_panel *panel)
+ 	struct intel_connector *intel_connector =
+ 		container_of(panel, struct intel_connector, panel);
+ 	struct drm_device *dev = intel_connector->base.dev;
+-	struct drm_i915_private *dev_priv = dev->dev_private;
++	//struct drm_i915_private *dev_priv = dev->dev_private;
+ 
+ 	if (IS_BROXTON(dev)) {
+ 		panel->backlight.setup = bxt_setup_backlight;
+@@ -1768,12 +1812,12 @@ intel_panel_init_backlight_funcs(struct intel_panel *panel)
+ 		panel->backlight.get = pch_get_backlight;
+ 		panel->backlight.hz_to_pwm = pch_hz_to_pwm;
+ 	} else if (IS_VALLEYVIEW(dev)) {
+-		if (dev_priv->vbt.has_mipi) {
+-			panel->backlight.setup = pwm_setup_backlight;
+-			panel->backlight.enable = pwm_enable_backlight;
+-			panel->backlight.disable = pwm_disable_backlight;
+-			panel->backlight.set = pwm_set_backlight;
+-			panel->backlight.get = pwm_get_backlight;
++		if (i915.force_backlight_pmic) {
++			panel->backlight.setup = vlv_pmic_setup_backlight;
++			panel->backlight.enable = vlv_pmic_enable_backlight;
++			panel->backlight.disable = vlv_pmic_disable_backlight;
++			panel->backlight.set = vlv_pmic_set_backlight;
++			panel->backlight.get = vlv_pmic_get_backlight;
+ 		} else {
+ 			panel->backlight.setup = vlv_setup_backlight;
+ 			panel->backlight.enable = vlv_enable_backlight;
+diff --git a/drivers/mfd/intel_soc_pmic_core.c b/drivers/mfd/intel_soc_pmic_core.c
+index 12d6ebb4ae5d..29fda0a6541e 100644
+--- a/drivers/mfd/intel_soc_pmic_core.c
++++ b/drivers/mfd/intel_soc_pmic_core.c
+@@ -28,6 +28,8 @@
+ #include <linux/pwm.h>
+ #include "intel_soc_pmic_core.h"
+ 
++static struct intel_soc_pmic *pmic_hack = NULL;
++
+ /* Lookup table for the Panel Enable/Disable line as GPIO signals */
+ static struct gpiod_lookup_table panel_gpio_table = {
+ 	/* Intel GFX is consumer */
+@@ -79,7 +81,7 @@ static int intel_soc_pmic_i2c_probe(struct i2c_client *i2c,
+ 	pmic = devm_kzalloc(dev, sizeof(*pmic), GFP_KERNEL);
+ 	if (!pmic)
+ 		return -ENOMEM;
+-
++	pmic_hack = pmic;
+ 	dev_set_drvdata(dev, pmic);
+ 
+ 	pmic->regmap = devm_regmap_init_i2c(i2c, config->regmap_config);
+@@ -168,6 +170,38 @@ static int intel_soc_pmic_resume(struct device *dev)
+ }
+ #endif
+ 
++int intel_soc_pmic_readb(int reg)
++{
++	int ret;
++	unsigned int val;
++
++	if (!pmic_hack) {
++		ret = -EIO;
++	} else {
++		ret = regmap_read(pmic_hack->regmap, reg, &val);
++		if (!ret) {
++			ret = val;
++		}
++	}
++
++	return ret;
++}
++EXPORT_SYMBOL(intel_soc_pmic_readb);
++
++int intel_soc_pmic_writeb(int reg, u8 val)
++{
++	int ret;
++
++	if (!pmic_hack) {
++		ret = -EIO;
++	} else {
++		ret = regmap_write(pmic_hack->regmap, reg, val);
++	}
++	return ret;
++}
++EXPORT_SYMBOL(intel_soc_pmic_writeb);
++
++
+ static SIMPLE_DEV_PM_OPS(intel_soc_pmic_pm_ops, intel_soc_pmic_suspend,
+ 			 intel_soc_pmic_resume);
+ 
+diff --git a/include/linux/mfd/intel_soc_pmic.h b/include/linux/mfd/intel_soc_pmic.h
+index cf619dbeace2..007f79f1e5be 100644
+--- a/include/linux/mfd/intel_soc_pmic.h
++++ b/include/linux/mfd/intel_soc_pmic.h
+@@ -29,4 +29,8 @@ struct intel_soc_pmic {
+ 	struct device *dev;
+ };
+ 
++int intel_soc_pmic_readb(int reg);
++int intel_soc_pmic_writeb(int reg, u8 val);
++
++
+ #endif	/* __INTEL_SOC_PMIC_H__ */
