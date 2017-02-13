@@ -25,14 +25,14 @@
 #include "i915_drv.h"
 
 struct i915_params i915 __read_mostly = {
-	.modeset = -1,
+	.modeset = 1,
 	.panel_ignore_lid = 1,
 	.semaphores = -1,
 	.lvds_channel_mode = 0,
 	.panel_use_ssc = -1,
 	.vbt_sdvo_panel_type = -1,
-	.enable_rc6 = -1,
-	.enable_fbc = -1,
+	.enable_rc6 = 7,
+	.enable_fbc = 0,
 	.enable_execlists = -1,
 	.enable_hangcheck = true,
 	.enable_ppgtt = -1,
