@@ -12,7 +12,7 @@ index 61fcb3b22297..a4280ba61e3f 100644
  			 info->gen,
  			 dev_priv->dev->pdev->device,
 diff --git a/drivers/gpu/drm/i915/i915_drv.c b/drivers/gpu/drm/i915/i915_drv.c
-index ba24384261bb..173b6015d0d9 100644
+index a6ad938f44a6..7458916d3759 100644
 --- a/drivers/gpu/drm/i915/i915_drv.c
 +++ b/drivers/gpu/drm/i915/i915_drv.c
 @@ -256,7 +256,8 @@ static const struct intel_device_info intel_ivybridge_q_info = {
@@ -26,10 +26,10 @@ index ba24384261bb..173b6015d0d9 100644
  	.display_mmio_offset = VLV_DISPLAY_BASE,
  	.has_fbc = 0, /* legal, last one wins */
 diff --git a/drivers/gpu/drm/i915/i915_drv.h b/drivers/gpu/drm/i915/i915_drv.h
-index 0b5e60f9ab50..47800472c5f1 100644
+index fb9f647bb5cd..eaa7a35ca0fb 100644
 --- a/drivers/gpu/drm/i915/i915_drv.h
 +++ b/drivers/gpu/drm/i915/i915_drv.h
-@@ -2676,6 +2676,7 @@ struct i915_params {
+@@ -2673,6 +2673,7 @@ struct i915_params {
  	bool verbose_state_checks;
  	bool nuclear_pageflip;
  	int edp_vswing;
@@ -38,14 +38,23 @@ index 0b5e60f9ab50..47800472c5f1 100644
  extern struct i915_params i915 __read_mostly;
  
 diff --git a/drivers/gpu/drm/i915/i915_params.c b/drivers/gpu/drm/i915/i915_params.c
-index 4be13a5eb932..d663ae04e8b8 100644
+index 4be13a5eb932..9004288d5642 100644
 --- a/drivers/gpu/drm/i915/i915_params.c
 +++ b/drivers/gpu/drm/i915/i915_params.c
+@@ -40,7 +40,7 @@ struct i915_params i915 __read_mostly = {
+ 	.preliminary_hw_support = IS_ENABLED(CONFIG_DRM_I915_PRELIMINARY_HW_SUPPORT),
+ 	.disable_power_well = -1,
+ 	.enable_ips = 1,
+-	.fastboot = 0,
++	.fastboot = 1,
+ 	.prefault_disable = 0,
+ 	.load_detect_test = 0,
+ 	.reset = true,
 @@ -55,6 +55,7 @@ struct i915_params i915 __read_mostly = {
  	.edp_vswing = 0,
  	.enable_guc_submission = false,
  	.guc_log_level = -1,
-+	.force_backlight_pmic = 0,
++	.force_backlight_pmic = 1,
  };
  
  module_param_named(modeset, i915.modeset, int, 0400);
@@ -59,7 +68,7 @@ index 4be13a5eb932..d663ae04e8b8 100644
 +       "Force backlight adjusting through pmic (default: false).");
 +
 diff --git a/drivers/gpu/drm/i915/intel_display.c b/drivers/gpu/drm/i915/intel_display.c
-index ed28a77db497..1c0401be7be9 100644
+index 909d1d71d130..5d679da3c765 100644
 --- a/drivers/gpu/drm/i915/intel_display.c
 +++ b/drivers/gpu/drm/i915/intel_display.c
 @@ -6195,6 +6195,9 @@ static void valleyview_crtc_enable(struct drm_crtc *crtc)
@@ -72,7 +81,7 @@ index ed28a77db497..1c0401be7be9 100644
  }
  
  static void i9xx_set_pll_dividers(struct intel_crtc *crtc)
-@@ -14088,6 +14091,7 @@ static void intel_setup_outputs(struct drm_device *dev)
+@@ -14090,6 +14093,7 @@ static void intel_setup_outputs(struct drm_device *dev)
  
  	intel_lvds_init(dev);
  
@@ -80,7 +89,7 @@ index ed28a77db497..1c0401be7be9 100644
  	if (intel_crt_present(dev))
  		intel_crt_init(dev);
  
-@@ -14245,6 +14249,9 @@ static void intel_setup_outputs(struct drm_device *dev)
+@@ -14247,6 +14251,9 @@ static void intel_setup_outputs(struct drm_device *dev)
  	if (SUPPORTS_TV(dev))
  		intel_tv_init(dev);
  
