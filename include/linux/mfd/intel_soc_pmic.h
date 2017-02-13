@@ -29,4 +29,8 @@ struct intel_soc_pmic {
 	struct device *dev;
 };
 
+int intel_soc_pmic_readb(int reg);
+int intel_soc_pmic_writeb(int reg, u8 val);
+
+
 #endif	/* __INTEL_SOC_PMIC_H__ */

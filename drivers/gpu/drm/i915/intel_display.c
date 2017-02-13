@@ -6195,6 +6195,9 @@ static void valleyview_crtc_enable(struct drm_crtc *crtc)
 
 	for_each_encoder_on_crtc(dev, crtc, encoder)
 		encoder->enable(encoder);
+
+	for_each_encoder_on_crtc(dev, crtc, encoder)
+		DRM_INFO("valleyview_crtc_enable encoder: %s ", encoder->base.name);
 }
 
 static void i9xx_set_pll_dividers(struct intel_crtc *crtc)
@@ -14090,6 +14093,7 @@ static void intel_setup_outputs(struct drm_device *dev)
 
 	intel_lvds_init(dev);
 
+#if 0
 	if (intel_crt_present(dev))
 		intel_crt_init(dev);
 
@@ -14246,6 +14250,9 @@ static void intel_setup_outputs(struct drm_device *dev)
 
 	if (SUPPORTS_TV(dev))
 		intel_tv_init(dev);
+
+#endif
+	intel_dsi_init(dev);
 
 	intel_psr_init(dev);
 

@@ -28,6 +28,8 @@
 #include <linux/pwm.h>
 #include "intel_soc_pmic_core.h"
 
+static struct intel_soc_pmic *pmic_hack = NULL;
+
 /* Lookup table for the Panel Enable/Disable line as GPIO signals */
 static struct gpiod_lookup_table panel_gpio_table = {
 	/* Intel GFX is consumer */
@@ -79,7 +81,7 @@ static int intel_soc_pmic_i2c_probe(struct i2c_client *i2c,
 	pmic = devm_kzalloc(dev, sizeof(*pmic), GFP_KERNEL);
 	if (!pmic)
 		return -ENOMEM;
-
+	pmic_hack = pmic;
 	dev_set_drvdata(dev, pmic);
 
 	pmic->regmap = devm_regmap_init_i2c(i2c, config->regmap_config);
@@ -167,6 +169,38 @@ static int intel_soc_pmic_resume(struct device *dev)
 	return 0;
 }
 #endif
+
+int intel_soc_pmic_readb(int reg)
+{
+	int ret;
+	unsigned int val;
+
+	if (!pmic_hack) {
+		ret = -EIO;
+	} else {
+		ret = regmap_read(pmic_hack->regmap, reg, &val);
+		if (!ret) {
+			ret = val;
+		}
+	}
+
+	return ret;
+}
+EXPORT_SYMBOL(intel_soc_pmic_readb);
+
+int intel_soc_pmic_writeb(int reg, u8 val)
+{
+	int ret;
+
+	if (!pmic_hack) {
+		ret = -EIO;
+	} else {
+		ret = regmap_write(pmic_hack->regmap, reg, val);
+	}
+	return ret;
+}
+EXPORT_SYMBOL(intel_soc_pmic_writeb);
+
 
 static SIMPLE_DEV_PM_OPS(intel_soc_pmic_pm_ops, intel_soc_pmic_suspend,
 			 intel_soc_pmic_resume);
