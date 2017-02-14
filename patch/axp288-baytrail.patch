@@ -1,0 +1,2408 @@
+diff --git a/drivers/extcon/Kconfig b/drivers/extcon/Kconfig
+index 04788d92ea52..1ed3860bdf95 100644
+--- a/drivers/extcon/Kconfig
++++ b/drivers/extcon/Kconfig
+@@ -35,6 +35,16 @@ config EXTCON_AXP288
+ 	  Say Y here to enable support for USB peripheral detection
+ 	  and USB MUX switching by X-Power AXP288 PMIC.
+ 
++config EXTCON_INTEL_INT3496
++	tristate "Intel INT3496 ACPI device extcon driver"
++	depends on GPIOLIB && ACPI
++	help
++	  Say Y here to enable extcon support for USB OTG ports controlled by
++	  an Intel INT3496 ACPI device.
++
++          This ACPI device is typically found on Intel Baytrail or Cherrytrail
++          based tablets, or other Baytrail / Cherrytrail devices.
++
+ config EXTCON_GPIO
+ 	tristate "GPIO extcon support"
+ 	depends on GPIOLIB || COMPILE_TEST
+diff --git a/drivers/extcon/Makefile b/drivers/extcon/Makefile
+index 31a0a999c4fb..237ac3f953c2 100644
+--- a/drivers/extcon/Makefile
++++ b/drivers/extcon/Makefile
+@@ -8,6 +8,7 @@ obj-$(CONFIG_EXTCON_ADC_JACK)	+= extcon-adc-jack.o
+ obj-$(CONFIG_EXTCON_ARIZONA)	+= extcon-arizona.o
+ obj-$(CONFIG_EXTCON_AXP288)	+= extcon-axp288.o
+ obj-$(CONFIG_EXTCON_GPIO)	+= extcon-gpio.o
++obj-$(CONFIG_EXTCON_INTEL_INT3496) += extcon-intel-int3496.o
+ obj-$(CONFIG_EXTCON_MAX14577)	+= extcon-max14577.o
+ obj-$(CONFIG_EXTCON_MAX3355)	+= extcon-max3355.o
+ obj-$(CONFIG_EXTCON_MAX77693)	+= extcon-max77693.o
+diff --git a/drivers/extcon/extcon-axp288.c b/drivers/extcon/extcon-axp288.c
+index 42f41e808292..f4fd03e58e37 100644
+--- a/drivers/extcon/extcon-axp288.c
++++ b/drivers/extcon/extcon-axp288.c
+@@ -21,7 +21,6 @@
+ #include <linux/interrupt.h>
+ #include <linux/platform_device.h>
+ #include <linux/property.h>
+-#include <linux/usb/phy.h>
+ #include <linux/notifier.h>
+ #include <linux/extcon.h>
+ #include <linux/regmap.h>
+@@ -71,12 +70,6 @@
+ #define DET_STAT_CDP			2
+ #define DET_STAT_DCP			3
+ 
+-/* IRQ enable-1 register */
+-#define PWRSRC_IRQ_CFG_MASK		(BIT(4)|BIT(3)|BIT(2))
+-
+-/* IRQ enable-6 register */
+-#define BC12_IRQ_CFG_MASK		BIT(1)
+-
+ enum axp288_extcon_reg {
+ 	AXP288_PS_STAT_REG		= 0x00,
+ 	AXP288_PS_BOOT_REASON_REG	= 0x02,
+@@ -84,8 +77,6 @@ enum axp288_extcon_reg {
+ 	AXP288_BC_VBUS_CNTL_REG		= 0x2d,
+ 	AXP288_BC_USB_STAT_REG		= 0x2e,
+ 	AXP288_BC_DET_STAT_REG		= 0x2f,
+-	AXP288_PWRSRC_IRQ_CFG_REG	= 0x40,
+-	AXP288_BC12_IRQ_CFG_REG		= 0x45,
+ };
+ 
+ enum axp288_mux_select {
+@@ -105,6 +96,7 @@ static const unsigned int axp288_extcon_cables[] = {
+ 	EXTCON_CHG_USB_SDP,
+ 	EXTCON_CHG_USB_CDP,
+ 	EXTCON_CHG_USB_DCP,
++	EXTCON_USB,
+ 	EXTCON_NONE,
+ };
+ 
+@@ -112,11 +104,11 @@ struct axp288_extcon_info {
+ 	struct device *dev;
+ 	struct regmap *regmap;
+ 	struct regmap_irq_chip_data *regmap_irqc;
+-	struct axp288_extcon_pdata *pdata;
++	struct gpio_desc *gpio_mux_cntl;
+ 	int irq[EXTCON_IRQ_END];
+ 	struct extcon_dev *edev;
+ 	struct notifier_block extcon_nb;
+-	struct usb_phy *otg;
++	unsigned int previous_cable;
+ };
+ 
+ /* Power up/down reason string array */
+@@ -156,10 +148,9 @@ static void axp288_extcon_log_rsi(struct axp288_extcon_info *info)
+ 
+ static int axp288_handle_chrg_det_event(struct axp288_extcon_info *info)
+ {
+-	static bool notify_otg, notify_charger;
+-	static unsigned int cable;
+ 	int ret, stat, cfg, pwr_stat;
+ 	u8 chrg_type;
++	unsigned int cable = info->previous_cable;
+ 	bool vbus_attach = false;
+ 
+ 	ret = regmap_read(info->regmap, AXP288_PS_STAT_REG, &pwr_stat);
+@@ -168,9 +159,9 @@ static int axp288_handle_chrg_det_event(struct axp288_extcon_info *info)
+ 		return ret;
+ 	}
+ 
+-	vbus_attach = (pwr_stat & PS_STAT_VBUS_PRESENT);
++	vbus_attach = (pwr_stat & PS_STAT_VBUS_VALID);
+ 	if (!vbus_attach)
+-		goto notify_otg;
++		goto no_vbus;
+ 
+ 	/* Check charger detection completion status */
+ 	ret = regmap_read(info->regmap, AXP288_BC_GLOBAL_REG, &cfg);
+@@ -190,19 +181,14 @@ static int axp288_handle_chrg_det_event(struct axp288_extcon_info *info)
+ 	switch (chrg_type) {
+ 	case DET_STAT_SDP:
+ 		dev_dbg(info->dev, "sdp cable is connected\n");
+-		notify_otg = true;
+-		notify_charger = true;
+ 		cable = EXTCON_CHG_USB_SDP;
+ 		break;
+ 	case DET_STAT_CDP:
+ 		dev_dbg(info->dev, "cdp cable is connected\n");
+-		notify_otg = true;
+-		notify_charger = true;
+ 		cable = EXTCON_CHG_USB_CDP;
+ 		break;
+ 	case DET_STAT_DCP:
+ 		dev_dbg(info->dev, "dcp cable is connected\n");
+-		notify_charger = true;
+ 		cable = EXTCON_CHG_USB_DCP;
+ 		break;
+ 	default:
+@@ -210,27 +196,28 @@ static int axp288_handle_chrg_det_event(struct axp288_extcon_info *info)
+ 			"disconnect or unknown or ID event\n");
+ 	}
+ 
+-notify_otg:
+-	if (notify_otg) {
+-		/*
+-		 * If VBUS is absent Connect D+/D- lines to PMIC for BC
+-		 * detection. Else connect them to SOC for USB communication.
+-		 */
+-		if (info->pdata->gpio_mux_cntl)
+-			gpiod_set_value(info->pdata->gpio_mux_cntl,
+-				vbus_attach ? EXTCON_GPIO_MUX_SEL_SOC
+-						: EXTCON_GPIO_MUX_SEL_PMIC);
+-
+-		atomic_notifier_call_chain(&info->otg->notifier,
+-			vbus_attach ? USB_EVENT_VBUS : USB_EVENT_NONE, NULL);
+-	}
+-
+-	if (notify_charger)
++no_vbus:
++	/*
++	 * If VBUS is absent Connect D+/D- lines to PMIC for BC
++	 * detection. Else connect them to SOC for USB communication.
++	 */
++	if (info->gpio_mux_cntl)
++		gpiod_set_value(info->gpio_mux_cntl,
++			vbus_attach ? EXTCON_GPIO_MUX_SEL_SOC
++					: EXTCON_GPIO_MUX_SEL_PMIC);
++
++	extcon_set_state_sync(info->edev, info->previous_cable, false);
++	if (info->previous_cable == EXTCON_CHG_USB_SDP)
++		extcon_set_state_sync(info->edev, EXTCON_USB, false);
++
++	if (vbus_attach) {
+ 		extcon_set_state_sync(info->edev, cable, vbus_attach);
++		if (cable == EXTCON_CHG_USB_SDP)
++			extcon_set_state_sync(info->edev, EXTCON_USB,
++						vbus_attach);
+ 
+-	/* Clear the flags on disconnect event */
+-	if (!vbus_attach)
+-		notify_otg = notify_charger = false;
++		info->previous_cable = cable;
++	}
+ 
+ 	return 0;
+ 
+@@ -253,15 +240,10 @@ static irqreturn_t axp288_extcon_isr(int irq, void *data)
+ 	return IRQ_HANDLED;
+ }
+ 
+-static void axp288_extcon_enable_irq(struct axp288_extcon_info *info)
++static void axp288_extcon_enable(struct axp288_extcon_info *info)
+ {
+-	/* Unmask VBUS interrupt */
+-	regmap_write(info->regmap, AXP288_PWRSRC_IRQ_CFG_REG,
+-						PWRSRC_IRQ_CFG_MASK);
+ 	regmap_update_bits(info->regmap, AXP288_BC_GLOBAL_REG,
+ 						BC_GLOBAL_RUN, 0);
+-	/* Unmask the BC1.2 complete interrupts */
+-	regmap_write(info->regmap, AXP288_BC12_IRQ_CFG_REG, BC12_IRQ_CFG_MASK);
+ 	/* Enable the charger detection logic */
+ 	regmap_update_bits(info->regmap, AXP288_BC_GLOBAL_REG,
+ 					BC_GLOBAL_RUN, BC_GLOBAL_RUN);
+@@ -271,6 +253,7 @@ static int axp288_extcon_probe(struct platform_device *pdev)
+ {
+ 	struct axp288_extcon_info *info;
+ 	struct axp20x_dev *axp20x = dev_get_drvdata(pdev->dev.parent);
++	struct axp288_extcon_pdata *pdata = pdev->dev.platform_data;
+ 	int ret, i, pirq, gpio;
+ 
+ 	info = devm_kzalloc(&pdev->dev, sizeof(*info), GFP_KERNEL);
+@@ -280,15 +263,10 @@ static int axp288_extcon_probe(struct platform_device *pdev)
+ 	info->dev = &pdev->dev;
+ 	info->regmap = axp20x->regmap;
+ 	info->regmap_irqc = axp20x->regmap_irqc;
+-	info->pdata = pdev->dev.platform_data;
+-
+-	if (!info->pdata) {
+-		/* Try ACPI provided pdata via device properties */
+-		if (!device_property_present(&pdev->dev,
+-					"axp288_extcon_data\n"))
+-			dev_err(&pdev->dev, "failed to get platform data\n");
+-		return -ENODEV;
+-	}
++	info->previous_cable = EXTCON_NONE;
++	if (pdata)
++		info->gpio_mux_cntl = pdata->gpio_mux_cntl;
++
+ 	platform_set_drvdata(pdev, info);
+ 
+ 	axp288_extcon_log_rsi(info);
+@@ -308,23 +286,16 @@ static int axp288_extcon_probe(struct platform_device *pdev)
+ 		return ret;
+ 	}
+ 
+-	/* Get otg transceiver phy */
+-	info->otg = devm_usb_get_phy(&pdev->dev, USB_PHY_TYPE_USB2);
+-	if (IS_ERR(info->otg)) {
+-		dev_err(&pdev->dev, "failed to get otg transceiver\n");
+-		return PTR_ERR(info->otg);
+-	}
+-
+ 	/* Set up gpio control for USB Mux */
+-	if (info->pdata->gpio_mux_cntl) {
+-		gpio = desc_to_gpio(info->pdata->gpio_mux_cntl);
++	if (info->gpio_mux_cntl) {
++		gpio = desc_to_gpio(info->gpio_mux_cntl);
+ 		ret = devm_gpio_request(&pdev->dev, gpio, "USB_MUX");
+ 		if (ret < 0) {
+ 			dev_err(&pdev->dev,
+ 				"failed to request the gpio=%d\n", gpio);
+ 			return ret;
+ 		}
+-		gpiod_direction_output(info->pdata->gpio_mux_cntl,
++		gpiod_direction_output(info->gpio_mux_cntl,
+ 						EXTCON_GPIO_MUX_SEL_PMIC);
+ 	}
+ 
+@@ -349,14 +320,21 @@ static int axp288_extcon_probe(struct platform_device *pdev)
+ 		}
+ 	}
+ 
+-	/* Enable interrupts */
+-	axp288_extcon_enable_irq(info);
++	/* Start charger cable type detection */
++	axp288_extcon_enable(info);
+ 
+ 	return 0;
+ }
+ 
++static const struct platform_device_id axp288_extcon_table[] = {
++	{ .name = "axp288_extcon" },
++	{},
++};
++MODULE_DEVICE_TABLE(platform, axp288_extcon_table);
++
+ static struct platform_driver axp288_extcon_driver = {
+ 	.probe = axp288_extcon_probe,
++	.id_table = axp288_extcon_table,
+ 	.driver = {
+ 		.name = "axp288_extcon",
+ 	},
+diff --git a/drivers/extcon/extcon-intel-int3496.c b/drivers/extcon/extcon-intel-int3496.c
+new file mode 100644
+index 000000000000..a3131b036de6
+--- /dev/null
++++ b/drivers/extcon/extcon-intel-int3496.c
+@@ -0,0 +1,179 @@
++/*
++ * Intel INT3496 ACPI device extcon driver
++ *
++ * Copyright (c) 2016 Hans de Goede <hdegoede@redhat.com>
++ *
++ * Based on android x86 kernel code which is:
++ *
++ * Copyright (c) 2014, Intel Corporation.
++ * Author: David Cohen <david.a.cohen@linux.intel.com>
++ *
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License version 2 as
++ * published by the Free Software Foundation.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ */
++
++#include <linux/acpi.h>
++#include <linux/extcon.h>
++#include <linux/gpio.h>
++#include <linux/interrupt.h>
++#include <linux/module.h>
++#include <linux/platform_device.h>
++
++#define INT3496_GPIO_USB_ID	0
++#define INT3496_GPIO_VBUS_EN	1
++#define INT3496_GPIO_USB_MUX	2
++#define DEBOUNCE_TIME		msecs_to_jiffies(50)
++
++struct int3496_data {
++	struct device *dev;
++	struct extcon_dev *edev;
++	struct delayed_work work;
++	struct gpio_desc *gpio_usb_id;
++	struct gpio_desc *gpio_vbus_en;
++	struct gpio_desc *gpio_usb_mux;
++	int usb_id_irq;
++};
++
++static const unsigned int int3496_cable[] = {
++	EXTCON_USB_HOST,
++	EXTCON_NONE,
++};
++
++static void int3496_do_usb_id(struct work_struct *work)
++{
++	struct int3496_data *data =
++		container_of(work, struct int3496_data, work.work);
++	int id = gpiod_get_value_cansleep(data->gpio_usb_id);
++
++	/* id == 1: PERIPHERAL, id == 0: HOST */
++	dev_dbg(data->dev, "Connected %s cable\n", id ? "PERIPHERAL" : "HOST");
++
++	/*
++	 * Peripheral: set USB mux to peripheral and disable VBUS
++	 * Host: set USB mux to host and enable VBUS
++	 */
++	if (!IS_ERR(data->gpio_usb_mux))
++		gpiod_direction_output(data->gpio_usb_mux, id);
++
++	if (!IS_ERR(data->gpio_vbus_en))
++		gpiod_direction_output(data->gpio_vbus_en, !id);
++
++	extcon_set_state_sync(data->edev, EXTCON_USB_HOST, !id);
++}
++
++static irqreturn_t int3496_thread_isr(int irq, void *priv)
++{
++	struct int3496_data *data = priv;
++
++	/* Let the pin settle before processing it */
++	mod_delayed_work(system_wq, &data->work, DEBOUNCE_TIME);
++
++	return IRQ_HANDLED;
++}
++
++static int int3496_probe(struct platform_device *pdev)
++{
++	struct device *dev = &pdev->dev;
++	struct int3496_data *data;
++	int ret;
++
++	data = devm_kzalloc(dev, sizeof(*data), GFP_KERNEL);
++	if (!data)
++		return -ENOMEM;
++
++	data->dev = dev;
++	INIT_DELAYED_WORK(&data->work, int3496_do_usb_id);
++
++	data->gpio_usb_id = devm_gpiod_get_index(dev, "id",
++						INT3496_GPIO_USB_ID,
++						GPIOD_IN);
++	if (IS_ERR(data->gpio_usb_id)) {
++		ret = PTR_ERR(data->gpio_usb_id);
++		dev_err(dev, "can't request USB ID GPIO: %d\n", ret);
++		return ret;
++	}
++
++	data->usb_id_irq = gpiod_to_irq(data->gpio_usb_id);
++	if (data->usb_id_irq <= 0) {
++		dev_err(dev, "can't get USB ID IRQ: %d\n", data->usb_id_irq);
++		return -EINVAL;
++	}
++
++	data->gpio_vbus_en = devm_gpiod_get_index(dev, "vbus en",
++						 INT3496_GPIO_VBUS_EN,
++						 GPIOD_ASIS);
++	if (IS_ERR(data->gpio_vbus_en))
++		dev_info(dev, "can't request VBUS EN GPIO\n");
++
++	data->gpio_usb_mux = devm_gpiod_get_index(dev, "usb mux",
++						 INT3496_GPIO_USB_MUX,
++						 GPIOD_ASIS);
++	if (IS_ERR(data->gpio_usb_mux))
++		dev_info(dev, "can't request USB MUX GPIO\n");
++
++	/* register extcon device */
++	data->edev = devm_extcon_dev_allocate(dev, int3496_cable);
++	if (IS_ERR(data->edev))
++		return -ENOMEM;
++
++	ret = devm_extcon_dev_register(dev, data->edev);
++	if (ret < 0) {
++		dev_err(dev, "can't register extcon device: %d\n", ret);
++		return ret;
++	}
++
++	ret = devm_request_threaded_irq(dev, data->usb_id_irq,
++					NULL, int3496_thread_isr,
++					IRQF_SHARED | IRQF_ONESHOT |
++					IRQF_TRIGGER_RISING |
++					IRQF_TRIGGER_FALLING,
++					dev_name(dev), data);
++	if (ret < 0) {
++		dev_err(dev, "can't request IRQ for USB ID GPIO: %d\n", ret);
++		return ret;
++	}
++
++	/* queue initial processing of id-pin */
++	queue_delayed_work(system_wq, &data->work, 0);
++
++	platform_set_drvdata(pdev, data);
++
++	return 0;
++}
++
++static int int3496_remove(struct platform_device *pdev)
++{
++	struct int3496_data *data = platform_get_drvdata(pdev);
++
++	devm_free_irq(&pdev->dev, data->usb_id_irq, data);
++	cancel_delayed_work_sync(&data->work);
++
++	return 0;
++}
++
++static struct acpi_device_id int3496_acpi_match[] = {
++	{ "INT3496" },
++	{ }
++};
++MODULE_DEVICE_TABLE(acpi, int3496_acpi_match);
++
++static struct platform_driver int3496_driver = {
++	.driver = {
++		.name = "intel-int3496",
++		.acpi_match_table = int3496_acpi_match,
++	},
++	.probe = int3496_probe,
++	.remove = int3496_remove,
++};
++
++module_platform_driver(int3496_driver);
++
++MODULE_AUTHOR("Hans de Goede <hdegoede@redhat.com>");
++MODULE_DESCRIPTION("Intel INT3496 ACPI device extcon driver");
++MODULE_LICENSE("GPL");
+diff --git a/drivers/i2c/busses/i2c-designware-baytrail.c b/drivers/i2c/busses/i2c-designware-baytrail.c
+index 1590ad0a8081..94814115ccd2 100644
+--- a/drivers/i2c/busses/i2c-designware-baytrail.c
++++ b/drivers/i2c/busses/i2c-designware-baytrail.c
+@@ -16,6 +16,7 @@
+ #include <linux/acpi.h>
+ #include <linux/i2c.h>
+ #include <linux/interrupt.h>
++#include <linux/pm_qos.h>
+ 
+ #include <asm/iosf_mbi.h>
+ 
+@@ -23,19 +24,36 @@
+ 
+ #define SEMAPHORE_TIMEOUT	100
+ #define PUNIT_SEMAPHORE		0x7
++#define PUNIT_SEMAPHORE_CHT	0x10e
+ #define PUNIT_SEMAPHORE_BIT	BIT(0)
+ #define PUNIT_SEMAPHORE_ACQUIRE	BIT(1)
+ 
+ static unsigned long acquired;
+ 
+-static int get_sem(struct device *dev, u32 *sem)
++static u32 get_sem_addr(struct dw_i2c_dev *dev)
+ {
++	if (dev->flags & MODEL_CHERRYTRAIL)
++		return PUNIT_SEMAPHORE_CHT;
++	else
++		return PUNIT_SEMAPHORE;
++}
++
++static int get_sem(struct dw_i2c_dev *dev, u32 *sem)
++{
++	u32 addr = get_sem_addr(dev);
+ 	u32 data;
+ 	int ret;
+ 
+-	ret = iosf_mbi_read(BT_MBI_UNIT_PMC, MBI_REG_READ, PUNIT_SEMAPHORE, &data);
++	/*
++	 * Disallow the CPU to enter C6 or C7 state, entering these states
++	 * requires the punit to talk to the pmic and if this happens while
++	 * we're holding the semaphore, the SoC hangs.
++	 */
++	pm_qos_update_request(&dev->pm_qos, 0);
++
++	ret = iosf_mbi_read(BT_MBI_UNIT_PMC, MBI_REG_READ, addr, &data);
+ 	if (ret) {
+-		dev_err(dev, "iosf failed to read punit semaphore\n");
++		dev_err(dev->dev, "iosf failed to read punit semaphore\n");
+ 		return ret;
+ 	}
+ 
+@@ -44,22 +62,26 @@ static int get_sem(struct device *dev, u32 *sem)
+ 	return 0;
+ }
+ 
+-static void reset_semaphore(struct device *dev)
++static void reset_semaphore(struct dw_i2c_dev *dev)
+ {
++	u32 addr = get_sem_addr(dev);
+ 	u32 data;
+ 
+-	if (iosf_mbi_read(BT_MBI_UNIT_PMC, MBI_REG_READ, PUNIT_SEMAPHORE, &data)) {
+-		dev_err(dev, "iosf failed to reset punit semaphore during read\n");
++	if (iosf_mbi_read(BT_MBI_UNIT_PMC, MBI_REG_READ, addr, &data)) {
++		dev_err(dev->dev, "iosf failed to reset punit semaphore during read\n");
+ 		return;
+ 	}
+ 
+ 	data &= ~PUNIT_SEMAPHORE_BIT;
+-	if (iosf_mbi_write(BT_MBI_UNIT_PMC, MBI_REG_WRITE, PUNIT_SEMAPHORE, data))
+-		dev_err(dev, "iosf failed to reset punit semaphore during write\n");
++	if (iosf_mbi_write(BT_MBI_UNIT_PMC, MBI_REG_WRITE, addr, data))
++		dev_err(dev->dev, "iosf failed to reset punit semaphore during write\n");
++
++	pm_qos_update_request(&dev->pm_qos, PM_QOS_DEFAULT_VALUE);
+ }
+ 
+ static int baytrail_i2c_acquire(struct dw_i2c_dev *dev)
+ {
++	u32 addr = get_sem_addr(dev);
+ 	u32 sem = PUNIT_SEMAPHORE_ACQUIRE;
+ 	int ret;
+ 	unsigned long start, end;
+@@ -73,7 +95,7 @@ static int baytrail_i2c_acquire(struct dw_i2c_dev *dev)
+ 		return 0;
+ 
+ 	/* host driver writes to side band semaphore register */
+-	ret = iosf_mbi_write(BT_MBI_UNIT_PMC, MBI_REG_WRITE, PUNIT_SEMAPHORE, sem);
++	ret = iosf_mbi_write(BT_MBI_UNIT_PMC, MBI_REG_WRITE, addr, sem);
+ 	if (ret) {
+ 		dev_err(dev->dev, "iosf punit semaphore request failed\n");
+ 		return ret;
+@@ -83,7 +105,7 @@ static int baytrail_i2c_acquire(struct dw_i2c_dev *dev)
+ 	start = jiffies;
+ 	end = start + msecs_to_jiffies(SEMAPHORE_TIMEOUT);
+ 	do {
+-		ret = get_sem(dev->dev, &sem);
++		ret = get_sem(dev, &sem);
+ 		if (!ret && sem) {
+ 			acquired = jiffies;
+ 			dev_dbg(dev->dev, "punit semaphore acquired after %ums\n",
+@@ -95,9 +117,9 @@ static int baytrail_i2c_acquire(struct dw_i2c_dev *dev)
+ 	} while (time_before(jiffies, end));
+ 
+ 	dev_err(dev->dev, "punit semaphore timed out, resetting\n");
+-	reset_semaphore(dev->dev);
++	reset_semaphore(dev);
+ 
+-	ret = iosf_mbi_read(BT_MBI_UNIT_PMC, MBI_REG_READ, PUNIT_SEMAPHORE, &sem);
++	ret = iosf_mbi_read(BT_MBI_UNIT_PMC, MBI_REG_READ, addr, &sem);
+ 	if (ret)
+ 		dev_err(dev->dev, "iosf failed to read punit semaphore\n");
+ 	else
+@@ -116,12 +138,12 @@ static void baytrail_i2c_release(struct dw_i2c_dev *dev)
+ 	if (!dev->acquire_lock)
+ 		return;
+ 
+-	reset_semaphore(dev->dev);
++	reset_semaphore(dev);
+ 	dev_dbg(dev->dev, "punit semaphore held for %ums\n",
+ 		jiffies_to_msecs(jiffies - acquired));
+ }
+ 
+-int i2c_dw_eval_lock_support(struct dw_i2c_dev *dev)
++int i2c_dw_probe_lock_support(struct dw_i2c_dev *dev)
+ {
+ 	acpi_status status;
+ 	unsigned long long shared_host = 0;
+@@ -138,15 +160,25 @@ int i2c_dw_eval_lock_support(struct dw_i2c_dev *dev)
+ 	if (ACPI_FAILURE(status))
+ 		return 0;
+ 
+-	if (shared_host) {
+-		dev_info(dev->dev, "I2C bus managed by PUNIT\n");
+-		dev->acquire_lock = baytrail_i2c_acquire;
+-		dev->release_lock = baytrail_i2c_release;
+-		dev->pm_runtime_disabled = true;
+-	}
++	if (!shared_host)
++		return 0;
+ 
+ 	if (!iosf_mbi_available())
+ 		return -EPROBE_DEFER;
+ 
++	dev_info(dev->dev, "I2C bus managed by PUNIT\n");
++	dev->acquire_lock = baytrail_i2c_acquire;
++	dev->release_lock = baytrail_i2c_release;
++	dev->pm_runtime_disabled = true;
++
++	pm_qos_add_request(&dev->pm_qos, PM_QOS_CPU_DMA_LATENCY,
++			   PM_QOS_DEFAULT_VALUE);
++
+ 	return 0;
+ }
++
++void i2c_dw_remove_lock_support(struct dw_i2c_dev *dev)
++{
++	if (dev->acquire_lock)
++		pm_qos_remove_request(&dev->pm_qos);
++}
+diff --git a/drivers/i2c/busses/i2c-designware-core.c b/drivers/i2c/busses/i2c-designware-core.c
+index b403fa5ecf49..b6a798992224 100644
+--- a/drivers/i2c/busses/i2c-designware-core.c
++++ b/drivers/i2c/busses/i2c-designware-core.c
+@@ -177,13 +177,13 @@ static u32 dw_readl(struct dw_i2c_dev *dev, int offset)
+ {
+ 	u32 value;
+ 
+-	if (dev->accessor_flags & ACCESS_16BIT)
++	if (dev->flags & ACCESS_16BIT)
+ 		value = readw_relaxed(dev->base + offset) |
+ 			(readw_relaxed(dev->base + offset + 2) << 16);
+ 	else
+ 		value = readl_relaxed(dev->base + offset);
+ 
+-	if (dev->accessor_flags & ACCESS_SWAP)
++	if (dev->flags & ACCESS_SWAP)
+ 		return swab32(value);
+ 	else
+ 		return value;
+@@ -191,10 +191,10 @@ static u32 dw_readl(struct dw_i2c_dev *dev, int offset)
+ 
+ static void dw_writel(struct dw_i2c_dev *dev, u32 b, int offset)
+ {
+-	if (dev->accessor_flags & ACCESS_SWAP)
++	if (dev->flags & ACCESS_SWAP)
+ 		b = swab32(b);
+ 
+-	if (dev->accessor_flags & ACCESS_16BIT) {
++	if (dev->flags & ACCESS_16BIT) {
+ 		writew_relaxed((u16)b, dev->base + offset);
+ 		writew_relaxed((u16)(b >> 16), dev->base + offset + 2);
+ 	} else {
+@@ -339,10 +339,10 @@ int i2c_dw_init(struct dw_i2c_dev *dev)
+ 	reg = dw_readl(dev, DW_IC_COMP_TYPE);
+ 	if (reg == ___constant_swab32(DW_IC_COMP_TYPE_VALUE)) {
+ 		/* Configure register endianess access */
+-		dev->accessor_flags |= ACCESS_SWAP;
++		dev->flags |= ACCESS_SWAP;
+ 	} else if (reg == (DW_IC_COMP_TYPE_VALUE & 0x0000ffff)) {
+ 		/* Configure register access mode 16bit */
+-		dev->accessor_flags |= ACCESS_16BIT;
++		dev->flags |= ACCESS_16BIT;
+ 	} else if (reg != DW_IC_COMP_TYPE_VALUE) {
+ 		dev_err(dev->dev, "Unknown Synopsys component type: "
+ 			"0x%08x\n", reg);
+@@ -886,7 +886,7 @@ static irqreturn_t i2c_dw_isr(int this_irq, void *dev_id)
+ tx_aborted:
+ 	if ((stat & (DW_IC_INTR_TX_ABRT | DW_IC_INTR_STOP_DET)) || dev->msg_err)
+ 		complete(&dev->cmd_complete);
+-	else if (unlikely(dev->accessor_flags & ACCESS_INTR_MASK)) {
++	else if (unlikely(dev->flags & ACCESS_INTR_MASK)) {
+ 		/* workaround to trigger pending interrupt */
+ 		stat = dw_readl(dev, DW_IC_INTR_MASK);
+ 		i2c_dw_disable_int(dev);
+diff --git a/drivers/i2c/busses/i2c-designware-core.h b/drivers/i2c/busses/i2c-designware-core.h
+index 0d44d2ae7d4c..cd4a87448ba6 100644
+--- a/drivers/i2c/busses/i2c-designware-core.h
++++ b/drivers/i2c/busses/i2c-designware-core.h
+@@ -22,6 +22,7 @@
+  *
+  */
+ 
++#include <linux/pm_qos.h>
+ 
+ #define DW_IC_CON_MASTER		0x1
+ #define DW_IC_CON_SPEED_STD		0x2
+@@ -67,6 +68,7 @@
+  * @fp_lcnt: fast plus LCNT value
+  * @hs_hcnt: high speed HCNT value
+  * @hs_lcnt: high speed LCNT value
++ * @pm_qos: pm_qos_request used while holding a hardware lock on the bus
+  * @acquire_lock: function to acquire a hardware lock on the bus
+  * @release_lock: function to release a hardware lock on the bus
+  * @pm_runtime_disabled: true if pm runtime is disabled
+@@ -95,7 +97,7 @@ struct dw_i2c_dev {
+ 	unsigned int		status;
+ 	u32			abort_source;
+ 	int			irq;
+-	u32			accessor_flags;
++	u32			flags;
+ 	struct i2c_adapter	adapter;
+ 	u32			functionality;
+ 	u32			master_cfg;
+@@ -114,6 +116,7 @@ struct dw_i2c_dev {
+ 	u16			fp_lcnt;
+ 	u16			hs_hcnt;
+ 	u16			hs_lcnt;
++	struct pm_qos_request	pm_qos;
+ 	int			(*acquire_lock)(struct dw_i2c_dev *dev);
+ 	void			(*release_lock)(struct dw_i2c_dev *dev);
+ 	bool			pm_runtime_disabled;
+@@ -124,6 +127,8 @@ struct dw_i2c_dev {
+ #define ACCESS_16BIT		0x00000002
+ #define ACCESS_INTR_MASK	0x00000004
+ 
++#define MODEL_CHERRYTRAIL	0x00000100
++
+ extern int i2c_dw_init(struct dw_i2c_dev *dev);
+ extern void i2c_dw_disable(struct dw_i2c_dev *dev);
+ extern void i2c_dw_disable_int(struct dw_i2c_dev *dev);
+@@ -131,7 +136,9 @@ extern u32 i2c_dw_read_comp_param(struct dw_i2c_dev *dev);
+ extern int i2c_dw_probe(struct dw_i2c_dev *dev);
+ 
+ #if IS_ENABLED(CONFIG_I2C_DESIGNWARE_BAYTRAIL)
+-extern int i2c_dw_eval_lock_support(struct dw_i2c_dev *dev);
++extern int i2c_dw_probe_lock_support(struct dw_i2c_dev *dev);
++extern void i2c_dw_remove_lock_support(struct dw_i2c_dev *dev);
+ #else
+-static inline int i2c_dw_eval_lock_support(struct dw_i2c_dev *dev) { return 0; }
++static inline int i2c_dw_probe_lock_support(struct dw_i2c_dev *dev) { return 0; }
++static inline void i2c_dw_remove_lock_support(struct dw_i2c_dev *dev) {}
+ #endif
+diff --git a/drivers/i2c/busses/i2c-designware-pcidrv.c b/drivers/i2c/busses/i2c-designware-pcidrv.c
+index 96f8230cd2d3..4e53a9f12add 100644
+--- a/drivers/i2c/busses/i2c-designware-pcidrv.c
++++ b/drivers/i2c/busses/i2c-designware-pcidrv.c
+@@ -45,6 +45,7 @@ enum dw_pci_ctl_id_t {
+ 	medfield,
+ 	merrifield,
+ 	baytrail,
++	cherrytrail,
+ 	haswell,
+ };
+ 
+@@ -63,6 +64,7 @@ struct dw_pci_controller {
+ 	u32 rx_fifo_depth;
+ 	u32 clk_khz;
+ 	u32 functionality;
++	u32 flags;
+ 	struct dw_scl_sda_cfg *scl_sda_cfg;
+ 	int (*setup)(struct pci_dev *pdev, struct dw_pci_controller *c);
+ };
+@@ -174,6 +176,15 @@ static struct dw_pci_controller dw_pci_controllers[] = {
+ 		.functionality = I2C_FUNC_10BIT_ADDR,
+ 		.scl_sda_cfg = &hsw_config,
+ 	},
++	[cherrytrail] = {
++		.bus_num = -1,
++		.bus_cfg = INTEL_MID_STD_CFG | DW_IC_CON_SPEED_FAST,
++		.tx_fifo_depth = 32,
++		.rx_fifo_depth = 32,
++		.functionality = I2C_FUNC_10BIT_ADDR,
++		.flags = MODEL_CHERRYTRAIL,
++		.scl_sda_cfg = &byt_config,
++	},
+ };
+ 
+ #ifdef CONFIG_PM
+@@ -241,6 +252,7 @@ static int i2c_dw_pci_probe(struct pci_dev *pdev,
+ 	dev->base = pcim_iomap_table(pdev)[0];
+ 	dev->dev = &pdev->dev;
+ 	dev->irq = pdev->irq;
++	dev->flags |= controller->flags;
+ 
+ 	if (controller->setup) {
+ 		r = controller->setup(pdev, controller);
+@@ -321,13 +333,13 @@ static const struct pci_device_id i2_designware_pci_ids[] = {
+ 	{ PCI_VDEVICE(INTEL, 0x9c61), haswell },
+ 	{ PCI_VDEVICE(INTEL, 0x9c62), haswell },
+ 	/* Braswell / Cherrytrail */
+-	{ PCI_VDEVICE(INTEL, 0x22C1), baytrail },
+-	{ PCI_VDEVICE(INTEL, 0x22C2), baytrail },
+-	{ PCI_VDEVICE(INTEL, 0x22C3), baytrail },
+-	{ PCI_VDEVICE(INTEL, 0x22C4), baytrail },
+-	{ PCI_VDEVICE(INTEL, 0x22C5), baytrail },
+-	{ PCI_VDEVICE(INTEL, 0x22C6), baytrail },
+-	{ PCI_VDEVICE(INTEL, 0x22C7), baytrail },
++	{ PCI_VDEVICE(INTEL, 0x22C1), cherrytrail },
++	{ PCI_VDEVICE(INTEL, 0x22C2), cherrytrail },
++	{ PCI_VDEVICE(INTEL, 0x22C3), cherrytrail },
++	{ PCI_VDEVICE(INTEL, 0x22C4), cherrytrail },
++	{ PCI_VDEVICE(INTEL, 0x22C5), cherrytrail },
++	{ PCI_VDEVICE(INTEL, 0x22C6), cherrytrail },
++	{ PCI_VDEVICE(INTEL, 0x22C7), cherrytrail },
+ 	{ 0,}
+ };
+ MODULE_DEVICE_TABLE(pci, i2_designware_pci_ids);
+diff --git a/drivers/i2c/busses/i2c-designware-platdrv.c b/drivers/i2c/busses/i2c-designware-platdrv.c
+index 0b42a12171f3..985c4de061a4 100644
+--- a/drivers/i2c/busses/i2c-designware-platdrv.c
++++ b/drivers/i2c/busses/i2c-designware-platdrv.c
+@@ -112,7 +112,7 @@ static int dw_i2c_acpi_configure(struct platform_device *pdev)
+ 
+ 	id = acpi_match_device(pdev->dev.driver->acpi_match_table, &pdev->dev);
+ 	if (id && id->driver_data)
+-		dev->accessor_flags |= (u32)id->driver_data;
++		dev->flags |= (u32)id->driver_data;
+ 
+ 	return 0;
+ }
+@@ -123,7 +123,7 @@ static const struct acpi_device_id dw_i2c_acpi_match[] = {
+ 	{ "INT3432", 0 },
+ 	{ "INT3433", 0 },
+ 	{ "80860F41", 0 },
+-	{ "808622C1", 0 },
++	{ "808622C1", MODEL_CHERRYTRAIL },
+ 	{ "AMD0010", ACCESS_INTR_MASK },
+ 	{ "AMDI0010", ACCESS_INTR_MASK },
+ 	{ "AMDI0510", 0 },
+@@ -210,7 +210,7 @@ static int dw_i2c_plat_probe(struct platform_device *pdev)
+ 		return -EINVAL;
+ 	}
+ 
+-	r = i2c_dw_eval_lock_support(dev);
++	r = i2c_dw_probe_lock_support(dev);
+ 	if (r)
+ 		return r;
+ 
+@@ -291,6 +291,8 @@ static int dw_i2c_plat_remove(struct platform_device *pdev)
+ 	if (!dev->pm_runtime_disabled)
+ 		pm_runtime_disable(&pdev->dev);
+ 
++	i2c_dw_remove_lock_support(dev);
++
+ 	return 0;
+ }
+ 
+diff --git a/drivers/iio/adc/axp288_adc.c b/drivers/iio/adc/axp288_adc.c
+index 7fd24949c0c1..64799ad7ebad 100644
+--- a/drivers/iio/adc/axp288_adc.c
++++ b/drivers/iio/adc/axp288_adc.c
+@@ -28,8 +28,6 @@
+ #include <linux/iio/driver.h>
+ 
+ #define AXP288_ADC_EN_MASK		0xF1
+-#define AXP288_ADC_TS_PIN_GPADC		0xF2
+-#define AXP288_ADC_TS_PIN_ON		0xF3
+ 
+ enum axp288_adc_id {
+ 	AXP288_ADC_TS,
+@@ -123,16 +121,6 @@ static int axp288_adc_read_channel(int *val, unsigned long address,
+ 	return IIO_VAL_INT;
+ }
+ 
+-static int axp288_adc_set_ts(struct regmap *regmap, unsigned int mode,
+-				unsigned long address)
+-{
+-	/* channels other than GPADC do not need to switch TS pin */
+-	if (address != AXP288_GP_ADC_H)
+-		return 0;
+-
+-	return regmap_write(regmap, AXP288_ADC_TS_PIN_CTRL, mode);
+-}
+-
+ static int axp288_adc_read_raw(struct iio_dev *indio_dev,
+ 			struct iio_chan_spec const *chan,
+ 			int *val, int *val2, long mask)
+@@ -143,16 +131,7 @@ static int axp288_adc_read_raw(struct iio_dev *indio_dev,
+ 	mutex_lock(&indio_dev->mlock);
+ 	switch (mask) {
+ 	case IIO_CHAN_INFO_RAW:
+-		if (axp288_adc_set_ts(info->regmap, AXP288_ADC_TS_PIN_GPADC,
+-					chan->address)) {
+-			dev_err(&indio_dev->dev, "GPADC mode\n");
+-			ret = -EINVAL;
+-			break;
+-		}
+ 		ret = axp288_adc_read_channel(val, chan->address, info->regmap);
+-		if (axp288_adc_set_ts(info->regmap, AXP288_ADC_TS_PIN_ON,
+-						chan->address))
+-			dev_err(&indio_dev->dev, "TS pin restore\n");
+ 		break;
+ 	default:
+ 		ret = -EINVAL;
+@@ -162,15 +141,6 @@ static int axp288_adc_read_raw(struct iio_dev *indio_dev,
+ 	return ret;
+ }
+ 
+-static int axp288_adc_set_state(struct regmap *regmap)
+-{
+-	/* ADC should be always enabled for internal FG to function */
+-	if (regmap_write(regmap, AXP288_ADC_TS_PIN_CTRL, AXP288_ADC_TS_PIN_ON))
+-		return -EIO;
+-
+-	return regmap_write(regmap, AXP20X_ADC_EN1, AXP288_ADC_EN_MASK);
+-}
+-
+ static const struct iio_info axp288_adc_iio_info = {
+ 	.read_raw = &axp288_adc_read_raw,
+ 	.driver_module = THIS_MODULE,
+@@ -199,7 +169,7 @@ static int axp288_adc_probe(struct platform_device *pdev)
+ 	 * Set ADC to enabled state at all time, including system suspend.
+ 	 * otherwise internal fuel gauge functionality may be affected.
+ 	 */
+-	ret = axp288_adc_set_state(axp20x->regmap);
++	ret = regmap_write(info->regmap, AXP20X_ADC_EN1, AXP288_ADC_EN_MASK);
+ 	if (ret) {
+ 		dev_err(&pdev->dev, "unable to enable ADC device\n");
+ 		return ret;
+diff --git a/drivers/mfd/axp20x.c b/drivers/mfd/axp20x.c
+index ba130be32e61..c51d2df2990b 100644
+--- a/drivers/mfd/axp20x.c
++++ b/drivers/mfd/axp20x.c
+@@ -117,7 +117,14 @@ static const struct regmap_range axp288_writeable_ranges[] = {
+ };
+ 
+ static const struct regmap_range axp288_volatile_ranges[] = {
++	regmap_reg_range(AXP20X_PWR_INPUT_STATUS, AXP288_POWER_REASON),
++	regmap_reg_range(AXP288_BC_GLOBAL, AXP288_BC_GLOBAL),
++	regmap_reg_range(AXP288_BC_DET_STAT, AXP288_BC_DET_STAT),
+ 	regmap_reg_range(AXP20X_IRQ1_EN, AXP20X_IPSOUT_V_HIGH_L),
++	regmap_reg_range(AXP20X_TIMER_CTRL, AXP20X_TIMER_CTRL),
++	regmap_reg_range(AXP22X_GPIO_STATE, AXP22X_GPIO_STATE),
++	regmap_reg_range(AXP288_RT_BATT_V_H, AXP288_RT_BATT_V_L),
++	regmap_reg_range(AXP20X_FG_RES, AXP288_FG_CC_CAP_REG),
+ };
+ 
+ static const struct regmap_access_table axp288_writeable_table = {
+@@ -205,14 +212,14 @@ static struct resource axp22x_pek_resources[] = {
+ static struct resource axp288_power_button_resources[] = {
+ 	{
+ 		.name	= "PEK_DBR",
+-		.start	= AXP288_IRQ_POKN,
+-		.end	= AXP288_IRQ_POKN,
++		.start	= AXP288_IRQ_POKP,
++		.end	= AXP288_IRQ_POKP,
+ 		.flags	= IORESOURCE_IRQ,
+ 	},
+ 	{
+ 		.name	= "PEK_DBF",
+-		.start	= AXP288_IRQ_POKP,
+-		.end	= AXP288_IRQ_POKP,
++		.start	= AXP288_IRQ_POKN,
++		.end	= AXP288_IRQ_POKN,
+ 		.flags	= IORESOURCE_IRQ,
+ 	},
+ };
+@@ -405,6 +412,9 @@ static const struct regmap_irq axp288_regmap_irqs[] = {
+ 	INIT_REGMAP_IRQ(AXP288, VBUS_FALL,              0, 2),
+ 	INIT_REGMAP_IRQ(AXP288, VBUS_RISE,              0, 3),
+ 	INIT_REGMAP_IRQ(AXP288, OV,                     0, 4),
++	INIT_REGMAP_IRQ(AXP288, FALLING_ALT,            0, 5),
++	INIT_REGMAP_IRQ(AXP288, RISING_ALT,             0, 6),
++	INIT_REGMAP_IRQ(AXP288, OV_ALT,                 0, 7),
+ 
+ 	INIT_REGMAP_IRQ(AXP288, DONE,                   1, 2),
+ 	INIT_REGMAP_IRQ(AXP288, CHARGING,               1, 3),
+@@ -800,6 +810,7 @@ int axp20x_match_device(struct axp20x_dev *axp20x)
+ 		axp20x->nr_cells = ARRAY_SIZE(axp288_cells);
+ 		axp20x->regmap_cfg = &axp288_regmap_config;
+ 		axp20x->regmap_irq_chip = &axp288_regmap_irq_chip;
++		axp20x->irq_flags = IRQF_TRIGGER_LOW;
+ 		break;
+ 	case AXP806_ID:
+ 		axp20x->nr_cells = ARRAY_SIZE(axp806_cells);
+@@ -829,9 +840,8 @@ int axp20x_device_probe(struct axp20x_dev *axp20x)
+ 	int ret;
+ 
+ 	ret = regmap_add_irq_chip(axp20x->regmap, axp20x->irq,
+-				  IRQF_ONESHOT | IRQF_SHARED, -1,
+-				  axp20x->regmap_irq_chip,
+-				  &axp20x->regmap_irqc);
++			  IRQF_ONESHOT | IRQF_SHARED | axp20x->irq_flags,
++			   -1, axp20x->regmap_irq_chip, &axp20x->regmap_irqc);
+ 	if (ret) {
+ 		dev_err(axp20x->dev, "failed to add irq chip: %d\n", ret);
+ 		return ret;
+diff --git a/drivers/power/supply/axp288_charger.c b/drivers/power/supply/axp288_charger.c
+index 75b8e0c7402b..6be2fe27bb07 100644
+--- a/drivers/power/supply/axp288_charger.c
++++ b/drivers/power/supply/axp288_charger.c
+@@ -90,20 +90,6 @@
+ #define CHRG_VLTFC_0C			0xA5	/* 0 DegC */
+ #define CHRG_VHTFC_45C			0x1F	/* 45 DegC */
+ 
+-#define BAT_IRQ_CFG_CHRG_DONE		(1 << 2)
+-#define BAT_IRQ_CFG_CHRG_START		(1 << 3)
+-#define BAT_IRQ_CFG_BAT_SAFE_EXIT	(1 << 4)
+-#define BAT_IRQ_CFG_BAT_SAFE_ENTER	(1 << 5)
+-#define BAT_IRQ_CFG_BAT_DISCON		(1 << 6)
+-#define BAT_IRQ_CFG_BAT_CONN		(1 << 7)
+-#define BAT_IRQ_CFG_BAT_MASK		0xFC
+-
+-#define TEMP_IRQ_CFG_QCBTU		(1 << 4)
+-#define TEMP_IRQ_CFG_CBTU		(1 << 5)
+-#define TEMP_IRQ_CFG_QCBTO		(1 << 6)
+-#define TEMP_IRQ_CFG_CBTO		(1 << 7)
+-#define TEMP_IRQ_CFG_MASK		0xF0
+-
+ #define FG_CNTL_OCV_ADJ_EN		(1 << 3)
+ 
+ #define CV_4100MV			4100	/* 4100mV */
+@@ -127,6 +113,10 @@
+ #define ILIM_3000MA			3000	/* 3000mA */
+ 
+ #define AXP288_EXTCON_DEV_NAME		"axp288_extcon"
++#define USB_HOST_EXTCON_DEV_NAME	"INT3496:00"
++
++static const unsigned int cable_ids[] =
++	{ EXTCON_CHG_USB_SDP, EXTCON_CHG_USB_CDP, EXTCON_CHG_USB_DCP };
+ 
+ enum {
+ 	VBUS_OV_IRQ = 0,
+@@ -143,7 +133,6 @@ enum {
+ 
+ struct axp288_chrg_info {
+ 	struct platform_device *pdev;
+-	struct axp20x_chrg_pdata *pdata;
+ 	struct regmap *regmap;
+ 	struct regmap_irq_chip_data *regmap_irqc;
+ 	int irq[CHRG_INTR_END];
+@@ -163,20 +152,16 @@ struct axp288_chrg_info {
+ 		struct extcon_dev *edev;
+ 		bool connected;
+ 		enum power_supply_type chg_type;
+-		struct notifier_block nb;
++		struct notifier_block nb[ARRAY_SIZE(cable_ids)];
+ 		struct work_struct work;
+ 	} cable;
+ 
+-	int health;
+ 	int inlmt;
+ 	int cc;
+ 	int cv;
+ 	int max_cc;
+ 	int max_cv;
+-	bool online;
+-	bool present;
+-	bool enable_charger;
+-	bool is_charger_enabled;
++	int is_charger_enabled;
+ };
+ 
+ static inline int axp288_charger_set_cc(struct axp288_chrg_info *info, int cc)
+@@ -305,6 +290,9 @@ static int axp288_charger_enable_charger(struct axp288_chrg_info *info,
+ {
+ 	int ret;
+ 
++	if ((int)enable == info->is_charger_enabled)
++		return 0;
++
+ 	if (enable)
+ 		ret = regmap_update_bits(info->regmap, AXP20X_CHRG_CTRL1,
+ 				CHRG_CCCV_CHG_EN, CHRG_CCCV_CHG_EN);
+@@ -430,8 +418,7 @@ static int axp288_charger_usb_get_property(struct power_supply *psy,
+ 		ret = axp288_charger_is_present(info);
+ 		if (ret < 0)
+ 			goto psy_get_prop_fail;
+-		info->present = ret;
+-		val->intval = info->present;
++		val->intval = ret;
+ 		break;
+ 	case POWER_SUPPLY_PROP_ONLINE:
+ 		/* Check for OTG case first */
+@@ -442,8 +429,7 @@ static int axp288_charger_usb_get_property(struct power_supply *psy,
+ 		ret = axp288_charger_is_online(info);
+ 		if (ret < 0)
+ 			goto psy_get_prop_fail;
+-		info->online = ret;
+-		val->intval = info->online;
++		val->intval = ret;
+ 		break;
+ 	case POWER_SUPPLY_PROP_HEALTH:
+ 		val->intval = axp288_get_charger_health(info);
+@@ -576,20 +562,20 @@ static void axp288_charger_extcon_evt_worker(struct work_struct *work)
+ 	struct axp288_chrg_info *info =
+ 	    container_of(work, struct axp288_chrg_info, cable.work);
+ 	int ret, current_limit;
+-	bool changed = false;
+ 	struct extcon_dev *edev = info->cable.edev;
+ 	bool old_connected = info->cable.connected;
++	enum power_supply_type old_chg_type = info->cable.chg_type;
+ 
+ 	/* Determine cable/charger type */
+-	if (extcon_get_cable_state_(edev, EXTCON_CHG_USB_SDP) > 0) {
++	if (extcon_get_state(edev, EXTCON_CHG_USB_SDP) > 0) {
+ 		dev_dbg(&info->pdev->dev, "USB SDP charger  is connected");
+ 		info->cable.connected = true;
+ 		info->cable.chg_type = POWER_SUPPLY_TYPE_USB;
+-	} else if (extcon_get_cable_state_(edev, EXTCON_CHG_USB_CDP) > 0) {
++	} else if (extcon_get_state(edev, EXTCON_CHG_USB_CDP) > 0) {
+ 		dev_dbg(&info->pdev->dev, "USB CDP charger is connected");
+ 		info->cable.connected = true;
+ 		info->cable.chg_type = POWER_SUPPLY_TYPE_USB_CDP;
+-	} else if (extcon_get_cable_state_(edev, EXTCON_CHG_USB_DCP) > 0) {
++	} else if (extcon_get_state(edev, EXTCON_CHG_USB_DCP) > 0) {
+ 		dev_dbg(&info->pdev->dev, "USB DCP charger is connected");
+ 		info->cable.connected = true;
+ 		info->cable.chg_type = POWER_SUPPLY_TYPE_USB_DCP;
+@@ -601,22 +587,15 @@ static void axp288_charger_extcon_evt_worker(struct work_struct *work)
+ 	}
+ 
+ 	/* Cable status changed */
+-	if (old_connected != info->cable.connected)
+-		changed = true;
+-
+-	if (!changed)
++	if (old_connected == info->cable.connected &&
++	    old_chg_type == info->cable.chg_type)
+ 		return;
+ 
+ 	mutex_lock(&info->lock);
+ 
+-	if (info->is_charger_enabled && !info->cable.connected) {
+-		info->enable_charger = false;
+-		ret = axp288_charger_enable_charger(info, info->enable_charger);
+-		if (ret < 0)
+-			dev_err(&info->pdev->dev,
+-				"cannot disable charger (%d)", ret);
++	if (info->cable.connected) {
++		axp288_charger_enable_charger(info, false);
+ 
+-	} else if (!info->is_charger_enabled && info->cable.connected) {
+ 		switch (info->cable.chg_type) {
+ 		case POWER_SUPPLY_TYPE_USB:
+ 			current_limit = ILIM_500MA;
+@@ -635,36 +614,49 @@ static void axp288_charger_extcon_evt_worker(struct work_struct *work)
+ 
+ 		/* Set vbus current limit first, then enable charger */
+ 		ret = axp288_charger_set_vbus_inlmt(info, current_limit);
+-		if (ret < 0) {
++		if (ret == 0)
++			axp288_charger_enable_charger(info, true);
++		else
+ 			dev_err(&info->pdev->dev,
+ 				"error setting current limit (%d)", ret);
+-		} else {
+-			info->enable_charger = (current_limit > 0);
+-			ret = axp288_charger_enable_charger(info,
+-							info->enable_charger);
+-			if (ret < 0)
+-				dev_err(&info->pdev->dev,
+-					"cannot enable charger (%d)", ret);
+-		}
++	} else {
++		axp288_charger_enable_charger(info, false);
+ 	}
+ 
+-	if (changed)
+-		info->health = axp288_get_charger_health(info);
+-
+ 	mutex_unlock(&info->lock);
+ 
+-	if (changed)
+-		power_supply_changed(info->psy_usb);
++	power_supply_changed(info->psy_usb);
+ }
+ 
+-static int axp288_charger_handle_cable_evt(struct notifier_block *nb,
+-					  unsigned long event, void *param)
++/*
++ * We need 3 copies of this, because there is no way to find out for which
++ * cable id we are being called from the passed in arguments; and we must
++ * have a separate nb for each extcon_register_notifier call.
++ */
++static int axp288_charger_handle_cable0_evt(struct notifier_block *nb,
++					    unsigned long event, void *param)
+ {
+ 	struct axp288_chrg_info *info =
+-	    container_of(nb, struct axp288_chrg_info, cable.nb);
++		container_of(nb, struct axp288_chrg_info, cable.nb[0]);
++	schedule_work(&info->cable.work);
++	return NOTIFY_OK;
++}
+ 
++static int axp288_charger_handle_cable1_evt(struct notifier_block *nb,
++					    unsigned long event, void *param)
++{
++	struct axp288_chrg_info *info =
++		container_of(nb, struct axp288_chrg_info, cable.nb[1]);
+ 	schedule_work(&info->cable.work);
++	return NOTIFY_OK;
++}
+ 
++static int axp288_charger_handle_cable2_evt(struct notifier_block *nb,
++					    unsigned long event, void *param)
++{
++	struct axp288_chrg_info *info =
++		container_of(nb, struct axp288_chrg_info, cable.nb[2]);
++	schedule_work(&info->cable.work);
+ 	return NOTIFY_OK;
+ }
+ 
+@@ -672,7 +664,17 @@ static void axp288_charger_otg_evt_worker(struct work_struct *work)
+ {
+ 	struct axp288_chrg_info *info =
+ 	    container_of(work, struct axp288_chrg_info, otg.work);
+-	int ret;
++	struct extcon_dev *edev = info->otg.cable;
++	int ret, usb_host = extcon_get_state(edev, EXTCON_USB_HOST);
++
++	dev_dbg(&info->pdev->dev, "external connector USB-Host is %s\n",
++				usb_host ? "attached" : "detached");
++
++	/*
++	 * Set usb_id_short flag to avoid running charger detection logic
++	 * in case usb host.
++	 */
++	info->otg.id_short = usb_host;
+ 
+ 	/* Disable VBUS path before enabling the 5V boost */
+ 	ret = axp288_charger_vbus_path_select(info, !info->otg.id_short);
+@@ -685,135 +687,109 @@ static int axp288_charger_handle_otg_evt(struct notifier_block *nb,
+ {
+ 	struct axp288_chrg_info *info =
+ 	    container_of(nb, struct axp288_chrg_info, otg.id_nb);
+-	struct extcon_dev *edev = info->otg.cable;
+-	int usb_host = extcon_get_cable_state_(edev, EXTCON_USB_HOST);
+ 
+-	dev_dbg(&info->pdev->dev, "external connector USB-Host is %s\n",
+-				usb_host ? "attached" : "detached");
+-
+-	/*
+-	 * Set usb_id_short flag to avoid running charger detection logic
+-	 * in case usb host.
+-	 */
+-	info->otg.id_short = usb_host;
+ 	schedule_work(&info->otg.work);
+ 
+ 	return NOTIFY_OK;
+ }
+ 
+-static void charger_init_hw_regs(struct axp288_chrg_info *info)
++static int charger_init_hw_regs(struct axp288_chrg_info *info)
+ {
+ 	int ret, cc, cv;
+ 	unsigned int val;
+ 
+ 	/* Program temperature thresholds */
+ 	ret = regmap_write(info->regmap, AXP20X_V_LTF_CHRG, CHRG_VLTFC_0C);
+-	if (ret < 0)
+-		dev_warn(&info->pdev->dev, "register(%x) write error(%d)\n",
++	if (ret < 0) {
++		dev_err(&info->pdev->dev, "register(%x) write error(%d)\n",
+ 							AXP20X_V_LTF_CHRG, ret);
++		return ret;
++	}
+ 
+ 	ret = regmap_write(info->regmap, AXP20X_V_HTF_CHRG, CHRG_VHTFC_45C);
+-	if (ret < 0)
+-		dev_warn(&info->pdev->dev, "register(%x) write error(%d)\n",
++	if (ret < 0) {
++		dev_err(&info->pdev->dev, "register(%x) write error(%d)\n",
+ 							AXP20X_V_HTF_CHRG, ret);
++		return ret;
++	}
+ 
+ 	/* Do not turn-off charger o/p after charge cycle ends */
+ 	ret = regmap_update_bits(info->regmap,
+ 				AXP20X_CHRG_CTRL2,
+-				CNTL2_CHG_OUT_TURNON, 1);
+-	if (ret < 0)
+-		dev_warn(&info->pdev->dev, "register(%x) write error(%d)\n",
++				CNTL2_CHG_OUT_TURNON, CNTL2_CHG_OUT_TURNON);
++	if (ret < 0) {
++		dev_err(&info->pdev->dev, "register(%x) write error(%d)\n",
+ 						AXP20X_CHRG_CTRL2, ret);
+-
+-	/* Enable interrupts */
+-	ret = regmap_update_bits(info->regmap,
+-				AXP20X_IRQ2_EN,
+-				BAT_IRQ_CFG_BAT_MASK, 1);
+-	if (ret < 0)
+-		dev_warn(&info->pdev->dev, "register(%x) write error(%d)\n",
+-						AXP20X_IRQ2_EN, ret);
+-
+-	ret = regmap_update_bits(info->regmap, AXP20X_IRQ3_EN,
+-				TEMP_IRQ_CFG_MASK, 1);
+-	if (ret < 0)
+-		dev_warn(&info->pdev->dev, "register(%x) write error(%d)\n",
+-						AXP20X_IRQ3_EN, ret);
++		return ret;
++	}
+ 
+ 	/* Setup ending condition for charging to be 10% of I(chrg) */
+ 	ret = regmap_update_bits(info->regmap,
+ 				AXP20X_CHRG_CTRL1,
+ 				CHRG_CCCV_ITERM_20P, 0);
+-	if (ret < 0)
+-		dev_warn(&info->pdev->dev, "register(%x) write error(%d)\n",
++	if (ret < 0) {
++		dev_err(&info->pdev->dev, "register(%x) write error(%d)\n",
+ 						AXP20X_CHRG_CTRL1, ret);
++		return ret;
++	}
+ 
+ 	/* Disable OCV-SOC curve calibration */
+ 	ret = regmap_update_bits(info->regmap,
+ 				AXP20X_CC_CTRL,
+ 				FG_CNTL_OCV_ADJ_EN, 0);
+-	if (ret < 0)
+-		dev_warn(&info->pdev->dev, "register(%x) write error(%d)\n",
++	if (ret < 0) {
++		dev_err(&info->pdev->dev, "register(%x) write error(%d)\n",
+ 						AXP20X_CC_CTRL, ret);
+-
+-	/* Init charging current and voltage */
+-	info->max_cc = info->pdata->max_cc;
+-	info->max_cv = info->pdata->max_cv;
++		return ret;
++	}
+ 
+ 	/* Read current charge voltage and current limit */
+ 	ret = regmap_read(info->regmap, AXP20X_CHRG_CTRL1, &val);
+ 	if (ret < 0) {
+-		/* Assume default if cannot read */
+-		info->cc = info->pdata->def_cc;
+-		info->cv = info->pdata->def_cv;
+-	} else {
+-		/* Determine charge voltage */
+-		cv = (val & CHRG_CCCV_CV_MASK) >> CHRG_CCCV_CV_BIT_POS;
+-		switch (cv) {
+-		case CHRG_CCCV_CV_4100MV:
+-			info->cv = CV_4100MV;
+-			break;
+-		case CHRG_CCCV_CV_4150MV:
+-			info->cv = CV_4150MV;
+-			break;
+-		case CHRG_CCCV_CV_4200MV:
+-			info->cv = CV_4200MV;
+-			break;
+-		case CHRG_CCCV_CV_4350MV:
+-			info->cv = CV_4350MV;
+-			break;
+-		default:
+-			info->cv = INT_MAX;
+-			break;
+-		}
++		dev_err(&info->pdev->dev, "register(%x) read error(%d)\n",
++			AXP20X_CHRG_CTRL1, ret);
++		return ret;
++	}
+ 
+-		/* Determine charge current limit */
+-		cc = (ret & CHRG_CCCV_CC_MASK) >> CHRG_CCCV_CC_BIT_POS;
+-		cc = (cc * CHRG_CCCV_CC_LSB_RES) + CHRG_CCCV_CC_OFFSET;
+-		info->cc = cc;
++	/* Determine charge voltage */
++	cv = (val & CHRG_CCCV_CV_MASK) >> CHRG_CCCV_CV_BIT_POS;
++	switch (cv) {
++	case CHRG_CCCV_CV_4100MV:
++		info->cv = CV_4100MV;
++		break;
++	case CHRG_CCCV_CV_4150MV:
++		info->cv = CV_4150MV;
++		break;
++	case CHRG_CCCV_CV_4200MV:
++		info->cv = CV_4200MV;
++		break;
++	case CHRG_CCCV_CV_4350MV:
++		info->cv = CV_4350MV;
++		break;
++	}
+ 
+-		/* Program default charging voltage and current */
+-		cc = min(info->pdata->def_cc, info->max_cc);
+-		cv = min(info->pdata->def_cv, info->max_cv);
++	/* Determine charge current limit */
++	cc = (ret & CHRG_CCCV_CC_MASK) >> CHRG_CCCV_CC_BIT_POS;
++	cc = (cc * CHRG_CCCV_CC_LSB_RES) + CHRG_CCCV_CC_OFFSET;
++	info->cc = cc;
+ 
+-		ret = axp288_charger_set_cc(info, cc);
+-		if (ret < 0)
+-			dev_warn(&info->pdev->dev,
+-					"error(%d) in setting CC\n", ret);
++	/*
++	 * Do not allow the user to configure higher settings then those
++	 * set by the firmware
++	 */
++	info->max_cv = info->cv;
++	info->max_cc = info->cc;
+ 
+-		ret = axp288_charger_set_cv(info, cv);
+-		if (ret < 0)
+-			dev_warn(&info->pdev->dev,
+-					"error(%d) in setting CV\n", ret);
+-	}
++	return 0;
+ }
+ 
+ static int axp288_charger_probe(struct platform_device *pdev)
+ {
+ 	int ret, i, pirq;
+ 	struct axp288_chrg_info *info;
++	struct device *dev = &pdev->dev;
+ 	struct axp20x_dev *axp20x = dev_get_drvdata(pdev->dev.parent);
+ 	struct power_supply_config charger_cfg = {};
+-
+ 	info = devm_kzalloc(&pdev->dev, sizeof(*info), GFP_KERNEL);
+ 	if (!info)
+ 		return -ENOMEM;
+@@ -821,15 +797,8 @@ static int axp288_charger_probe(struct platform_device *pdev)
+ 	info->pdev = pdev;
+ 	info->regmap = axp20x->regmap;
+ 	info->regmap_irqc = axp20x->regmap_irqc;
+-	info->pdata = pdev->dev.platform_data;
+-
+-	if (!info->pdata) {
+-		/* Try ACPI provided pdata via device properties */
+-		if (!device_property_present(&pdev->dev,
+-						"axp288_charger_data\n"))
+-			dev_err(&pdev->dev, "failed to get platform data\n");
+-		return -ENODEV;
+-	}
++	info->cable.chg_type = -1;
++	info->is_charger_enabled = -1;
+ 
+ 	info->cable.edev = extcon_get_extcon_dev(AXP288_EXTCON_DEV_NAME);
+ 	if (info->cable.edev == NULL) {
+@@ -838,63 +807,55 @@ static int axp288_charger_probe(struct platform_device *pdev)
+ 		return -EPROBE_DEFER;
+ 	}
+ 
+-	/* Register for extcon notification */
+-	INIT_WORK(&info->cable.work, axp288_charger_extcon_evt_worker);
+-	info->cable.nb.notifier_call = axp288_charger_handle_cable_evt;
+-	ret = extcon_register_notifier(info->cable.edev, EXTCON_CHG_USB_SDP,
+-					&info->cable.nb);
+-	if (ret) {
+-		dev_err(&info->pdev->dev,
+-			"failed to register extcon notifier for SDP %d\n", ret);
+-		return ret;
+-	}
+-
+-	ret = extcon_register_notifier(info->cable.edev, EXTCON_CHG_USB_CDP,
+-					&info->cable.nb);
+-	if (ret) {
+-		dev_err(&info->pdev->dev,
+-			"failed to register extcon notifier for CDP %d\n", ret);
+-		extcon_unregister_notifier(info->cable.edev,
+-				EXTCON_CHG_USB_SDP, &info->cable.nb);
+-		return ret;
+-	}
+-
+-	ret = extcon_register_notifier(info->cable.edev, EXTCON_CHG_USB_DCP,
+-					&info->cable.nb);
+-	if (ret) {
+-		dev_err(&info->pdev->dev,
+-			"failed to register extcon notifier for DCP %d\n", ret);
+-		extcon_unregister_notifier(info->cable.edev,
+-				EXTCON_CHG_USB_SDP, &info->cable.nb);
+-		extcon_unregister_notifier(info->cable.edev,
+-				EXTCON_CHG_USB_CDP, &info->cable.nb);
+-		return ret;
++	info->otg.cable = extcon_get_extcon_dev(USB_HOST_EXTCON_DEV_NAME);
++	if (info->otg.cable == NULL) {
++		dev_dbg(dev, "EXTCON_USB_HOST is not ready, probe deferred\n");
++		return -EPROBE_DEFER;
+ 	}
+ 
+ 	platform_set_drvdata(pdev, info);
+ 	mutex_init(&info->lock);
+ 
++	ret = charger_init_hw_regs(info);
++	if (ret)
++		return ret;
++
+ 	/* Register with power supply class */
+ 	charger_cfg.drv_data = info;
+-	info->psy_usb = power_supply_register(&pdev->dev, &axp288_charger_desc,
+-						&charger_cfg);
++	info->psy_usb = devm_power_supply_register(dev, &axp288_charger_desc,
++						   &charger_cfg);
+ 	if (IS_ERR(info->psy_usb)) {
+-		dev_err(&pdev->dev, "failed to register power supply charger\n");
+ 		ret = PTR_ERR(info->psy_usb);
+-		goto psy_reg_failed;
++		dev_err(dev, "failed to register power supply: %d\n", ret);
++		return ret;
++	}
++
++	/* Register for extcon notification */
++	INIT_WORK(&info->cable.work, axp288_charger_extcon_evt_worker);
++	info->cable.nb[0].notifier_call = axp288_charger_handle_cable0_evt;
++	info->cable.nb[1].notifier_call = axp288_charger_handle_cable1_evt;
++	info->cable.nb[2].notifier_call = axp288_charger_handle_cable2_evt;
++	for (i = 0; i < ARRAY_SIZE(cable_ids); i++) {
++		ret = devm_extcon_register_notifier(dev, info->cable.edev,
++					  cable_ids[i], &info->cable.nb[i]);
++		if (ret) {
++			dev_err(dev, "failed to register extcon notifier for %u: %d\n",
++				cable_ids[i], ret);
++			return ret;
++		}
+ 	}
++	schedule_work(&info->cable.work);
+ 
+ 	/* Register for OTG notification */
+ 	INIT_WORK(&info->otg.work, axp288_charger_otg_evt_worker);
+ 	info->otg.id_nb.notifier_call = axp288_charger_handle_otg_evt;
+-	ret = extcon_register_notifier(info->otg.cable, EXTCON_USB_HOST,
+-				       &info->otg.id_nb);
+-	if (ret)
+-		dev_warn(&pdev->dev, "failed to register otg notifier\n");
+-
+-	if (info->otg.cable)
+-		info->otg.id_short = extcon_get_cable_state_(
+-					info->otg.cable, EXTCON_USB_HOST);
++	ret = devm_extcon_register_notifier(&pdev->dev, info->otg.cable,
++					EXTCON_USB_HOST, &info->otg.id_nb);
++	if (ret) {
++		dev_err(dev, "failed to register EXTCON_USB_HOST notifier\n");
++		return ret;
++	}
++	schedule_work(&info->otg.work);
+ 
+ 	/* Register charger interrupts */
+ 	for (i = 0; i < CHRG_INTR_END; i++) {
+@@ -903,8 +864,7 @@ static int axp288_charger_probe(struct platform_device *pdev)
+ 		if (info->irq[i] < 0) {
+ 			dev_warn(&info->pdev->dev,
+ 				"failed to get virtual interrupt=%d\n", pirq);
+-			ret = info->irq[i];
+-			goto intr_reg_failed;
++			return info->irq[i];
+ 		}
+ 		ret = devm_request_threaded_irq(&info->pdev->dev, info->irq[i],
+ 					NULL, axp288_charger_irq_thread_handler,
+@@ -912,51 +872,22 @@ static int axp288_charger_probe(struct platform_device *pdev)
+ 		if (ret) {
+ 			dev_err(&pdev->dev, "failed to request interrupt=%d\n",
+ 								info->irq[i]);
+-			goto intr_reg_failed;
++			return ret;
+ 		}
+ 	}
+ 
+-	charger_init_hw_regs(info);
+-
+ 	return 0;
+-
+-intr_reg_failed:
+-	if (info->otg.cable)
+-		extcon_unregister_notifier(info->otg.cable, EXTCON_USB_HOST,
+-					&info->otg.id_nb);
+-	power_supply_unregister(info->psy_usb);
+-psy_reg_failed:
+-	extcon_unregister_notifier(info->cable.edev, EXTCON_CHG_USB_SDP,
+-					&info->cable.nb);
+-	extcon_unregister_notifier(info->cable.edev, EXTCON_CHG_USB_CDP,
+-					&info->cable.nb);
+-	extcon_unregister_notifier(info->cable.edev, EXTCON_CHG_USB_DCP,
+-					&info->cable.nb);
+-	return ret;
+ }
+ 
+-static int axp288_charger_remove(struct platform_device *pdev)
+-{
+-	struct axp288_chrg_info *info =  dev_get_drvdata(&pdev->dev);
+-
+-	if (info->otg.cable)
+-		extcon_unregister_notifier(info->otg.cable, EXTCON_USB_HOST,
+-					&info->otg.id_nb);
+-
+-	extcon_unregister_notifier(info->cable.edev, EXTCON_CHG_USB_SDP,
+-					&info->cable.nb);
+-	extcon_unregister_notifier(info->cable.edev, EXTCON_CHG_USB_CDP,
+-					&info->cable.nb);
+-	extcon_unregister_notifier(info->cable.edev, EXTCON_CHG_USB_DCP,
+-					&info->cable.nb);
+-	power_supply_unregister(info->psy_usb);
+-
+-	return 0;
+-}
++static const struct platform_device_id axp288_charger_id_table[] = {
++	{ .name = "axp288_charger" },
++	{},
++};
++MODULE_DEVICE_TABLE(platform, axp288_charger_id_table);
+ 
+ static struct platform_driver axp288_charger_driver = {
+ 	.probe = axp288_charger_probe,
+-	.remove = axp288_charger_remove,
++	.id_table = axp288_charger_id_table,
+ 	.driver = {
+ 		.name = "axp288_charger",
+ 	},
+diff --git a/drivers/power/supply/axp288_fuel_gauge.c b/drivers/power/supply/axp288_fuel_gauge.c
+index 5bdde692f724..a8dcabc32721 100644
+--- a/drivers/power/supply/axp288_fuel_gauge.c
++++ b/drivers/power/supply/axp288_fuel_gauge.c
+@@ -29,6 +29,7 @@
+ #include <linux/iio/consumer.h>
+ #include <linux/debugfs.h>
+ #include <linux/seq_file.h>
++#include <asm/unaligned.h>
+ 
+ #define CHRG_STAT_BAT_SAFE_MODE		(1 << 3)
+ #define CHRG_STAT_BAT_VALID			(1 << 4)
+@@ -49,23 +50,6 @@
+ #define CHRG_CCCV_CV_4350MV			0x3     /* 4.35V */
+ #define CHRG_CCCV_CHG_EN			(1 << 7)
+ 
+-#define CV_4100						4100    /* 4100mV */
+-#define CV_4150						4150    /* 4150mV */
+-#define CV_4200						4200    /* 4200mV */
+-#define CV_4350						4350    /* 4350mV */
+-
+-#define TEMP_IRQ_CFG_QWBTU			(1 << 0)
+-#define TEMP_IRQ_CFG_WBTU			(1 << 1)
+-#define TEMP_IRQ_CFG_QWBTO			(1 << 2)
+-#define TEMP_IRQ_CFG_WBTO			(1 << 3)
+-#define TEMP_IRQ_CFG_MASK			0xf
+-
+-#define FG_IRQ_CFG_LOWBATT_WL2		(1 << 0)
+-#define FG_IRQ_CFG_LOWBATT_WL1		(1 << 1)
+-#define FG_IRQ_CFG_LOWBATT_MASK		0x3
+-#define LOWBAT_IRQ_STAT_LOWBATT_WL2	(1 << 0)
+-#define LOWBAT_IRQ_STAT_LOWBATT_WL1	(1 << 1)
+-
+ #define FG_CNTL_OCV_ADJ_STAT		(1 << 2)
+ #define FG_CNTL_OCV_ADJ_EN			(1 << 3)
+ #define FG_CNTL_CAP_ADJ_STAT		(1 << 4)
+@@ -73,17 +57,15 @@
+ #define FG_CNTL_CC_EN				(1 << 6)
+ #define FG_CNTL_GAUGE_EN			(1 << 7)
+ 
++#define FG_15BIT_WORD_VALID			(1 << 15)
++#define FG_15BIT_VAL_MASK			0x7fff
++
+ #define FG_REP_CAP_VALID			(1 << 7)
+ #define FG_REP_CAP_VAL_MASK			0x7F
+ 
+ #define FG_DES_CAP1_VALID			(1 << 7)
+-#define FG_DES_CAP1_VAL_MASK		0x7F
+-#define FG_DES_CAP0_VAL_MASK		0xFF
+ #define FG_DES_CAP_RES_LSB			1456    /* 1.456mAhr */
+ 
+-#define FG_CC_MTR1_VALID			(1 << 7)
+-#define FG_CC_MTR1_VAL_MASK			0x7F
+-#define FG_CC_MTR0_VAL_MASK			0xFF
+ #define FG_DES_CC_RES_LSB			1456    /* 1.456mAhr */
+ 
+ #define FG_OCV_CAP_VALID			(1 << 7)
+@@ -104,9 +86,7 @@
+ 
+ /* 1.1mV per LSB expressed in uV */
+ #define VOLTAGE_FROM_ADC(a)			((a * 11) / 10)
+-/* properties converted to tenths of degrees, uV, uA, uW */
+-#define PROP_TEMP(a)		((a) * 10)
+-#define UNPROP_TEMP(a)		((a) / 10)
++/* properties converted to uV, uA */
+ #define PROP_VOLT(a)		((a) * 1000)
+ #define PROP_CURR(a)		((a) * 1000)
+ 
+@@ -122,13 +102,13 @@ enum {
+ 
+ struct axp288_fg_info {
+ 	struct platform_device *pdev;
+-	struct axp20x_fg_pdata *pdata;
+ 	struct regmap *regmap;
+ 	struct regmap_irq_chip_data *regmap_irqc;
+ 	int irq[AXP288_FG_INTR_NUM];
+ 	struct power_supply *bat;
+ 	struct mutex lock;
+ 	int status;
++	int max_volt;
+ 	struct delayed_work status_monitor;
+ 	struct dentry *debug_file;
+ };
+@@ -138,22 +118,14 @@ static enum power_supply_property fuel_gauge_props[] = {
+ 	POWER_SUPPLY_PROP_PRESENT,
+ 	POWER_SUPPLY_PROP_HEALTH,
+ 	POWER_SUPPLY_PROP_VOLTAGE_MAX_DESIGN,
+-	POWER_SUPPLY_PROP_VOLTAGE_MIN_DESIGN,
+ 	POWER_SUPPLY_PROP_VOLTAGE_NOW,
+ 	POWER_SUPPLY_PROP_VOLTAGE_OCV,
+ 	POWER_SUPPLY_PROP_CURRENT_NOW,
+ 	POWER_SUPPLY_PROP_CAPACITY,
+ 	POWER_SUPPLY_PROP_CAPACITY_ALERT_MIN,
+-	POWER_SUPPLY_PROP_TEMP,
+-	POWER_SUPPLY_PROP_TEMP_MAX,
+-	POWER_SUPPLY_PROP_TEMP_MIN,
+-	POWER_SUPPLY_PROP_TEMP_ALERT_MIN,
+-	POWER_SUPPLY_PROP_TEMP_ALERT_MAX,
+ 	POWER_SUPPLY_PROP_TECHNOLOGY,
+ 	POWER_SUPPLY_PROP_CHARGE_FULL,
+ 	POWER_SUPPLY_PROP_CHARGE_NOW,
+-	POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN,
+-	POWER_SUPPLY_PROP_MODEL_NAME,
+ };
+ 
+ static int fuel_gauge_reg_readb(struct axp288_fg_info *info, int reg)
+@@ -169,8 +141,10 @@ static int fuel_gauge_reg_readb(struct axp288_fg_info *info, int reg)
+ 			break;
+ 	}
+ 
+-	if (ret < 0)
++	if (ret < 0) {
+ 		dev_err(&info->pdev->dev, "axp288 reg read err:%d\n", ret);
++		return ret;
++	}
+ 
+ 	return val;
+ }
+@@ -187,6 +161,44 @@ static int fuel_gauge_reg_writeb(struct axp288_fg_info *info, int reg, u8 val)
+ 	return ret;
+ }
+ 
++static int fuel_gauge_read_15bit_word(struct axp288_fg_info *info, int reg)
++{
++	unsigned char buf[2];
++	int ret;
++
++	ret = regmap_bulk_read(info->regmap, reg, buf, 2);
++	if (ret < 0) {
++		dev_err(&info->pdev->dev, "Error reading reg 0x%02x err: %d\n",
++			reg, ret);
++		return ret;
++	}
++
++	ret = get_unaligned_be16(buf);
++	if (!(ret & FG_15BIT_WORD_VALID)) {
++		dev_err(&info->pdev->dev, "Error reg 0x%02x contents not valid\n",
++			reg);
++		return -ENXIO;
++	}
++
++	return ret & FG_15BIT_VAL_MASK;
++}
++
++static int fuel_gauge_read_12bit_word(struct axp288_fg_info *info, int reg)
++{
++	unsigned char buf[2];
++	int ret;
++
++	ret = regmap_bulk_read(info->regmap, reg, buf, 2);
++	if (ret < 0) {
++		dev_err(&info->pdev->dev, "Error reading reg 0x%02x err: %d\n",
++			reg, ret);
++		return ret;
++	}
++
++	/* 12-bit data values have upper 8 bits in buf[0], lower 4 in buf[1] */
++	return (buf[0] << 4) | ((buf[1] >> 4) & 0x0f);
++}
++
+ static int pmic_read_adc_val(const char *name, int *raw_val,
+ 		struct axp288_fg_info *info)
+ {
+@@ -247,24 +259,15 @@ static int fuel_gauge_debug_show(struct seq_file *s, void *data)
+ 	seq_printf(s, "    FG_RDC0[%02x] : %02x\n",
+ 		AXP288_FG_RDC0_REG,
+ 		fuel_gauge_reg_readb(info, AXP288_FG_RDC0_REG));
+-	seq_printf(s, "    FG_OCVH[%02x] : %02x\n",
++	seq_printf(s, "     FG_OCV[%02x] : %04x\n",
+ 		AXP288_FG_OCVH_REG,
+-		fuel_gauge_reg_readb(info, AXP288_FG_OCVH_REG));
+-	seq_printf(s, "    FG_OCVL[%02x] : %02x\n",
+-		AXP288_FG_OCVL_REG,
+-		fuel_gauge_reg_readb(info, AXP288_FG_OCVL_REG));
+-	seq_printf(s, "FG_DES_CAP1[%02x] : %02x\n",
++		fuel_gauge_read_12bit_word(info, AXP288_FG_OCVH_REG));
++	seq_printf(s, " FG_DES_CAP[%02x] : %04x\n",
+ 		AXP288_FG_DES_CAP1_REG,
+-		fuel_gauge_reg_readb(info, AXP288_FG_DES_CAP1_REG));
+-	seq_printf(s, "FG_DES_CAP0[%02x] : %02x\n",
+-		AXP288_FG_DES_CAP0_REG,
+-		fuel_gauge_reg_readb(info, AXP288_FG_DES_CAP0_REG));
+-	seq_printf(s, " FG_CC_MTR1[%02x] : %02x\n",
++		fuel_gauge_read_15bit_word(info, AXP288_FG_DES_CAP1_REG));
++	seq_printf(s, "  FG_CC_MTR[%02x] : %04x\n",
+ 		AXP288_FG_CC_MTR1_REG,
+-		fuel_gauge_reg_readb(info, AXP288_FG_CC_MTR1_REG));
+-	seq_printf(s, " FG_CC_MTR0[%02x] : %02x\n",
+-		AXP288_FG_CC_MTR0_REG,
+-		fuel_gauge_reg_readb(info, AXP288_FG_CC_MTR0_REG));
++		fuel_gauge_read_15bit_word(info, AXP288_FG_CC_MTR1_REG));
+ 	seq_printf(s, " FG_OCV_CAP[%02x] : %02x\n",
+ 		AXP288_FG_OCV_CAP_REG,
+ 		fuel_gauge_reg_readb(info, AXP288_FG_OCV_CAP_REG));
+@@ -417,143 +420,27 @@ static int fuel_gauge_get_current(struct axp288_fg_info *info, int *cur)
+ 	return ret;
+ }
+ 
+-static int temp_to_adc(struct axp288_fg_info *info, int tval)
+-{
+-	int rntc = 0, i, ret, adc_val;
+-	int rmin, rmax, tmin, tmax;
+-	int tcsz = info->pdata->tcsz;
+-
+-	/* get the Rntc resitance value for this temp */
+-	if (tval > info->pdata->thermistor_curve[0][1]) {
+-		rntc = info->pdata->thermistor_curve[0][0];
+-	} else if (tval <= info->pdata->thermistor_curve[tcsz-1][1]) {
+-		rntc = info->pdata->thermistor_curve[tcsz-1][0];
+-	} else {
+-		for (i = 1; i < tcsz; i++) {
+-			if (tval > info->pdata->thermistor_curve[i][1]) {
+-				rmin = info->pdata->thermistor_curve[i-1][0];
+-				rmax = info->pdata->thermistor_curve[i][0];
+-				tmin = info->pdata->thermistor_curve[i-1][1];
+-				tmax = info->pdata->thermistor_curve[i][1];
+-				rntc = rmin + ((rmax - rmin) *
+-					(tval - tmin) / (tmax - tmin));
+-				break;
+-			}
+-		}
+-	}
+-
+-	/* we need the current to calculate the proper adc voltage */
+-	ret = fuel_gauge_reg_readb(info, AXP20X_ADC_RATE);
+-	if (ret < 0) {
+-		dev_err(&info->pdev->dev, "%s:read err:%d\n", __func__, ret);
+-		ret = 0x30;
+-	}
+-
+-	/*
+-	 * temperature is proportional to NTS thermistor resistance
+-	 * ADC_RATE[5-4] determines current, 00=20uA,01=40uA,10=60uA,11=80uA
+-	 * [12-bit ADC VAL] = R_NTC(Ω) * current / 800
+-	 */
+-	adc_val = rntc * (20 + (20 * ((ret >> 4) & 0x3))) / 800;
+-
+-	return adc_val;
+-}
+-
+-static int adc_to_temp(struct axp288_fg_info *info, int adc_val)
+-{
+-	int ret, r, i, tval = 0;
+-	int rmin, rmax, tmin, tmax;
+-	int tcsz = info->pdata->tcsz;
+-
+-	ret = fuel_gauge_reg_readb(info, AXP20X_ADC_RATE);
+-	if (ret < 0) {
+-		dev_err(&info->pdev->dev, "%s:read err:%d\n", __func__, ret);
+-		ret = 0x30;
+-	}
+-
+-	/*
+-	 * temperature is proportional to NTS thermistor resistance
+-	 * ADC_RATE[5-4] determines current, 00=20uA,01=40uA,10=60uA,11=80uA
+-	 * R_NTC(Ω) = [12-bit ADC VAL] * 800 / current
+-	 */
+-	r = adc_val * 800 / (20 + (20 * ((ret >> 4) & 0x3)));
+-
+-	if (r < info->pdata->thermistor_curve[0][0]) {
+-		tval = info->pdata->thermistor_curve[0][1];
+-	} else if (r >= info->pdata->thermistor_curve[tcsz-1][0]) {
+-		tval = info->pdata->thermistor_curve[tcsz-1][1];
+-	} else {
+-		for (i = 1; i < tcsz; i++) {
+-			if (r < info->pdata->thermistor_curve[i][0]) {
+-				rmin = info->pdata->thermistor_curve[i-1][0];
+-				rmax = info->pdata->thermistor_curve[i][0];
+-				tmin = info->pdata->thermistor_curve[i-1][1];
+-				tmax = info->pdata->thermistor_curve[i][1];
+-				tval = tmin + ((tmax - tmin) *
+-					(r - rmin) / (rmax - rmin));
+-				break;
+-			}
+-		}
+-	}
+-
+-	return tval;
+-}
+-
+-static int fuel_gauge_get_btemp(struct axp288_fg_info *info, int *btemp)
+-{
+-	int ret, raw_val = 0;
+-
+-	ret = pmic_read_adc_val("axp288-batt-temp", &raw_val, info);
+-	if (ret < 0)
+-		goto temp_read_fail;
+-
+-	*btemp = adc_to_temp(info, raw_val);
+-
+-temp_read_fail:
+-	return ret;
+-}
+-
+ static int fuel_gauge_get_vocv(struct axp288_fg_info *info, int *vocv)
+ {
+-	int ret, value;
+-
+-	/* 12-bit data value, upper 8 in OCVH, lower 4 in OCVL */
+-	ret = fuel_gauge_reg_readb(info, AXP288_FG_OCVH_REG);
+-	if (ret < 0)
+-		goto vocv_read_fail;
+-	value = ret << 4;
++	int ret;
+ 
+-	ret = fuel_gauge_reg_readb(info, AXP288_FG_OCVL_REG);
+-	if (ret < 0)
+-		goto vocv_read_fail;
+-	value |= (ret & 0xf);
++	ret = fuel_gauge_read_12bit_word(info, AXP288_FG_OCVH_REG);
++	if (ret >= 0)
++		*vocv = VOLTAGE_FROM_ADC(ret);
+ 
+-	*vocv = VOLTAGE_FROM_ADC(value);
+-vocv_read_fail:
+ 	return ret;
+ }
+ 
+ static int fuel_gauge_battery_health(struct axp288_fg_info *info)
+ {
+-	int temp, vocv;
+-	int ret, health = POWER_SUPPLY_HEALTH_UNKNOWN;
+-
+-	ret = fuel_gauge_get_btemp(info, &temp);
+-	if (ret < 0)
+-		goto health_read_fail;
++	int ret, vocv, health = POWER_SUPPLY_HEALTH_UNKNOWN;
+ 
+ 	ret = fuel_gauge_get_vocv(info, &vocv);
+ 	if (ret < 0)
+ 		goto health_read_fail;
+ 
+-	if (vocv > info->pdata->max_volt)
++	if (vocv > info->max_volt)
+ 		health = POWER_SUPPLY_HEALTH_OVERVOLTAGE;
+-	else if (temp > info->pdata->max_temp)
+-		health = POWER_SUPPLY_HEALTH_OVERHEAT;
+-	else if (temp < info->pdata->min_temp)
+-		health = POWER_SUPPLY_HEALTH_COLD;
+-	else if (vocv < info->pdata->min_volt)
+-		health = POWER_SUPPLY_HEALTH_DEAD;
+ 	else
+ 		health = POWER_SUPPLY_HEALTH_GOOD;
+ 
+@@ -561,28 +448,6 @@ static int fuel_gauge_battery_health(struct axp288_fg_info *info)
+ 	return health;
+ }
+ 
+-static int fuel_gauge_set_high_btemp_alert(struct axp288_fg_info *info)
+-{
+-	int ret, adc_val;
+-
+-	/* program temperature threshold as 1/16 ADC value */
+-	adc_val = temp_to_adc(info, info->pdata->max_temp);
+-	ret = fuel_gauge_reg_writeb(info, AXP20X_V_HTF_DISCHRG, adc_val >> 4);
+-
+-	return ret;
+-}
+-
+-static int fuel_gauge_set_low_btemp_alert(struct axp288_fg_info *info)
+-{
+-	int ret, adc_val;
+-
+-	/* program temperature threshold as 1/16 ADC value */
+-	adc_val = temp_to_adc(info, info->pdata->min_temp);
+-	ret = fuel_gauge_reg_writeb(info, AXP20X_V_LTF_DISCHRG, adc_val >> 4);
+-
+-	return ret;
+-}
+-
+ static int fuel_gauge_get_property(struct power_supply *ps,
+ 		enum power_supply_property prop,
+ 		union power_supply_propval *val)
+@@ -643,58 +508,25 @@ static int fuel_gauge_get_property(struct power_supply *ps,
+ 			goto fuel_gauge_read_err;
+ 		val->intval = (ret & 0x0f);
+ 		break;
+-	case POWER_SUPPLY_PROP_TEMP:
+-		ret = fuel_gauge_get_btemp(info, &value);
+-		if (ret < 0)
+-			goto fuel_gauge_read_err;
+-		val->intval = PROP_TEMP(value);
+-		break;
+-	case POWER_SUPPLY_PROP_TEMP_MAX:
+-	case POWER_SUPPLY_PROP_TEMP_ALERT_MAX:
+-		val->intval = PROP_TEMP(info->pdata->max_temp);
+-		break;
+-	case POWER_SUPPLY_PROP_TEMP_MIN:
+-	case POWER_SUPPLY_PROP_TEMP_ALERT_MIN:
+-		val->intval = PROP_TEMP(info->pdata->min_temp);
+-		break;
+ 	case POWER_SUPPLY_PROP_TECHNOLOGY:
+ 		val->intval = POWER_SUPPLY_TECHNOLOGY_LION;
+ 		break;
+ 	case POWER_SUPPLY_PROP_CHARGE_NOW:
+-		ret = fuel_gauge_reg_readb(info, AXP288_FG_CC_MTR1_REG);
++		ret = fuel_gauge_read_15bit_word(info, AXP288_FG_CC_MTR1_REG);
+ 		if (ret < 0)
+ 			goto fuel_gauge_read_err;
+ 
+-		value = (ret & FG_CC_MTR1_VAL_MASK) << 8;
+-		ret = fuel_gauge_reg_readb(info, AXP288_FG_CC_MTR0_REG);
+-		if (ret < 0)
+-			goto fuel_gauge_read_err;
+-		value |= (ret & FG_CC_MTR0_VAL_MASK);
+-		val->intval = value * FG_DES_CAP_RES_LSB;
++		val->intval = ret * FG_DES_CAP_RES_LSB;
+ 		break;
+ 	case POWER_SUPPLY_PROP_CHARGE_FULL:
+-		ret = fuel_gauge_reg_readb(info, AXP288_FG_DES_CAP1_REG);
++		ret = fuel_gauge_read_15bit_word(info, AXP288_FG_DES_CAP1_REG);
+ 		if (ret < 0)
+ 			goto fuel_gauge_read_err;
+ 
+-		value = (ret & FG_DES_CAP1_VAL_MASK) << 8;
+-		ret = fuel_gauge_reg_readb(info, AXP288_FG_DES_CAP0_REG);
+-		if (ret < 0)
+-			goto fuel_gauge_read_err;
+-		value |= (ret & FG_DES_CAP0_VAL_MASK);
+-		val->intval = value * FG_DES_CAP_RES_LSB;
+-		break;
+-	case POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN:
+-		val->intval = PROP_CURR(info->pdata->design_cap);
++		val->intval = ret * FG_DES_CAP_RES_LSB;
+ 		break;
+ 	case POWER_SUPPLY_PROP_VOLTAGE_MAX_DESIGN:
+-		val->intval = PROP_VOLT(info->pdata->max_volt);
+-		break;
+-	case POWER_SUPPLY_PROP_VOLTAGE_MIN_DESIGN:
+-		val->intval = PROP_VOLT(info->pdata->min_volt);
+-		break;
+-	case POWER_SUPPLY_PROP_MODEL_NAME:
+-		val->strval = info->pdata->battid;
++		val->intval = PROP_VOLT(info->max_volt);
+ 		break;
+ 	default:
+ 		mutex_unlock(&info->lock);
+@@ -718,35 +550,6 @@ static int fuel_gauge_set_property(struct power_supply *ps,
+ 
+ 	mutex_lock(&info->lock);
+ 	switch (prop) {
+-	case POWER_SUPPLY_PROP_STATUS:
+-		info->status = val->intval;
+-		break;
+-	case POWER_SUPPLY_PROP_TEMP_MIN:
+-	case POWER_SUPPLY_PROP_TEMP_ALERT_MIN:
+-		if ((val->intval < PD_DEF_MIN_TEMP) ||
+-			(val->intval > PD_DEF_MAX_TEMP)) {
+-			ret = -EINVAL;
+-			break;
+-		}
+-		info->pdata->min_temp = UNPROP_TEMP(val->intval);
+-		ret = fuel_gauge_set_low_btemp_alert(info);
+-		if (ret < 0)
+-			dev_err(&info->pdev->dev,
+-				"temp alert min set fail:%d\n", ret);
+-		break;
+-	case POWER_SUPPLY_PROP_TEMP_MAX:
+-	case POWER_SUPPLY_PROP_TEMP_ALERT_MAX:
+-		if ((val->intval < PD_DEF_MIN_TEMP) ||
+-			(val->intval > PD_DEF_MAX_TEMP)) {
+-			ret = -EINVAL;
+-			break;
+-		}
+-		info->pdata->max_temp = UNPROP_TEMP(val->intval);
+-		ret = fuel_gauge_set_high_btemp_alert(info);
+-		if (ret < 0)
+-			dev_err(&info->pdev->dev,
+-				"temp alert max set fail:%d\n", ret);
+-		break;
+ 	case POWER_SUPPLY_PROP_CAPACITY_ALERT_MIN:
+ 		if ((val->intval < 0) || (val->intval > 15)) {
+ 			ret = -EINVAL;
+@@ -774,11 +577,6 @@ static int fuel_gauge_property_is_writeable(struct power_supply *psy,
+ 	int ret;
+ 
+ 	switch (psp) {
+-	case POWER_SUPPLY_PROP_STATUS:
+-	case POWER_SUPPLY_PROP_TEMP_MIN:
+-	case POWER_SUPPLY_PROP_TEMP_ALERT_MIN:
+-	case POWER_SUPPLY_PROP_TEMP_MAX:
+-	case POWER_SUPPLY_PROP_TEMP_ALERT_MAX:
+ 	case POWER_SUPPLY_PROP_CAPACITY_ALERT_MIN:
+ 		ret = 1;
+ 		break;
+@@ -863,158 +661,6 @@ static const struct power_supply_desc fuel_gauge_desc = {
+ 	.external_power_changed	= fuel_gauge_external_power_changed,
+ };
+ 
+-static int fuel_gauge_set_lowbatt_thresholds(struct axp288_fg_info *info)
+-{
+-	int ret;
+-	u8 reg_val;
+-
+-	ret = fuel_gauge_reg_readb(info, AXP20X_FG_RES);
+-	if (ret < 0) {
+-		dev_err(&info->pdev->dev, "%s:read err:%d\n", __func__, ret);
+-		return ret;
+-	}
+-	ret = (ret & FG_REP_CAP_VAL_MASK);
+-
+-	if (ret > FG_LOW_CAP_WARN_THR)
+-		reg_val = FG_LOW_CAP_WARN_THR;
+-	else if (ret > FG_LOW_CAP_CRIT_THR)
+-		reg_val = FG_LOW_CAP_CRIT_THR;
+-	else
+-		reg_val = FG_LOW_CAP_SHDN_THR;
+-
+-	reg_val |= FG_LOW_CAP_THR1_VAL;
+-	ret = fuel_gauge_reg_writeb(info, AXP288_FG_LOW_CAP_REG, reg_val);
+-	if (ret < 0)
+-		dev_err(&info->pdev->dev, "%s:write err:%d\n", __func__, ret);
+-
+-	return ret;
+-}
+-
+-static int fuel_gauge_program_vbatt_full(struct axp288_fg_info *info)
+-{
+-	int ret;
+-	u8 val;
+-
+-	ret = fuel_gauge_reg_readb(info, AXP20X_CHRG_CTRL1);
+-	if (ret < 0)
+-		goto fg_prog_ocv_fail;
+-	else
+-		val = (ret & ~CHRG_CCCV_CV_MASK);
+-
+-	switch (info->pdata->max_volt) {
+-	case CV_4100:
+-		val |= (CHRG_CCCV_CV_4100MV << CHRG_CCCV_CV_BIT_POS);
+-		break;
+-	case CV_4150:
+-		val |= (CHRG_CCCV_CV_4150MV << CHRG_CCCV_CV_BIT_POS);
+-		break;
+-	case CV_4200:
+-		val |= (CHRG_CCCV_CV_4200MV << CHRG_CCCV_CV_BIT_POS);
+-		break;
+-	case CV_4350:
+-		val |= (CHRG_CCCV_CV_4350MV << CHRG_CCCV_CV_BIT_POS);
+-		break;
+-	default:
+-		val |= (CHRG_CCCV_CV_4200MV << CHRG_CCCV_CV_BIT_POS);
+-		break;
+-	}
+-
+-	ret = fuel_gauge_reg_writeb(info, AXP20X_CHRG_CTRL1, val);
+-fg_prog_ocv_fail:
+-	return ret;
+-}
+-
+-static int fuel_gauge_program_design_cap(struct axp288_fg_info *info)
+-{
+-	int ret;
+-
+-	ret = fuel_gauge_reg_writeb(info,
+-		AXP288_FG_DES_CAP1_REG, info->pdata->cap1);
+-	if (ret < 0)
+-		goto fg_prog_descap_fail;
+-
+-	ret = fuel_gauge_reg_writeb(info,
+-		AXP288_FG_DES_CAP0_REG, info->pdata->cap0);
+-
+-fg_prog_descap_fail:
+-	return ret;
+-}
+-
+-static int fuel_gauge_program_ocv_curve(struct axp288_fg_info *info)
+-{
+-	int ret = 0, i;
+-
+-	for (i = 0; i < OCV_CURVE_SIZE; i++) {
+-		ret = fuel_gauge_reg_writeb(info,
+-			AXP288_FG_OCV_CURVE_REG + i, info->pdata->ocv_curve[i]);
+-		if (ret < 0)
+-			goto fg_prog_ocv_fail;
+-	}
+-
+-fg_prog_ocv_fail:
+-	return ret;
+-}
+-
+-static int fuel_gauge_program_rdc_vals(struct axp288_fg_info *info)
+-{
+-	int ret;
+-
+-	ret = fuel_gauge_reg_writeb(info,
+-		AXP288_FG_RDC1_REG, info->pdata->rdc1);
+-	if (ret < 0)
+-		goto fg_prog_ocv_fail;
+-
+-	ret = fuel_gauge_reg_writeb(info,
+-		AXP288_FG_RDC0_REG, info->pdata->rdc0);
+-
+-fg_prog_ocv_fail:
+-	return ret;
+-}
+-
+-static void fuel_gauge_init_config_regs(struct axp288_fg_info *info)
+-{
+-	int ret;
+-
+-	/*
+-	 * check if the config data is already
+-	 * programmed and if so just return.
+-	 */
+-
+-	ret = fuel_gauge_reg_readb(info, AXP288_FG_DES_CAP1_REG);
+-	if (ret < 0) {
+-		dev_warn(&info->pdev->dev, "CAP1 reg read err!!\n");
+-	} else if (!(ret & FG_DES_CAP1_VALID)) {
+-		dev_info(&info->pdev->dev, "FG data needs to be initialized\n");
+-	} else {
+-		dev_info(&info->pdev->dev, "FG data is already initialized\n");
+-		return;
+-	}
+-
+-	ret = fuel_gauge_program_vbatt_full(info);
+-	if (ret < 0)
+-		dev_err(&info->pdev->dev, "set vbatt full fail:%d\n", ret);
+-
+-	ret = fuel_gauge_program_design_cap(info);
+-	if (ret < 0)
+-		dev_err(&info->pdev->dev, "set design cap fail:%d\n", ret);
+-
+-	ret = fuel_gauge_program_rdc_vals(info);
+-	if (ret < 0)
+-		dev_err(&info->pdev->dev, "set rdc fail:%d\n", ret);
+-
+-	ret = fuel_gauge_program_ocv_curve(info);
+-	if (ret < 0)
+-		dev_err(&info->pdev->dev, "set ocv curve fail:%d\n", ret);
+-
+-	ret = fuel_gauge_set_lowbatt_thresholds(info);
+-	if (ret < 0)
+-		dev_err(&info->pdev->dev, "lowbatt thr set fail:%d\n", ret);
+-
+-	ret = fuel_gauge_reg_writeb(info, AXP20X_CC_CTRL, 0xef);
+-	if (ret < 0)
+-		dev_err(&info->pdev->dev, "gauge cntl set fail:%d\n", ret);
+-}
+-
+ static void fuel_gauge_init_irq(struct axp288_fg_info *info)
+ {
+ 	int ret, i, pirq;
+@@ -1052,29 +698,6 @@ static void fuel_gauge_init_irq(struct axp288_fg_info *info)
+ 	}
+ }
+ 
+-static void fuel_gauge_init_hw_regs(struct axp288_fg_info *info)
+-{
+-	int ret;
+-	unsigned int val;
+-
+-	ret = fuel_gauge_set_high_btemp_alert(info);
+-	if (ret < 0)
+-		dev_err(&info->pdev->dev, "high batt temp set fail:%d\n", ret);
+-
+-	ret = fuel_gauge_set_low_btemp_alert(info);
+-	if (ret < 0)
+-		dev_err(&info->pdev->dev, "low batt temp set fail:%d\n", ret);
+-
+-	/* enable interrupts */
+-	val = fuel_gauge_reg_readb(info, AXP20X_IRQ3_EN);
+-	val |= TEMP_IRQ_CFG_MASK;
+-	fuel_gauge_reg_writeb(info, AXP20X_IRQ3_EN, val);
+-
+-	val = fuel_gauge_reg_readb(info, AXP20X_IRQ4_EN);
+-	val |= FG_IRQ_CFG_LOWBATT_MASK;
+-	val = fuel_gauge_reg_writeb(info, AXP20X_IRQ4_EN, val);
+-}
+-
+ static int axp288_fuel_gauge_probe(struct platform_device *pdev)
+ {
+ 	int ret = 0;
+@@ -1090,15 +713,39 @@ static int axp288_fuel_gauge_probe(struct platform_device *pdev)
+ 	info->regmap = axp20x->regmap;
+ 	info->regmap_irqc = axp20x->regmap_irqc;
+ 	info->status = POWER_SUPPLY_STATUS_UNKNOWN;
+-	info->pdata = pdev->dev.platform_data;
+-	if (!info->pdata)
+-		return -ENODEV;
+ 
+ 	platform_set_drvdata(pdev, info);
+ 
+ 	mutex_init(&info->lock);
+ 	INIT_DELAYED_WORK(&info->status_monitor, fuel_gauge_status_monitor);
+ 
++	ret = fuel_gauge_reg_readb(info, AXP288_FG_DES_CAP1_REG);
++	if (ret < 0)
++		return ret;
++
++	if (!(ret & FG_DES_CAP1_VALID)) {
++		dev_err(&pdev->dev, "axp288 not configured by firmware\n");
++		return -ENODEV;
++	}
++
++	ret = fuel_gauge_reg_readb(info, AXP20X_CHRG_CTRL1);
++	if (ret < 0)
++		return ret;
++	switch ((ret & CHRG_CCCV_CV_MASK) >> CHRG_CCCV_CV_BIT_POS) {
++	case CHRG_CCCV_CV_4100MV:
++		info->max_volt = 4100;
++		break;
++	case CHRG_CCCV_CV_4150MV:
++		info->max_volt = 4150;
++		break;
++	case CHRG_CCCV_CV_4200MV:
++		info->max_volt = 4200;
++		break;
++	case CHRG_CCCV_CV_4350MV:
++		info->max_volt = 4350;
++		break;
++	}
++
+ 	psy_cfg.drv_data = info;
+ 	info->bat = power_supply_register(&pdev->dev, &fuel_gauge_desc, &psy_cfg);
+ 	if (IS_ERR(info->bat)) {
+@@ -1108,18 +755,17 @@ static int axp288_fuel_gauge_probe(struct platform_device *pdev)
+ 	}
+ 
+ 	fuel_gauge_create_debugfs(info);
+-	fuel_gauge_init_config_regs(info);
+ 	fuel_gauge_init_irq(info);
+-	fuel_gauge_init_hw_regs(info);
+ 	schedule_delayed_work(&info->status_monitor, STATUS_MON_DELAY_JIFFIES);
+ 
+-	return ret;
++	return 0;
+ }
+ 
+ static const struct platform_device_id axp288_fg_id_table[] = {
+ 	{ .name = DEV_NAME },
+ 	{},
+ };
++MODULE_DEVICE_TABLE(platform, axp288_fg_id_table);
+ 
+ static int axp288_fuel_gauge_remove(struct platform_device *pdev)
+ {
+diff --git a/include/linux/mfd/axp20x.h b/include/linux/mfd/axp20x.h
+index fec597fb34cb..6715df3bf776 100644
+--- a/include/linux/mfd/axp20x.h
++++ b/include/linux/mfd/axp20x.h
+@@ -229,10 +229,20 @@ enum {
+ #define AXP22X_BATLOW_THRES1		0xe6
+ 
+ /* AXP288 specific registers */
++#define AXP288_POWER_REASON		0x02
++#define AXP288_BC_GLOBAL		0x2c
++#define AXP288_BC_VBUS_CNTL		0x2d
++#define AXP288_BC_USB_STAT		0x2e
++#define AXP288_BC_DET_STAT		0x2f
+ #define AXP288_PMIC_ADC_H               0x56
+ #define AXP288_PMIC_ADC_L               0x57
++#define AXP288_TS_ADC_H			0x58
++#define AXP288_TS_ADC_L			0x59
++#define AXP288_GP_ADC_H			0x5a
++#define AXP288_GP_ADC_L			0x5b
+ #define AXP288_ADC_TS_PIN_CTRL          0x84
+-#define AXP288_PMIC_ADC_EN              0x84
++#define AXP288_RT_BATT_V_H		0xa0
++#define AXP288_RT_BATT_V_L		0xa1
+ 
+ /* Fuel Gauge */
+ #define AXP288_FG_RDC1_REG          0xba
+@@ -509,14 +519,10 @@ enum axp809_irqs {
+ 	AXP809_IRQ_GPIO0_INPUT,
+ };
+ 
+-#define AXP288_TS_ADC_H		0x58
+-#define AXP288_TS_ADC_L		0x59
+-#define AXP288_GP_ADC_H		0x5a
+-#define AXP288_GP_ADC_L		0x5b
+-
+ struct axp20x_dev {
+ 	struct device			*dev;
+ 	int				irq;
++	unsigned long			irq_flags;
+ 	struct regmap			*regmap;
+ 	struct regmap_irq_chip_data	*regmap_irqc;
+ 	long				variant;
+@@ -526,35 +532,6 @@ struct axp20x_dev {
+ 	const struct regmap_irq_chip	*regmap_irq_chip;
+ };
+ 
+-#define BATTID_LEN				64
+-#define OCV_CURVE_SIZE			32
+-#define MAX_THERM_CURVE_SIZE	25
+-#define PD_DEF_MIN_TEMP			0
+-#define PD_DEF_MAX_TEMP			55
+-
+-struct axp20x_fg_pdata {
+-	char battid[BATTID_LEN + 1];
+-	int design_cap;
+-	int min_volt;
+-	int max_volt;
+-	int max_temp;
+-	int min_temp;
+-	int cap1;
+-	int cap0;
+-	int rdc1;
+-	int rdc0;
+-	int ocv_curve[OCV_CURVE_SIZE];
+-	int tcsz;
+-	int thermistor_curve[MAX_THERM_CURVE_SIZE][2];
+-};
+-
+-struct axp20x_chrg_pdata {
+-	int max_cc;
+-	int max_cv;
+-	int def_cc;
+-	int def_cv;
+-};
+-
+ struct axp288_extcon_pdata {
+ 	/* GPIO pin control to switch D+/D- lines b/w PMIC and SOC */
+ 	struct gpio_desc *gpio_mux_cntl;
