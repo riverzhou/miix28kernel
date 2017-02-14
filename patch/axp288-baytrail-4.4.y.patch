@@ -1,0 +1,441 @@
+diff --git a/drivers/extcon/extcon-axp288.c b/drivers/extcon/extcon-axp288.c
+index fd55c2f2080a..77f781338517 100644
+--- a/drivers/extcon/extcon-axp288.c
++++ b/drivers/extcon/extcon-axp288.c
+@@ -77,6 +77,7 @@
+ /* IRQ enable-6 register */
+ #define BC12_IRQ_CFG_MASK		BIT(1)
+ 
++#define DEV_NAME       "axp288_extcon"
+ enum axp288_extcon_reg {
+ 	AXP288_PS_STAT_REG		= 0x00,
+ 	AXP288_PS_BOOT_REASON_REG	= 0x02,
+@@ -132,6 +133,11 @@ static char *axp288_pwr_up_down_info[] = {
+ 	NULL,
+ };
+ 
++static const struct platform_device_id extcon_axp288_id_table[] = {
++       { .name = DEV_NAME },
++       {},
++};
++
+ /*
+  * Decode and log the given "reset source indicator" (rsi)
+  * register and then clear it.
+@@ -221,8 +227,9 @@ notify_otg:
+ 				vbus_attach ? EXTCON_GPIO_MUX_SEL_SOC
+ 						: EXTCON_GPIO_MUX_SEL_PMIC);
+ 
+-		atomic_notifier_call_chain(&info->otg->notifier,
+-			vbus_attach ? USB_EVENT_VBUS : USB_EVENT_NONE, NULL);
++		if(info->otg)
++			atomic_notifier_call_chain(&info->otg->notifier,
++				vbus_attach ? USB_EVENT_VBUS : USB_EVENT_NONE, NULL);
+ 	}
+ 
+ 	if (notify_charger)
+@@ -311,8 +318,9 @@ static int axp288_extcon_probe(struct platform_device *pdev)
+ 	/* Get otg transceiver phy */
+ 	info->otg = devm_usb_get_phy(&pdev->dev, USB_PHY_TYPE_USB2);
+ 	if (IS_ERR(info->otg)) {
+-		dev_err(&pdev->dev, "failed to get otg transceiver\n");
+-		return PTR_ERR(info->otg);
++		dev_warn(&pdev->dev, "failed to get otg transceiver\n");
++		info->otg = NULL;
++		//return PTR_ERR(info->otg);
+ 	}
+ 
+ 	/* Set up gpio control for USB Mux */
+@@ -366,3 +374,4 @@ module_platform_driver(axp288_extcon_driver);
+ MODULE_AUTHOR("Ramakrishna Pallala <ramakrishna.pallala@intel.com>");
+ MODULE_DESCRIPTION("X-Powers AXP288 extcon driver");
+ MODULE_LICENSE("GPL v2");
++MODULE_DEVICE_TABLE(platform, extcon_axp288_id_table);
+diff --git a/drivers/mfd/axp20x.c b/drivers/mfd/axp20x.c
+index 9842199e2e6c..05206018b188 100644
+--- a/drivers/mfd/axp20x.c
++++ b/drivers/mfd/axp20x.c
+@@ -26,9 +26,195 @@
+ #include <linux/of_device.h>
+ #include <linux/of_irq.h>
+ #include <linux/acpi.h>
++#include <linux/gpio.h>
+ 
+ #define AXP20X_OFF	0x80
+ 
++struct cell_dev_pdata {
++        struct list_head        list;
++        const char              *name;
++        void                    *data;
++        int                     len;
++        int                     id;
++};
++
++static LIST_HEAD(pdata_list);
++
++
++#define GPIO_USB_MUX_INDEX     1
++#define XPOWER_DEFAULT_TEMP_MAX        45
++
++static int fg_bat_curve[] = {
++       +        0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x1, 0x2,
++       +        0x2, 0x3, 0x5, 0x9, 0xf, 0x18, 0x24, 0x29,
++       +    0x2e, 0x32, 0x35, 0x3b, 0x40, 0x45, 0x49, 0x4c,
++       +    0x50, 0x53, 0x55, 0x57, 0x5a, 0x5d, 0x61, 0x64,
++       +};
++
++#ifdef CONFIG_ACPI
++#define FGCONFIG_ACPI_TABLE_NAME        "BCFG"
++#define XPWR_FGCONFIG_NAME              "XPOWER-0"
++
++static int axp288_get_acpi_cdata(struct axp20x_fg_pdata *pdata)
++{
++       struct axp288_acpi_fg_config *acpi_tbl = NULL;
++       char *name = FGCONFIG_ACPI_TABLE_NAME;
++       int i;
++       acpi_size tbl_size;
++       acpi_status status;
++
++        /* read the fg config table from acpi */
++        status = acpi_get_table_with_size(name , 0,
++                        (struct acpi_table_header **)&acpi_tbl, &tbl_size);
++        if (ACPI_FAILURE(status)) {
++                pr_err("%s:%s table not found!!\n", __func__, name);
++                return status;
++        }
++        pr_info("%s: %s table found, size=%d\n",
++                                __func__, name, (int)tbl_size);
++
++        /* validate the table size */
++        if (tbl_size <  sizeof(struct axp288_acpi_fg_config)) {
++                pr_err("%s:%s table incomplete!!\n", __func__, name);
++                pr_info("%s: table_size=%d, structure_size=%lu\n",
++                        __func__, (int)tbl_size,
++                        sizeof(struct axp288_acpi_fg_config));
++                return -ENXIO;
++        }
++
++        if (strncmp(acpi_tbl->cdata.fg_name, XPWR_FGCONFIG_NAME,
++                ACPI_FG_CONF_NAME_LEN)
++                || strncmp(acpi_tbl->cdata.battid, pdata->battid,
++                BATTID_STR_LEN)) {
++                pr_err("%s: battid and fg_name mismatch!!!\n", __func__);
++                return -EINVAL;
++        }
++
++        /* copy battid */
++        for (i = 0; i < BATTID_STR_LEN; i++)
++               pdata->battid[i]=acpi_tbl->cdata.battid[i];
++
++       pdata->cap1=acpi_tbl->cdata.cap1;
++       pdata->cap0=acpi_tbl->cdata.cap0;
++       pdata->rdc1=acpi_tbl->cdata.rdc1;
++       pdata->rdc0=acpi_tbl->cdata.rdc0;
++
++        /* copy curve data */
++        for (i = 0; i < OCV_CURVE_SIZE; i++)
++                pdata->ocv_curve[i] = acpi_tbl->cdata.bat_curve[i];
++
++       return 0;
++}
++#endif /* CONFIG_ACPI */
++
++static void axp288_get_fg_config_data(struct axp20x_fg_pdata *pdata)
++{
++        int scaled_capacity;
++        int i;
++
++#ifdef CONFIG_ACPI
++        if (!axp288_get_acpi_cdata(pdata)) {
++                pr_info("%s: Loading fg config from acpi table\n", __func__);
++                return;
++        }
++#endif /* CONFIG_ACPI */
++
++        pr_info("%s: Loading default fg config.\n", __func__);
++        /*
++         * Calculate cap1 and cap0.  The value of a LSB is 1.456mAh.
++         * Using 1.5 as math friendly and close enough.
++         */
++
++        scaled_capacity = (pdata->design_cap >> 1) +
++                                (pdata->design_cap >> 3) +
++                                (pdata->design_cap >> 4);
++
++        /*
++         * bit 7 of cap1 register is set to indicate battery maximum
++         * capacity is valid
++         */
++        pdata->cap0 = scaled_capacity & 0xFF;
++        pdata->cap1 = (scaled_capacity >> 8) | 0x80;
++
++        pdata->rdc1 = 0xc0;
++        pdata->rdc0 = 0x97;
++
++        /* copy curve data */
++        for (i = 0; i < OCV_CURVE_SIZE; i++)
++                pdata->ocv_curve[i] = fg_bat_curve[i];
++
++        return;
++}
++
++static void platform_set_battery_data(struct axp20x_fg_pdata *pdata)
++{
++        pdata->design_cap = 4045;
++        pdata->max_volt = 4350;
++        pdata->min_volt = 3400;
++}
++
++static void axp288_fg_pdata(void)
++{
++       static struct axp20x_fg_pdata pdata;
++
++       platform_set_battery_data(&pdata);
++       pdata.max_temp = XPOWER_DEFAULT_TEMP_MAX;
++
++       /* Load FG config data to pdata */
++       axp288_get_fg_config_data(&pdata);
++
++       axp20x_set_pdata("axp288_fuel_gauge",
++               (void *)&pdata, sizeof(pdata), 0);
++}
++
++static void axp288_extcon_pdata(struct device *dev)
++{
++       static struct axp288_extcon_pdata pdata;
++
++       /* Get the gpio based uab mux which will be used to switch usb D+/D-
++        * data line between SOC for data communication and PMIC for charger
++        * detection functionality.
++        */
++       // FIXME: This always fails.
++       pdata.gpio_mux_cntl = devm_gpiod_get_index(dev,
++               "axp20x_i2c", GPIO_USB_MUX_INDEX, 0);
++
++       if (IS_ERR(pdata.gpio_mux_cntl)) {
++               pdata.gpio_mux_cntl = NULL;
++               dev_err(dev,"Failed to get gpio for extcon pdata\n");
++       } else {
++               gpiod_put(pdata.gpio_mux_cntl);
++       }
++
++       axp20x_set_pdata("axp288_extcon",
++               (void *)&pdata, sizeof(pdata), 0);
++}
++
++static void platform_init_chrg_params(struct axp20x_chrg_pdata *pdata)
++{
++       /* Initialize the default parameters */
++       pdata->def_cc = 500;
++       pdata->def_cv = 4200;
++       pdata->max_cc = 2000;
++       pdata->max_cv = 4350;
++}
++
++static void axp288_chrg_pdata(void)
++{
++       static struct axp20x_chrg_pdata pdata;
++       platform_init_chrg_params(&pdata);
++       axp20x_set_pdata("axp288_charger",
++               (void *)&pdata, sizeof(pdata), 0);
++}
++
++static int axp288_init(struct device *dev)
++{
++       axp288_chrg_pdata();
++       axp288_extcon_pdata(dev);
++       axp288_fg_pdata();
++       return 0;
++}
++
+ static const char * const axp20x_model_names[] = {
+ 	"AXP152",
+ 	"AXP202",
+@@ -103,12 +289,27 @@ static const struct regmap_access_table axp22x_volatile_table = {
+ };
+ 
+ static const struct regmap_range axp288_writeable_ranges[] = {
++	// 0x04 - 0x4d :
+ 	regmap_reg_range(AXP20X_DATACACHE(0), AXP20X_IRQ6_STATE),
++	// 0x80 - 0xed :
+ 	regmap_reg_range(AXP20X_DCDC_MODE, AXP288_FG_TUNE5),
+ };
+ 
+ static const struct regmap_range axp288_volatile_ranges[] = {
+-	regmap_reg_range(AXP20X_IRQ1_EN, AXP20X_IPSOUT_V_HIGH_L),
++        // 0x00 - 0x01 :
++        regmap_reg_range(AXP20X_PWR_INPUT_STATUS, AXP20X_PWR_OP_MODE),
++        // 0x33 - 0x33 :
++        regmap_reg_range(AXP20X_CHRG_CTRL1, AXP20X_CHRG_CTRL1),
++        // 0x3c - 0x3d :
++        regmap_reg_range(AXP20X_V_LTF_DISCHRG, AXP20X_V_HTF_DISCHRG),
++        // 0x40 - 0x7f :
++        regmap_reg_range(AXP20X_IRQ1_EN, AXP20X_IPSOUT_V_HIGH_L),
++        // 0x84 - 0x84 :
++        regmap_reg_range(AXP20X_ADC_RATE, AXP20X_ADC_RATE),
++        // 0xb8 - 0xbd :
++        regmap_reg_range(AXP20X_CC_CTRL, AXP288_FG_OCVL_REG),
++        // 0xe0 - 0xed :
++        regmap_reg_range(AXP288_FG_DES_CAP1_REG, AXP288_FG_TUNE5),
+ };
+ 
+ static const struct regmap_access_table axp288_writeable_table = {
+@@ -597,6 +798,28 @@ static struct mfd_cell axp288_cells[] = {
+ };
+ 
+ static struct axp20x_dev *axp20x_pm_power_off;
++
++int axp20x_set_pdata(const char *name, void *data, int len, int id)
++{
++        struct cell_dev_pdata *pdata;
++
++        pdata = kzalloc(sizeof(*pdata), GFP_KERNEL);
++        if (!pdata) {
++                pr_err("axp20x: can't set pdata!\n");
++                return -ENOMEM;
++        }
++
++        pdata->name = name;
++        pdata->data = data;
++        pdata->len = len;
++        pdata->id = id;
++        list_add_tail(&pdata->list, &pdata_list);
++
++        return 0;
++}
++EXPORT_SYMBOL(axp20x_set_pdata);
++
++
+ static void axp20x_power_off(void)
+ {
+ 	if (axp20x_pm_power_off->variant == AXP288_ID)
+@@ -667,7 +890,8 @@ static int axp20x_i2c_probe(struct i2c_client *i2c,
+ 			 const struct i2c_device_id *id)
+ {
+ 	struct axp20x_dev *axp20x;
+-	int ret;
++        int i, ret;
++        struct cell_dev_pdata *pdata;
+ 
+ 	axp20x = devm_kzalloc(&i2c->dev, sizeof(*axp20x), GFP_KERNEL);
+ 	if (!axp20x)
+@@ -697,6 +921,17 @@ static int axp20x_i2c_probe(struct i2c_client *i2c,
+ 		return ret;
+ 	}
+ 
++        for (i = 0; axp20x->cells[i].name != NULL; i++) {
++                list_for_each_entry(pdata, &pdata_list, list) {
++                        if (!strcmp(pdata->name, axp20x->cells[i].name) &&
++                                        (pdata->id == axp20x->cells[i].id)) {
++                                axp20x->cells[i].platform_data = pdata->data;
++                                axp20x->cells[i].pdata_size = pdata->len;
++                               dev_info(axp20x->dev,"added platform data for %s\n",axp20x->cells[i].name);
++                        }
++                }
++        }
++
+ 	ret = mfd_add_devices(axp20x->dev, -1, axp20x->cells,
+ 			axp20x->nr_cells, NULL, 0, NULL);
+ 
+@@ -713,6 +948,8 @@ static int axp20x_i2c_probe(struct i2c_client *i2c,
+ 
+ 	dev_info(&i2c->dev, "AXP20X driver loaded\n");
+ 
++	if (axp20x->variant==AXP288_ID) axp288_init(axp20x->dev);
++
+ 	return 0;
+ }
+ 
+diff --git a/drivers/power/axp288_charger.c b/drivers/power/axp288_charger.c
+index e4d569f57acc..d0c8a34cb3a0 100644
+--- a/drivers/power/axp288_charger.c
++++ b/drivers/power/axp288_charger.c
+@@ -128,6 +128,7 @@
+ #define ILIM_3000MA			3000	/* 3000mA */
+ 
+ #define AXP288_EXTCON_DEV_NAME		"axp288_extcon"
++#define DEV_NAME       			"axp288_charger"
+ 
+ #define AXP288_EXTCON_SLOW_CHARGER		"SLOW-CHARGER"
+ #define AXP288_EXTCON_DOWNSTREAM_CHARGER	"CHARGE-DOWNSTREAM"
+@@ -184,6 +185,11 @@ struct axp288_chrg_info {
+ 	bool is_charger_enabled;
+ };
+ 
++static const struct platform_device_id axp288_charger_id_table[] = {
++       { .name = DEV_NAME },
++       {},
++};
++
+ static inline int axp288_charger_set_cc(struct axp288_chrg_info *info, int cc)
+ {
+ 	u8 reg_val;
+@@ -939,3 +945,4 @@ module_platform_driver(axp288_charger_driver);
+ MODULE_AUTHOR("Ramakrishna Pallala <ramakrishna.pallala@intel.com>");
+ MODULE_DESCRIPTION("X-power AXP288 Charger Driver");
+ MODULE_LICENSE("GPL v2");
++MODULE_DEVICE_TABLE(platform, axp288_charger_id_table);
+diff --git a/drivers/power/axp288_fuel_gauge.c b/drivers/power/axp288_fuel_gauge.c
+index 50c0110d6b58..269c0aab5d06 100644
+--- a/drivers/power/axp288_fuel_gauge.c
++++ b/drivers/power/axp288_fuel_gauge.c
+@@ -1153,3 +1153,4 @@ MODULE_AUTHOR("Ramakrishna Pallala <ramakrishna.pallala@intel.com>");
+ MODULE_AUTHOR("Todd Brandt <todd.e.brandt@linux.intel.com>");
+ MODULE_DESCRIPTION("Xpower AXP288 Fuel Gauge Driver");
+ MODULE_LICENSE("GPL");
++MODULE_DEVICE_TABLE(platform, axp288_fg_id_table);
+diff --git a/include/linux/mfd/axp20x.h b/include/linux/mfd/axp20x.h
+index b24c771cebd5..5dae44da8e86 100644
+--- a/include/linux/mfd/axp20x.h
++++ b/include/linux/mfd/axp20x.h
+@@ -12,6 +12,7 @@
+ #define __LINUX_MFD_AXP20X_H
+ 
+ #include <linux/regmap.h>
++#include <linux/acpi.h>
+ 
+ enum {
+ 	AXP152_ID = 0,
+@@ -412,6 +413,9 @@ struct axp20x_dev {
+ #define PD_DEF_MIN_TEMP			0
+ #define PD_DEF_MAX_TEMP			55
+ 
++#define BATTID_STR_LEN         	8
++#define ACPI_FG_CONF_NAME_LEN   8
++
+ struct axp20x_fg_pdata {
+ 	char battid[BATTID_LEN + 1];
+ 	int design_cap;
+@@ -440,6 +444,25 @@ struct axp288_extcon_pdata {
+ 	struct gpio_desc *gpio_mux_cntl;
+ };
+ 
++struct axp288_fg_config_data {
++        char fg_name[ACPI_FG_CONF_NAME_LEN];
++        char battid[BATTID_STR_LEN];
++        u16 size; /* config size */
++        u8 fco; /* FG config options */
++        u16 checksum; /* Primary data checksum */
++        u8 cap1;
++        u8 cap0;
++        u8 rdc1;
++        u8 rdc0;
++        u8 bat_curve[OCV_CURVE_SIZE];
++} __packed;
++
++struct axp288_acpi_fg_config {
++        struct acpi_table_header acpi_header;
++        struct axp288_fg_config_data cdata;
++} __packed;
++
++
+ /* generic helper function for reading 9-16 bit wide regs */
+ static inline int axp20x_read_variable_width(struct regmap *regmap,
+ 	unsigned int reg, unsigned int width)
+@@ -462,4 +485,6 @@ static inline int axp20x_read_variable_width(struct regmap *regmap,
+ 	return result;
+ }
+ 
++int axp20x_set_pdata(const char *name, void *data, int len, int id);
++
+ #endif /* __LINUX_MFD_AXP20X_H */
