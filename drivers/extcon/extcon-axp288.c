@@ -77,6 +77,7 @@
 /* IRQ enable-6 register */
 #define BC12_IRQ_CFG_MASK		BIT(1)
 
+#define DEV_NAME       "axp288_extcon"
 enum axp288_extcon_reg {
 	AXP288_PS_STAT_REG		= 0x00,
 	AXP288_PS_BOOT_REASON_REG	= 0x02,
@@ -130,6 +131,11 @@ static char *axp288_pwr_up_down_info[] = {
 	"Last shutdown caused by SOC initiated cold off",
 	"Last shutdown caused by user pressing the power button",
 	NULL,
+};
+
+static const struct platform_device_id extcon_axp288_id_table[] = {
+       { .name = DEV_NAME },
+       {},
 };
 
 /*
@@ -221,8 +227,9 @@ notify_otg:
 				vbus_attach ? EXTCON_GPIO_MUX_SEL_SOC
 						: EXTCON_GPIO_MUX_SEL_PMIC);
 
-		atomic_notifier_call_chain(&info->otg->notifier,
-			vbus_attach ? USB_EVENT_VBUS : USB_EVENT_NONE, NULL);
+		if(info->otg)
+			atomic_notifier_call_chain(&info->otg->notifier,
+				vbus_attach ? USB_EVENT_VBUS : USB_EVENT_NONE, NULL);
 	}
 
 	if (notify_charger)
@@ -311,8 +318,9 @@ static int axp288_extcon_probe(struct platform_device *pdev)
 	/* Get otg transceiver phy */
 	info->otg = devm_usb_get_phy(&pdev->dev, USB_PHY_TYPE_USB2);
 	if (IS_ERR(info->otg)) {
-		dev_err(&pdev->dev, "failed to get otg transceiver\n");
-		return PTR_ERR(info->otg);
+		dev_warn(&pdev->dev, "failed to get otg transceiver\n");
+		info->otg = NULL;
+		//return PTR_ERR(info->otg);
 	}
 
 	/* Set up gpio control for USB Mux */
@@ -366,3 +374,4 @@ module_platform_driver(axp288_extcon_driver);
 MODULE_AUTHOR("Ramakrishna Pallala <ramakrishna.pallala@intel.com>");
 MODULE_DESCRIPTION("X-Powers AXP288 extcon driver");
 MODULE_LICENSE("GPL v2");
+MODULE_DEVICE_TABLE(platform, extcon_axp288_id_table);

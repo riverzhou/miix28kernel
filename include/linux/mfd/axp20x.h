@@ -12,6 +12,7 @@
 #define __LINUX_MFD_AXP20X_H
 
 #include <linux/regmap.h>
+#include <linux/acpi.h>
 
 enum {
 	AXP152_ID = 0,
@@ -412,6 +413,9 @@ struct axp20x_dev {
 #define PD_DEF_MIN_TEMP			0
 #define PD_DEF_MAX_TEMP			55
 
+#define BATTID_STR_LEN         	8
+#define ACPI_FG_CONF_NAME_LEN   8
+
 struct axp20x_fg_pdata {
 	char battid[BATTID_LEN + 1];
 	int design_cap;
@@ -440,6 +444,25 @@ struct axp288_extcon_pdata {
 	struct gpio_desc *gpio_mux_cntl;
 };
 
+struct axp288_fg_config_data {
+        char fg_name[ACPI_FG_CONF_NAME_LEN];
+        char battid[BATTID_STR_LEN];
+        u16 size; /* config size */
+        u8 fco; /* FG config options */
+        u16 checksum; /* Primary data checksum */
+        u8 cap1;
+        u8 cap0;
+        u8 rdc1;
+        u8 rdc0;
+        u8 bat_curve[OCV_CURVE_SIZE];
+} __packed;
+
+struct axp288_acpi_fg_config {
+        struct acpi_table_header acpi_header;
+        struct axp288_fg_config_data cdata;
+} __packed;
+
+
 /* generic helper function for reading 9-16 bit wide regs */
 static inline int axp20x_read_variable_width(struct regmap *regmap,
 	unsigned int reg, unsigned int width)
@@ -461,5 +484,7 @@ static inline int axp20x_read_variable_width(struct regmap *regmap,
 
 	return result;
 }
+
+int axp20x_set_pdata(struct device *dev, const char *name, void *data, int len, int id);
 
 #endif /* __LINUX_MFD_AXP20X_H */

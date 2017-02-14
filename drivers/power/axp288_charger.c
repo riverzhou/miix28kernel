@@ -128,6 +128,7 @@
 #define ILIM_3000MA			3000	/* 3000mA */
 
 #define AXP288_EXTCON_DEV_NAME		"axp288_extcon"
+#define DEV_NAME       			"axp288_charger"
 
 #define AXP288_EXTCON_SLOW_CHARGER		"SLOW-CHARGER"
 #define AXP288_EXTCON_DOWNSTREAM_CHARGER	"CHARGE-DOWNSTREAM"
@@ -182,6 +183,11 @@ struct axp288_chrg_info {
 	bool present;
 	bool enable_charger;
 	bool is_charger_enabled;
+};
+
+static const struct platform_device_id axp288_charger_id_table[] = {
+       { .name = DEV_NAME },
+       {},
 };
 
 static inline int axp288_charger_set_cc(struct axp288_chrg_info *info, int cc)
@@ -939,3 +945,4 @@ module_platform_driver(axp288_charger_driver);
 MODULE_AUTHOR("Ramakrishna Pallala <ramakrishna.pallala@intel.com>");
 MODULE_DESCRIPTION("X-power AXP288 Charger Driver");
 MODULE_LICENSE("GPL v2");
+MODULE_DEVICE_TABLE(platform, axp288_charger_id_table);
