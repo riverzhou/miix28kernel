@@ -52,7 +52,7 @@ index fd55c2f2080a..77f781338517 100644
  MODULE_LICENSE("GPL v2");
 +MODULE_DEVICE_TABLE(platform, extcon_axp288_id_table);
 diff --git a/drivers/mfd/axp20x.c b/drivers/mfd/axp20x.c
-index 9842199e2e6c..05206018b188 100644
+index 9842199e2e6c..e2599c59397b 100644
 --- a/drivers/mfd/axp20x.c
 +++ b/drivers/mfd/axp20x.c
 @@ -26,9 +26,195 @@
@@ -78,17 +78,17 @@ index 9842199e2e6c..05206018b188 100644
 +#define XPOWER_DEFAULT_TEMP_MAX        45
 +
 +static int fg_bat_curve[] = {
-+       +        0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x1, 0x2,
-+       +        0x2, 0x3, 0x5, 0x9, 0xf, 0x18, 0x24, 0x29,
-+       +    0x2e, 0x32, 0x35, 0x3b, 0x40, 0x45, 0x49, 0x4c,
-+       +    0x50, 0x53, 0x55, 0x57, 0x5a, 0x5d, 0x61, 0x64,
-+       +};
++    0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x1, 0x2,
++    0x2, 0x3, 0x5, 0x9, 0xf, 0x18, 0x24, 0x29,
++    0x2e, 0x32, 0x35, 0x3b, 0x40, 0x45, 0x49, 0x4c,
++    0x50, 0x53, 0x55, 0x57, 0x5a, 0x5d, 0x61, 0x64,
++};
 +
 +#ifdef CONFIG_ACPI
 +#define FGCONFIG_ACPI_TABLE_NAME        "BCFG"
 +#define XPWR_FGCONFIG_NAME              "XPOWER-0"
 +
-+static int axp288_get_acpi_cdata(struct axp20x_fg_pdata *pdata)
++static int axp288_get_acpi_cdata(struct device *dev, struct axp20x_fg_pdata *pdata)
 +{
 +       struct axp288_acpi_fg_config *acpi_tbl = NULL;
 +       char *name = FGCONFIG_ACPI_TABLE_NAME;
@@ -100,16 +100,16 @@ index 9842199e2e6c..05206018b188 100644
 +        status = acpi_get_table_with_size(name , 0,
 +                        (struct acpi_table_header **)&acpi_tbl, &tbl_size);
 +        if (ACPI_FAILURE(status)) {
-+                pr_err("%s:%s table not found!!\n", __func__, name);
++                dev_err(dev, "%s:%s table not found!!\n", __func__, name);
 +                return status;
 +        }
-+        pr_info("%s: %s table found, size=%d\n",
++        dev_info(dev, "%s: %s table found, size=%d\n",
 +                                __func__, name, (int)tbl_size);
 +
 +        /* validate the table size */
 +        if (tbl_size <  sizeof(struct axp288_acpi_fg_config)) {
-+                pr_err("%s:%s table incomplete!!\n", __func__, name);
-+                pr_info("%s: table_size=%d, structure_size=%lu\n",
++                dev_err(dev, "%s:%s table incomplete!!\n", __func__, name);
++                dev_info(dev, "%s: table_size=%d, structure_size=%lu\n",
 +                        __func__, (int)tbl_size,
 +                        sizeof(struct axp288_acpi_fg_config));
 +                return -ENXIO;
@@ -119,7 +119,7 @@ index 9842199e2e6c..05206018b188 100644
 +                ACPI_FG_CONF_NAME_LEN)
 +                || strncmp(acpi_tbl->cdata.battid, pdata->battid,
 +                BATTID_STR_LEN)) {
-+                pr_err("%s: battid and fg_name mismatch!!!\n", __func__);
++                dev_err(dev, "%s: battid and fg_name mismatch!!!\n", __func__);
 +                return -EINVAL;
 +        }
 +
@@ -140,19 +140,19 @@ index 9842199e2e6c..05206018b188 100644
 +}
 +#endif /* CONFIG_ACPI */
 +
-+static void axp288_get_fg_config_data(struct axp20x_fg_pdata *pdata)
++static void axp288_get_fg_config_data(struct device *dev, struct axp20x_fg_pdata *pdata)
 +{
 +        int scaled_capacity;
 +        int i;
 +
 +#ifdef CONFIG_ACPI
-+        if (!axp288_get_acpi_cdata(pdata)) {
-+                pr_info("%s: Loading fg config from acpi table\n", __func__);
++        if (!axp288_get_acpi_cdata(dev, pdata)) {
++                dev_info(dev, "%s: Loading fg config from acpi table\n", __func__);
 +                return;
 +        }
 +#endif /* CONFIG_ACPI */
 +
-+        pr_info("%s: Loading default fg config.\n", __func__);
++        dev_info(dev, "%s: Loading default fg config.\n", __func__);
 +        /*
 +         * Calculate cap1 and cap0.  The value of a LSB is 1.456mAh.
 +         * Using 1.5 as math friendly and close enough.
@@ -186,7 +186,7 @@ index 9842199e2e6c..05206018b188 100644
 +        pdata->min_volt = 3400;
 +}
 +
-+static void axp288_fg_pdata(void)
++static void axp288_fg_pdata(struct device *dev)
 +{
 +       static struct axp20x_fg_pdata pdata;
 +
@@ -194,9 +194,9 @@ index 9842199e2e6c..05206018b188 100644
 +       pdata.max_temp = XPOWER_DEFAULT_TEMP_MAX;
 +
 +       /* Load FG config data to pdata */
-+       axp288_get_fg_config_data(&pdata);
++       axp288_get_fg_config_data(dev, &pdata);
 +
-+       axp20x_set_pdata("axp288_fuel_gauge",
++       axp20x_set_pdata(dev, "axp288_fuel_gauge",
 +               (void *)&pdata, sizeof(pdata), 0);
 +}
 +
@@ -214,12 +214,12 @@ index 9842199e2e6c..05206018b188 100644
 +
 +       if (IS_ERR(pdata.gpio_mux_cntl)) {
 +               pdata.gpio_mux_cntl = NULL;
-+               dev_err(dev,"Failed to get gpio for extcon pdata\n");
++               dev_err(dev, "Failed to get gpio for extcon pdata\n");
 +       } else {
 +               gpiod_put(pdata.gpio_mux_cntl);
 +       }
 +
-+       axp20x_set_pdata("axp288_extcon",
++       axp20x_set_pdata(dev, "axp288_extcon",
 +               (void *)&pdata, sizeof(pdata), 0);
 +}
 +
@@ -232,19 +232,19 @@ index 9842199e2e6c..05206018b188 100644
 +       pdata->max_cv = 4350;
 +}
 +
-+static void axp288_chrg_pdata(void)
++static void axp288_chrg_pdata(struct device *dev)
 +{
 +       static struct axp20x_chrg_pdata pdata;
 +       platform_init_chrg_params(&pdata);
-+       axp20x_set_pdata("axp288_charger",
++       axp20x_set_pdata(dev, "axp288_charger",
 +               (void *)&pdata, sizeof(pdata), 0);
 +}
 +
 +static int axp288_init(struct device *dev)
 +{
-+       axp288_chrg_pdata();
++       axp288_chrg_pdata(dev);
 +       axp288_extcon_pdata(dev);
-+       axp288_fg_pdata();
++       axp288_fg_pdata(dev);
 +       return 0;
 +}
 +
@@ -285,13 +285,13 @@ index 9842199e2e6c..05206018b188 100644
  
  static struct axp20x_dev *axp20x_pm_power_off;
 +
-+int axp20x_set_pdata(const char *name, void *data, int len, int id)
++int axp20x_set_pdata(struct device *dev, const char *name, void *data, int len, int id)
 +{
 +        struct cell_dev_pdata *pdata;
 +
 +        pdata = kzalloc(sizeof(*pdata), GFP_KERNEL);
 +        if (!pdata) {
-+                pr_err("axp20x: can't set pdata!\n");
++                dev_err(dev, "axp20x: can't set pdata!\n");
 +                return -ENOMEM;
 +        }
 +
@@ -385,7 +385,7 @@ index 50c0110d6b58..269c0aab5d06 100644
  MODULE_LICENSE("GPL");
 +MODULE_DEVICE_TABLE(platform, axp288_fg_id_table);
 diff --git a/include/linux/mfd/axp20x.h b/include/linux/mfd/axp20x.h
-index b24c771cebd5..5dae44da8e86 100644
+index b24c771cebd5..aff7b4d376bd 100644
 --- a/include/linux/mfd/axp20x.h
 +++ b/include/linux/mfd/axp20x.h
 @@ -12,6 +12,7 @@
@@ -436,6 +436,6 @@ index b24c771cebd5..5dae44da8e86 100644
  	return result;
  }
  
-+int axp20x_set_pdata(const char *name, void *data, int len, int id);
++int axp20x_set_pdata(struct device *dev, const char *name, void *data, int len, int id);
 +
  #endif /* __LINUX_MFD_AXP20X_H */
