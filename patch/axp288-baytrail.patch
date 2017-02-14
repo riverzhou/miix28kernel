@@ -1,0 +1,519 @@
+diff --git a/drivers/i2c/busses/i2c-designware-baytrail.c b/drivers/i2c/busses/i2c-designware-baytrail.c
+index 1590ad0a8081..94814115ccd2 100644
+--- a/drivers/i2c/busses/i2c-designware-baytrail.c
++++ b/drivers/i2c/busses/i2c-designware-baytrail.c
+@@ -16,6 +16,7 @@
+ #include <linux/acpi.h>
+ #include <linux/i2c.h>
+ #include <linux/interrupt.h>
++#include <linux/pm_qos.h>
+ 
+ #include <asm/iosf_mbi.h>
+ 
+@@ -23,19 +24,36 @@
+ 
+ #define SEMAPHORE_TIMEOUT	100
+ #define PUNIT_SEMAPHORE		0x7
++#define PUNIT_SEMAPHORE_CHT	0x10e
+ #define PUNIT_SEMAPHORE_BIT	BIT(0)
+ #define PUNIT_SEMAPHORE_ACQUIRE	BIT(1)
+ 
+ static unsigned long acquired;
+ 
+-static int get_sem(struct device *dev, u32 *sem)
++static u32 get_sem_addr(struct dw_i2c_dev *dev)
+ {
++	if (dev->flags & MODEL_CHERRYTRAIL)
++		return PUNIT_SEMAPHORE_CHT;
++	else
++		return PUNIT_SEMAPHORE;
++}
++
++static int get_sem(struct dw_i2c_dev *dev, u32 *sem)
++{
++	u32 addr = get_sem_addr(dev);
+ 	u32 data;
+ 	int ret;
+ 
+-	ret = iosf_mbi_read(BT_MBI_UNIT_PMC, MBI_REG_READ, PUNIT_SEMAPHORE, &data);
++	/*
++	 * Disallow the CPU to enter C6 or C7 state, entering these states
++	 * requires the punit to talk to the pmic and if this happens while
++	 * we're holding the semaphore, the SoC hangs.
++	 */
++	pm_qos_update_request(&dev->pm_qos, 0);
++
++	ret = iosf_mbi_read(BT_MBI_UNIT_PMC, MBI_REG_READ, addr, &data);
+ 	if (ret) {
+-		dev_err(dev, "iosf failed to read punit semaphore\n");
++		dev_err(dev->dev, "iosf failed to read punit semaphore\n");
+ 		return ret;
+ 	}
+ 
+@@ -44,22 +62,26 @@ static int get_sem(struct device *dev, u32 *sem)
+ 	return 0;
+ }
+ 
+-static void reset_semaphore(struct device *dev)
++static void reset_semaphore(struct dw_i2c_dev *dev)
+ {
++	u32 addr = get_sem_addr(dev);
+ 	u32 data;
+ 
+-	if (iosf_mbi_read(BT_MBI_UNIT_PMC, MBI_REG_READ, PUNIT_SEMAPHORE, &data)) {
+-		dev_err(dev, "iosf failed to reset punit semaphore during read\n");
++	if (iosf_mbi_read(BT_MBI_UNIT_PMC, MBI_REG_READ, addr, &data)) {
++		dev_err(dev->dev, "iosf failed to reset punit semaphore during read\n");
+ 		return;
+ 	}
+ 
+ 	data &= ~PUNIT_SEMAPHORE_BIT;
+-	if (iosf_mbi_write(BT_MBI_UNIT_PMC, MBI_REG_WRITE, PUNIT_SEMAPHORE, data))
+-		dev_err(dev, "iosf failed to reset punit semaphore during write\n");
++	if (iosf_mbi_write(BT_MBI_UNIT_PMC, MBI_REG_WRITE, addr, data))
++		dev_err(dev->dev, "iosf failed to reset punit semaphore during write\n");
++
++	pm_qos_update_request(&dev->pm_qos, PM_QOS_DEFAULT_VALUE);
+ }
+ 
+ static int baytrail_i2c_acquire(struct dw_i2c_dev *dev)
+ {
++	u32 addr = get_sem_addr(dev);
+ 	u32 sem = PUNIT_SEMAPHORE_ACQUIRE;
+ 	int ret;
+ 	unsigned long start, end;
+@@ -73,7 +95,7 @@ static int baytrail_i2c_acquire(struct dw_i2c_dev *dev)
+ 		return 0;
+ 
+ 	/* host driver writes to side band semaphore register */
+-	ret = iosf_mbi_write(BT_MBI_UNIT_PMC, MBI_REG_WRITE, PUNIT_SEMAPHORE, sem);
++	ret = iosf_mbi_write(BT_MBI_UNIT_PMC, MBI_REG_WRITE, addr, sem);
+ 	if (ret) {
+ 		dev_err(dev->dev, "iosf punit semaphore request failed\n");
+ 		return ret;
+@@ -83,7 +105,7 @@ static int baytrail_i2c_acquire(struct dw_i2c_dev *dev)
+ 	start = jiffies;
+ 	end = start + msecs_to_jiffies(SEMAPHORE_TIMEOUT);
+ 	do {
+-		ret = get_sem(dev->dev, &sem);
++		ret = get_sem(dev, &sem);
+ 		if (!ret && sem) {
+ 			acquired = jiffies;
+ 			dev_dbg(dev->dev, "punit semaphore acquired after %ums\n",
+@@ -95,9 +117,9 @@ static int baytrail_i2c_acquire(struct dw_i2c_dev *dev)
+ 	} while (time_before(jiffies, end));
+ 
+ 	dev_err(dev->dev, "punit semaphore timed out, resetting\n");
+-	reset_semaphore(dev->dev);
++	reset_semaphore(dev);
+ 
+-	ret = iosf_mbi_read(BT_MBI_UNIT_PMC, MBI_REG_READ, PUNIT_SEMAPHORE, &sem);
++	ret = iosf_mbi_read(BT_MBI_UNIT_PMC, MBI_REG_READ, addr, &sem);
+ 	if (ret)
+ 		dev_err(dev->dev, "iosf failed to read punit semaphore\n");
+ 	else
+@@ -116,12 +138,12 @@ static void baytrail_i2c_release(struct dw_i2c_dev *dev)
+ 	if (!dev->acquire_lock)
+ 		return;
+ 
+-	reset_semaphore(dev->dev);
++	reset_semaphore(dev);
+ 	dev_dbg(dev->dev, "punit semaphore held for %ums\n",
+ 		jiffies_to_msecs(jiffies - acquired));
+ }
+ 
+-int i2c_dw_eval_lock_support(struct dw_i2c_dev *dev)
++int i2c_dw_probe_lock_support(struct dw_i2c_dev *dev)
+ {
+ 	acpi_status status;
+ 	unsigned long long shared_host = 0;
+@@ -138,15 +160,25 @@ int i2c_dw_eval_lock_support(struct dw_i2c_dev *dev)
+ 	if (ACPI_FAILURE(status))
+ 		return 0;
+ 
+-	if (shared_host) {
+-		dev_info(dev->dev, "I2C bus managed by PUNIT\n");
+-		dev->acquire_lock = baytrail_i2c_acquire;
+-		dev->release_lock = baytrail_i2c_release;
+-		dev->pm_runtime_disabled = true;
+-	}
++	if (!shared_host)
++		return 0;
+ 
+ 	if (!iosf_mbi_available())
+ 		return -EPROBE_DEFER;
+ 
++	dev_info(dev->dev, "I2C bus managed by PUNIT\n");
++	dev->acquire_lock = baytrail_i2c_acquire;
++	dev->release_lock = baytrail_i2c_release;
++	dev->pm_runtime_disabled = true;
++
++	pm_qos_add_request(&dev->pm_qos, PM_QOS_CPU_DMA_LATENCY,
++			   PM_QOS_DEFAULT_VALUE);
++
+ 	return 0;
+ }
++
++void i2c_dw_remove_lock_support(struct dw_i2c_dev *dev)
++{
++	if (dev->acquire_lock)
++		pm_qos_remove_request(&dev->pm_qos);
++}
+diff --git a/drivers/i2c/busses/i2c-designware-core.c b/drivers/i2c/busses/i2c-designware-core.c
+index b403fa5ecf49..b6a798992224 100644
+--- a/drivers/i2c/busses/i2c-designware-core.c
++++ b/drivers/i2c/busses/i2c-designware-core.c
+@@ -177,13 +177,13 @@ static u32 dw_readl(struct dw_i2c_dev *dev, int offset)
+ {
+ 	u32 value;
+ 
+-	if (dev->accessor_flags & ACCESS_16BIT)
++	if (dev->flags & ACCESS_16BIT)
+ 		value = readw_relaxed(dev->base + offset) |
+ 			(readw_relaxed(dev->base + offset + 2) << 16);
+ 	else
+ 		value = readl_relaxed(dev->base + offset);
+ 
+-	if (dev->accessor_flags & ACCESS_SWAP)
++	if (dev->flags & ACCESS_SWAP)
+ 		return swab32(value);
+ 	else
+ 		return value;
+@@ -191,10 +191,10 @@ static u32 dw_readl(struct dw_i2c_dev *dev, int offset)
+ 
+ static void dw_writel(struct dw_i2c_dev *dev, u32 b, int offset)
+ {
+-	if (dev->accessor_flags & ACCESS_SWAP)
++	if (dev->flags & ACCESS_SWAP)
+ 		b = swab32(b);
+ 
+-	if (dev->accessor_flags & ACCESS_16BIT) {
++	if (dev->flags & ACCESS_16BIT) {
+ 		writew_relaxed((u16)b, dev->base + offset);
+ 		writew_relaxed((u16)(b >> 16), dev->base + offset + 2);
+ 	} else {
+@@ -339,10 +339,10 @@ int i2c_dw_init(struct dw_i2c_dev *dev)
+ 	reg = dw_readl(dev, DW_IC_COMP_TYPE);
+ 	if (reg == ___constant_swab32(DW_IC_COMP_TYPE_VALUE)) {
+ 		/* Configure register endianess access */
+-		dev->accessor_flags |= ACCESS_SWAP;
++		dev->flags |= ACCESS_SWAP;
+ 	} else if (reg == (DW_IC_COMP_TYPE_VALUE & 0x0000ffff)) {
+ 		/* Configure register access mode 16bit */
+-		dev->accessor_flags |= ACCESS_16BIT;
++		dev->flags |= ACCESS_16BIT;
+ 	} else if (reg != DW_IC_COMP_TYPE_VALUE) {
+ 		dev_err(dev->dev, "Unknown Synopsys component type: "
+ 			"0x%08x\n", reg);
+@@ -886,7 +886,7 @@ static irqreturn_t i2c_dw_isr(int this_irq, void *dev_id)
+ tx_aborted:
+ 	if ((stat & (DW_IC_INTR_TX_ABRT | DW_IC_INTR_STOP_DET)) || dev->msg_err)
+ 		complete(&dev->cmd_complete);
+-	else if (unlikely(dev->accessor_flags & ACCESS_INTR_MASK)) {
++	else if (unlikely(dev->flags & ACCESS_INTR_MASK)) {
+ 		/* workaround to trigger pending interrupt */
+ 		stat = dw_readl(dev, DW_IC_INTR_MASK);
+ 		i2c_dw_disable_int(dev);
+diff --git a/drivers/i2c/busses/i2c-designware-core.h b/drivers/i2c/busses/i2c-designware-core.h
+index 0d44d2ae7d4c..cd4a87448ba6 100644
+--- a/drivers/i2c/busses/i2c-designware-core.h
++++ b/drivers/i2c/busses/i2c-designware-core.h
+@@ -22,6 +22,7 @@
+  *
+  */
+ 
++#include <linux/pm_qos.h>
+ 
+ #define DW_IC_CON_MASTER		0x1
+ #define DW_IC_CON_SPEED_STD		0x2
+@@ -67,6 +68,7 @@
+  * @fp_lcnt: fast plus LCNT value
+  * @hs_hcnt: high speed HCNT value
+  * @hs_lcnt: high speed LCNT value
++ * @pm_qos: pm_qos_request used while holding a hardware lock on the bus
+  * @acquire_lock: function to acquire a hardware lock on the bus
+  * @release_lock: function to release a hardware lock on the bus
+  * @pm_runtime_disabled: true if pm runtime is disabled
+@@ -95,7 +97,7 @@ struct dw_i2c_dev {
+ 	unsigned int		status;
+ 	u32			abort_source;
+ 	int			irq;
+-	u32			accessor_flags;
++	u32			flags;
+ 	struct i2c_adapter	adapter;
+ 	u32			functionality;
+ 	u32			master_cfg;
+@@ -114,6 +116,7 @@ struct dw_i2c_dev {
+ 	u16			fp_lcnt;
+ 	u16			hs_hcnt;
+ 	u16			hs_lcnt;
++	struct pm_qos_request	pm_qos;
+ 	int			(*acquire_lock)(struct dw_i2c_dev *dev);
+ 	void			(*release_lock)(struct dw_i2c_dev *dev);
+ 	bool			pm_runtime_disabled;
+@@ -124,6 +127,8 @@ struct dw_i2c_dev {
+ #define ACCESS_16BIT		0x00000002
+ #define ACCESS_INTR_MASK	0x00000004
+ 
++#define MODEL_CHERRYTRAIL	0x00000100
++
+ extern int i2c_dw_init(struct dw_i2c_dev *dev);
+ extern void i2c_dw_disable(struct dw_i2c_dev *dev);
+ extern void i2c_dw_disable_int(struct dw_i2c_dev *dev);
+@@ -131,7 +136,9 @@ extern u32 i2c_dw_read_comp_param(struct dw_i2c_dev *dev);
+ extern int i2c_dw_probe(struct dw_i2c_dev *dev);
+ 
+ #if IS_ENABLED(CONFIG_I2C_DESIGNWARE_BAYTRAIL)
+-extern int i2c_dw_eval_lock_support(struct dw_i2c_dev *dev);
++extern int i2c_dw_probe_lock_support(struct dw_i2c_dev *dev);
++extern void i2c_dw_remove_lock_support(struct dw_i2c_dev *dev);
+ #else
+-static inline int i2c_dw_eval_lock_support(struct dw_i2c_dev *dev) { return 0; }
++static inline int i2c_dw_probe_lock_support(struct dw_i2c_dev *dev) { return 0; }
++static inline void i2c_dw_remove_lock_support(struct dw_i2c_dev *dev) {}
+ #endif
+diff --git a/drivers/i2c/busses/i2c-designware-pcidrv.c b/drivers/i2c/busses/i2c-designware-pcidrv.c
+index 96f8230cd2d3..4e53a9f12add 100644
+--- a/drivers/i2c/busses/i2c-designware-pcidrv.c
++++ b/drivers/i2c/busses/i2c-designware-pcidrv.c
+@@ -45,6 +45,7 @@ enum dw_pci_ctl_id_t {
+ 	medfield,
+ 	merrifield,
+ 	baytrail,
++	cherrytrail,
+ 	haswell,
+ };
+ 
+@@ -63,6 +64,7 @@ struct dw_pci_controller {
+ 	u32 rx_fifo_depth;
+ 	u32 clk_khz;
+ 	u32 functionality;
++	u32 flags;
+ 	struct dw_scl_sda_cfg *scl_sda_cfg;
+ 	int (*setup)(struct pci_dev *pdev, struct dw_pci_controller *c);
+ };
+@@ -174,6 +176,15 @@ static struct dw_pci_controller dw_pci_controllers[] = {
+ 		.functionality = I2C_FUNC_10BIT_ADDR,
+ 		.scl_sda_cfg = &hsw_config,
+ 	},
++	[cherrytrail] = {
++		.bus_num = -1,
++		.bus_cfg = INTEL_MID_STD_CFG | DW_IC_CON_SPEED_FAST,
++		.tx_fifo_depth = 32,
++		.rx_fifo_depth = 32,
++		.functionality = I2C_FUNC_10BIT_ADDR,
++		.flags = MODEL_CHERRYTRAIL,
++		.scl_sda_cfg = &byt_config,
++	},
+ };
+ 
+ #ifdef CONFIG_PM
+@@ -241,6 +252,7 @@ static int i2c_dw_pci_probe(struct pci_dev *pdev,
+ 	dev->base = pcim_iomap_table(pdev)[0];
+ 	dev->dev = &pdev->dev;
+ 	dev->irq = pdev->irq;
++	dev->flags |= controller->flags;
+ 
+ 	if (controller->setup) {
+ 		r = controller->setup(pdev, controller);
+@@ -321,13 +333,13 @@ static const struct pci_device_id i2_designware_pci_ids[] = {
+ 	{ PCI_VDEVICE(INTEL, 0x9c61), haswell },
+ 	{ PCI_VDEVICE(INTEL, 0x9c62), haswell },
+ 	/* Braswell / Cherrytrail */
+-	{ PCI_VDEVICE(INTEL, 0x22C1), baytrail },
+-	{ PCI_VDEVICE(INTEL, 0x22C2), baytrail },
+-	{ PCI_VDEVICE(INTEL, 0x22C3), baytrail },
+-	{ PCI_VDEVICE(INTEL, 0x22C4), baytrail },
+-	{ PCI_VDEVICE(INTEL, 0x22C5), baytrail },
+-	{ PCI_VDEVICE(INTEL, 0x22C6), baytrail },
+-	{ PCI_VDEVICE(INTEL, 0x22C7), baytrail },
++	{ PCI_VDEVICE(INTEL, 0x22C1), cherrytrail },
++	{ PCI_VDEVICE(INTEL, 0x22C2), cherrytrail },
++	{ PCI_VDEVICE(INTEL, 0x22C3), cherrytrail },
++	{ PCI_VDEVICE(INTEL, 0x22C4), cherrytrail },
++	{ PCI_VDEVICE(INTEL, 0x22C5), cherrytrail },
++	{ PCI_VDEVICE(INTEL, 0x22C6), cherrytrail },
++	{ PCI_VDEVICE(INTEL, 0x22C7), cherrytrail },
+ 	{ 0,}
+ };
+ MODULE_DEVICE_TABLE(pci, i2_designware_pci_ids);
+diff --git a/drivers/i2c/busses/i2c-designware-platdrv.c b/drivers/i2c/busses/i2c-designware-platdrv.c
+index 0b42a12171f3..985c4de061a4 100644
+--- a/drivers/i2c/busses/i2c-designware-platdrv.c
++++ b/drivers/i2c/busses/i2c-designware-platdrv.c
+@@ -112,7 +112,7 @@ static int dw_i2c_acpi_configure(struct platform_device *pdev)
+ 
+ 	id = acpi_match_device(pdev->dev.driver->acpi_match_table, &pdev->dev);
+ 	if (id && id->driver_data)
+-		dev->accessor_flags |= (u32)id->driver_data;
++		dev->flags |= (u32)id->driver_data;
+ 
+ 	return 0;
+ }
+@@ -123,7 +123,7 @@ static const struct acpi_device_id dw_i2c_acpi_match[] = {
+ 	{ "INT3432", 0 },
+ 	{ "INT3433", 0 },
+ 	{ "80860F41", 0 },
+-	{ "808622C1", 0 },
++	{ "808622C1", MODEL_CHERRYTRAIL },
+ 	{ "AMD0010", ACCESS_INTR_MASK },
+ 	{ "AMDI0010", ACCESS_INTR_MASK },
+ 	{ "AMDI0510", 0 },
+@@ -210,7 +210,7 @@ static int dw_i2c_plat_probe(struct platform_device *pdev)
+ 		return -EINVAL;
+ 	}
+ 
+-	r = i2c_dw_eval_lock_support(dev);
++	r = i2c_dw_probe_lock_support(dev);
+ 	if (r)
+ 		return r;
+ 
+@@ -291,6 +291,8 @@ static int dw_i2c_plat_remove(struct platform_device *pdev)
+ 	if (!dev->pm_runtime_disabled)
+ 		pm_runtime_disable(&pdev->dev);
+ 
++	i2c_dw_remove_lock_support(dev);
++
+ 	return 0;
+ }
+ 
+diff --git a/drivers/iio/adc/axp288_adc.c b/drivers/iio/adc/axp288_adc.c
+index 7fd24949c0c1..64799ad7ebad 100644
+--- a/drivers/iio/adc/axp288_adc.c
++++ b/drivers/iio/adc/axp288_adc.c
+@@ -28,8 +28,6 @@
+ #include <linux/iio/driver.h>
+ 
+ #define AXP288_ADC_EN_MASK		0xF1
+-#define AXP288_ADC_TS_PIN_GPADC		0xF2
+-#define AXP288_ADC_TS_PIN_ON		0xF3
+ 
+ enum axp288_adc_id {
+ 	AXP288_ADC_TS,
+@@ -123,16 +121,6 @@ static int axp288_adc_read_channel(int *val, unsigned long address,
+ 	return IIO_VAL_INT;
+ }
+ 
+-static int axp288_adc_set_ts(struct regmap *regmap, unsigned int mode,
+-				unsigned long address)
+-{
+-	/* channels other than GPADC do not need to switch TS pin */
+-	if (address != AXP288_GP_ADC_H)
+-		return 0;
+-
+-	return regmap_write(regmap, AXP288_ADC_TS_PIN_CTRL, mode);
+-}
+-
+ static int axp288_adc_read_raw(struct iio_dev *indio_dev,
+ 			struct iio_chan_spec const *chan,
+ 			int *val, int *val2, long mask)
+@@ -143,16 +131,7 @@ static int axp288_adc_read_raw(struct iio_dev *indio_dev,
+ 	mutex_lock(&indio_dev->mlock);
+ 	switch (mask) {
+ 	case IIO_CHAN_INFO_RAW:
+-		if (axp288_adc_set_ts(info->regmap, AXP288_ADC_TS_PIN_GPADC,
+-					chan->address)) {
+-			dev_err(&indio_dev->dev, "GPADC mode\n");
+-			ret = -EINVAL;
+-			break;
+-		}
+ 		ret = axp288_adc_read_channel(val, chan->address, info->regmap);
+-		if (axp288_adc_set_ts(info->regmap, AXP288_ADC_TS_PIN_ON,
+-						chan->address))
+-			dev_err(&indio_dev->dev, "TS pin restore\n");
+ 		break;
+ 	default:
+ 		ret = -EINVAL;
+@@ -162,15 +141,6 @@ static int axp288_adc_read_raw(struct iio_dev *indio_dev,
+ 	return ret;
+ }
+ 
+-static int axp288_adc_set_state(struct regmap *regmap)
+-{
+-	/* ADC should be always enabled for internal FG to function */
+-	if (regmap_write(regmap, AXP288_ADC_TS_PIN_CTRL, AXP288_ADC_TS_PIN_ON))
+-		return -EIO;
+-
+-	return regmap_write(regmap, AXP20X_ADC_EN1, AXP288_ADC_EN_MASK);
+-}
+-
+ static const struct iio_info axp288_adc_iio_info = {
+ 	.read_raw = &axp288_adc_read_raw,
+ 	.driver_module = THIS_MODULE,
+@@ -199,7 +169,7 @@ static int axp288_adc_probe(struct platform_device *pdev)
+ 	 * Set ADC to enabled state at all time, including system suspend.
+ 	 * otherwise internal fuel gauge functionality may be affected.
+ 	 */
+-	ret = axp288_adc_set_state(axp20x->regmap);
++	ret = regmap_write(info->regmap, AXP20X_ADC_EN1, AXP288_ADC_EN_MASK);
+ 	if (ret) {
+ 		dev_err(&pdev->dev, "unable to enable ADC device\n");
+ 		return ret;
+diff --git a/drivers/mfd/axp20x.c b/drivers/mfd/axp20x.c
+index ba130be32e61..c51d2df2990b 100644
+--- a/drivers/mfd/axp20x.c
++++ b/drivers/mfd/axp20x.c
+@@ -117,7 +117,14 @@ static const struct regmap_range axp288_writeable_ranges[] = {
+ };
+ 
+ static const struct regmap_range axp288_volatile_ranges[] = {
++	regmap_reg_range(AXP20X_PWR_INPUT_STATUS, AXP288_POWER_REASON),
++	regmap_reg_range(AXP288_BC_GLOBAL, AXP288_BC_GLOBAL),
++	regmap_reg_range(AXP288_BC_DET_STAT, AXP288_BC_DET_STAT),
+ 	regmap_reg_range(AXP20X_IRQ1_EN, AXP20X_IPSOUT_V_HIGH_L),
++	regmap_reg_range(AXP20X_TIMER_CTRL, AXP20X_TIMER_CTRL),
++	regmap_reg_range(AXP22X_GPIO_STATE, AXP22X_GPIO_STATE),
++	regmap_reg_range(AXP288_RT_BATT_V_H, AXP288_RT_BATT_V_L),
++	regmap_reg_range(AXP20X_FG_RES, AXP288_FG_CC_CAP_REG),
+ };
+ 
+ static const struct regmap_access_table axp288_writeable_table = {
+@@ -205,14 +212,14 @@ static struct resource axp22x_pek_resources[] = {
+ static struct resource axp288_power_button_resources[] = {
+ 	{
+ 		.name	= "PEK_DBR",
+-		.start	= AXP288_IRQ_POKN,
+-		.end	= AXP288_IRQ_POKN,
++		.start	= AXP288_IRQ_POKP,
++		.end	= AXP288_IRQ_POKP,
+ 		.flags	= IORESOURCE_IRQ,
+ 	},
+ 	{
+ 		.name	= "PEK_DBF",
+-		.start	= AXP288_IRQ_POKP,
+-		.end	= AXP288_IRQ_POKP,
++		.start	= AXP288_IRQ_POKN,
++		.end	= AXP288_IRQ_POKN,
+ 		.flags	= IORESOURCE_IRQ,
+ 	},
+ };
+@@ -405,6 +412,9 @@ static const struct regmap_irq axp288_regmap_irqs[] = {
+ 	INIT_REGMAP_IRQ(AXP288, VBUS_FALL,              0, 2),
+ 	INIT_REGMAP_IRQ(AXP288, VBUS_RISE,              0, 3),
+ 	INIT_REGMAP_IRQ(AXP288, OV,                     0, 4),
++	INIT_REGMAP_IRQ(AXP288, FALLING_ALT,            0, 5),
++	INIT_REGMAP_IRQ(AXP288, RISING_ALT,             0, 6),
++	INIT_REGMAP_IRQ(AXP288, OV_ALT,                 0, 7),
+ 
+ 	INIT_REGMAP_IRQ(AXP288, DONE,                   1, 2),
+ 	INIT_REGMAP_IRQ(AXP288, CHARGING,               1, 3),
+@@ -800,6 +810,7 @@ int axp20x_match_device(struct axp20x_dev *axp20x)
+ 		axp20x->nr_cells = ARRAY_SIZE(axp288_cells);
+ 		axp20x->regmap_cfg = &axp288_regmap_config;
+ 		axp20x->regmap_irq_chip = &axp288_regmap_irq_chip;
++		axp20x->irq_flags = IRQF_TRIGGER_LOW;
+ 		break;
+ 	case AXP806_ID:
+ 		axp20x->nr_cells = ARRAY_SIZE(axp806_cells);
+@@ -829,9 +840,8 @@ int axp20x_device_probe(struct axp20x_dev *axp20x)
+ 	int ret;
+ 
+ 	ret = regmap_add_irq_chip(axp20x->regmap, axp20x->irq,
+-				  IRQF_ONESHOT | IRQF_SHARED, -1,
+-				  axp20x->regmap_irq_chip,
+-				  &axp20x->regmap_irqc);
++			  IRQF_ONESHOT | IRQF_SHARED | axp20x->irq_flags,
++			   -1, axp20x->regmap_irq_chip, &axp20x->regmap_irqc);
+ 	if (ret) {
+ 		dev_err(axp20x->dev, "failed to add irq chip: %d\n", ret);
+ 		return ret;
