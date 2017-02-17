@@ -1,0 +1,70 @@
+commit 44e979228fc308597903a8e96e0c3c8ea15129e4
+Author: River Zhou <riverzhou2000@163.com>
+Date:   Fri Feb 17 13:38:27 2017 +0800
+
+        backport commit bb98e72adaf9d19719aba35f802d4836f5d5176c to 4.4.49
+        fixed i915 dsi init bug
+        passed test on my Lenovo Miix 2 8 (Bay Trail Z3740)
+    
+        commit bb98e72adaf9d19719aba35f802d4836f5d5176c
+        Author: Hans de Goede <hdegoede@redhat.com>
+        Date:   Fri Dec 2 15:29:04 2016 +0100
+    
+            drm/i915/dsi: Do not clear DPOUNIT_CLOCK_GATE_DISABLE from vlv_init_display_clock_gating
+    
+            On my Cherrytrail CUBE iwork8 Air tablet PIPE-A would get stuck on loading
+            i915 at boot 1 out of every 3 boots, resulting in a non functional LCD.
+            Once the i915 driver has successfully loaded, the panel can be disabled /
+            enabled without hitting this issue.
+    
+            The getting stuck is caused by vlv_init_display_clock_gating() clearing
+            the DPOUNIT_CLOCK_GATE_DISABLE bit in DSPCLK_GATE_D when called from
+            chv_pipe_power_well_ops.enable() on driver load, while a pipe is enabled
+            driving the DSI LCD by the BIOS.
+    
+            Clearing this bit while DSI is in use is a known issue and
+            intel_dsi_pre_enable() / intel_dsi_post_disable() already set / clear it
+            as appropriate.
+    
+            This commit modifies vlv_init_display_clock_gating() to leave the
+            DPOUNIT_CLOCK_GATE_DISABLE bit alone fixing the pipe getting stuck.
+    
+            Changes in v2:
+            -Replace PIPE-A with "a pipe" or "the pipe" in the commit msg and
+            comment
+    
+            Bugzilla: https://bugs.freedesktop.org/show_bug.cgi?id=97330
+            Cc: stable@vger.kernel.org
+            Signed-off-by: Hans de Goede <hdegoede@redhat.com>
+            Reviewed-by: Ville Syrjälä <ville.syrjala@linux.intel.com>
+            Link: http://patchwork.freedesktop.org/patch/msgid/20161202142904.25613-1-hdegoede@redhat.com
+            Signed-off-by: Ville Syrjälä <ville.syrjala@linux.intel.com>
+            (cherry picked from commit 721d484563e1a51ada760089c490cbc47e909756)
+            Signed-off-by: Jani Nikula <jani.nikula@intel.com>
+    
+    Signed-off-by: River Zhou <riverzhou2000@163.com>
+
+diff --git a/drivers/gpu/drm/i915/intel_pm.c b/drivers/gpu/drm/i915/intel_pm.c
+index 3f802163f7d4..e7c18519274a 100644
+--- a/drivers/gpu/drm/i915/intel_pm.c
++++ b/drivers/gpu/drm/i915/intel_pm.c
+@@ -6803,7 +6803,18 @@ static void ivybridge_init_clock_gating(struct drm_device *dev)
+ 
+ static void vlv_init_display_clock_gating(struct drm_i915_private *dev_priv)
+ {
+-	I915_WRITE(DSPCLK_GATE_D, VRHUNIT_CLOCK_GATE_DISABLE);
++        u32 val;
++
++        /*
++        * On driver load, a pipe may be active and driving a DSI display.
++        * Preserve DPOUNIT_CLOCK_GATE_DISABLE to avoid the pipe getting stuck
++        * (and never recovering) in this case. intel_dsi_post_disable() will
++        * clear it when we turn off the display.
++        */
++        val = I915_READ(DSPCLK_GATE_D);
++        val &= DPOUNIT_CLOCK_GATE_DISABLE;
++        val |= VRHUNIT_CLOCK_GATE_DISABLE;
++        I915_WRITE(DSPCLK_GATE_D, val);
+ 
+ 	/*
+ 	 * Disable trickle feed and enable pnd deadline calculation
