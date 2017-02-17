@@ -25,22 +25,22 @@
 #include "i915_drv.h"
 
 struct i915_params i915 __read_mostly = {
-	.modeset = -1,
+	.modeset = 1,
 	.panel_ignore_lid = 1,
 	.semaphores = -1,
 	.lvds_channel_mode = 0,
 	.panel_use_ssc = -1,
 	.vbt_sdvo_panel_type = -1,
-	.enable_rc6 = -1,
-	.enable_fbc = -1,
+	.enable_rc6 = 1,
+	.enable_fbc = 0,
 	.enable_execlists = -1,
 	.enable_hangcheck = true,
 	.enable_ppgtt = -1,
 	.enable_psr = 0,
 	.preliminary_hw_support = IS_ENABLED(CONFIG_DRM_I915_PRELIMINARY_HW_SUPPORT),
-	.disable_power_well = -1,
+	.disable_power_well = 1,
 	.enable_ips = 1,
-	.fastboot = 0,
+	.fastboot = 1,
 	.prefault_disable = 0,
 	.load_detect_test = 0,
 	.reset = true,
@@ -55,7 +55,7 @@ struct i915_params i915 __read_mostly = {
 	.edp_vswing = 0,
 	.enable_guc_submission = false,
 	.guc_log_level = -1,
-	.force_backlight_pmic = 0,
+	.force_backlight_pmic = 1,
 };
 
 module_param_named(modeset, i915.modeset, int, 0400);
