@@ -1,0 +1,83 @@
+From d530bb6aba723116d8416491cc48163c390c552f Mon Sep 17 00:00:00 2001
+From: Mika Kuoppala <mika.kuoppala@intel.com>
+Date: Wed, 21 Dec 2016 15:56:09 +0200
+Subject: [PATCH] drm/i915/byt: Avoid tweaking evaluation thresholds
+
+Certain Baytrails, the 4 cpu core variety, have been plaqued by
+spurious system hangs, mostly occurring with light loads.
+
+Multiple bisects by various people point to a commit
+which changes the reclocking strategy for Baytrail to follow
+its bigger brethen: commit 8fb55197e64d
+("drm/i915: Agressive downclocking on Baytrail")
+
+Partially revert this approach and mimic the way chv takes on
+punit access by avoiding tweaking the thresholds during when the
+hardware has been asked to move into different frequency.
+
+Empirical evidence shows that doing so improves the stability
+considerably. With J1900 box, glxgears and parallel mpv video
+playback would end up in system hang in usually less than 12 hours.
+With this patch applied, the continuous uptime has now been 23 days
+without issues with the same workload.
+
+References: https://bugzilla.kernel.org/show_bug.cgi?id=109051
+Signed-off-by: Mika Kuoppala <mika.kuoppala@intel.com>
+---
+ drivers/gpu/drm/i915/i915_irq.c | 4 ++--
+ drivers/gpu/drm/i915/i915_reg.h | 2 ++
+ drivers/gpu/drm/i915/intel_pm.c | 2 +-
+ 3 files changed, 5 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/gpu/drm/i915/i915_irq.c b/drivers/gpu/drm/i915/i915_irq.c
+index 3fc286c..4b9635f 100644
+--- a/drivers/gpu/drm/i915/i915_irq.c
++++ b/drivers/gpu/drm/i915/i915_irq.c
+@@ -1039,7 +1039,7 @@ static u32 vlv_wa_c0_ei(struct drm_i915_private *dev_priv, u32 pm_iir)
+ 	if (pm_iir & GEN6_PM_RP_DOWN_EI_EXPIRED) {
+ 		if (!vlv_c0_above(dev_priv,
+ 				  &dev_priv->rps.down_ei, &now,
+-				  dev_priv->rps.down_threshold))
++				  VLV_RP_DOWN_EI_THRESHOLD))
+ 			events |= GEN6_PM_RP_DOWN_THRESHOLD;
+ 		dev_priv->rps.down_ei = now;
+ 	}
+@@ -1047,7 +1047,7 @@ static u32 vlv_wa_c0_ei(struct drm_i915_private *dev_priv, u32 pm_iir)
+ 	if (pm_iir & GEN6_PM_RP_UP_EI_EXPIRED) {
+ 		if (vlv_c0_above(dev_priv,
+ 				 &dev_priv->rps.up_ei, &now,
+-				 dev_priv->rps.up_threshold))
++				 VLV_RP_UP_EI_THRESHOLD))
+ 			events |= GEN6_PM_RP_UP_THRESHOLD;
+ 		dev_priv->rps.up_ei = now;
+ 	}
+diff --git a/drivers/gpu/drm/i915/i915_reg.h b/drivers/gpu/drm/i915/i915_reg.h
+index 70d9616..09f6aea 100644
+--- a/drivers/gpu/drm/i915/i915_reg.h
++++ b/drivers/gpu/drm/i915/i915_reg.h
+@@ -787,6 +787,8 @@ enum skl_disp_power_wells {
+ #define 	CHV_BIAS_CPU_50_SOC_50 (3 << 2)
+ 
+ #define VLV_CZ_CLOCK_TO_MILLI_SEC		100000
++#define VLV_RP_UP_EI_THRESHOLD			90
++#define VLV_RP_DOWN_EI_THRESHOLD		70
+ 
+ /* vlv2 north clock has */
+ #define CCK_FUSE_REG				0x8
+diff --git a/drivers/gpu/drm/i915/intel_pm.c b/drivers/gpu/drm/i915/intel_pm.c
+index db24f89..1923b6b 100644
+--- a/drivers/gpu/drm/i915/intel_pm.c
++++ b/drivers/gpu/drm/i915/intel_pm.c
+@@ -4983,7 +4983,7 @@ static void valleyview_set_rps(struct drm_i915_private *dev_priv, u8 val)
+ 
+ 	if (val != dev_priv->rps.cur_freq) {
+ 		vlv_punit_write(dev_priv, PUNIT_REG_GPU_FREQ_REQ, val);
+-		if (!IS_CHERRYVIEW(dev_priv))
++		if (!(IS_CHERRYVIEW(dev_priv) || IS_VALLEYVIEW(dev_priv)))
+ 			gen6_set_rps_thresholds(dev_priv, val);
+ 	}
+ 
+-- 
+2.7.4
+
+
