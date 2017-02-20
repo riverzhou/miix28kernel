@@ -31,7 +31,7 @@
 *.xz
 *.lz4
 *.lzo
-*.patch
+#*.patch
 *.gcno
 modules.builtin
 Module.symvers
@@ -42,6 +42,7 @@ Module.symvers
 #
 # Top-level generic files
 #
+/build
 /tags
 /TAGS
 /linux
@@ -77,10 +78,10 @@ include/generated
 arch/*/include/generated
 
 # stgit generated dirs
-patches-*
+#patches-*
 
 # quilt's files
-patches
+#patches
 series
 
 # cscope files
