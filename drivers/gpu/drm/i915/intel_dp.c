@@ -1654,8 +1654,7 @@ found:
 		 * CEA-861-E - 5.1 Default Encoding Parameters
 		 * VESA DisplayPort Ver.1.2a - 5.1.1.1 Video Colorimetry
 		 */
-		pipe_config->limited_color_range =
-			bpp != 18 && drm_match_cea_mode(adjusted_mode) > 1;
+		pipe_config->limited_color_range = false;
 	} else {
 		pipe_config->limited_color_range =
 			intel_dp->limited_color_range;
@@ -4585,8 +4584,6 @@ intel_dp_set_property(struct drm_connector *connector,
 
 		switch (val) {
 		case INTEL_BROADCAST_RGB_AUTO:
-			intel_dp->color_range_auto = true;
-			break;
 		case INTEL_BROADCAST_RGB_FULL:
 			intel_dp->color_range_auto = false;
 			intel_dp->limited_color_range = false;

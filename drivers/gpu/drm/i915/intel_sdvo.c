@@ -1171,9 +1171,7 @@ static bool intel_sdvo_compute_config(struct intel_encoder *encoder,
 		/* See CEA-861-E - 5.1 Default Encoding Parameters */
 		/* FIXME: This bit is only valid when using TMDS encoding and 8
 		 * bit per color mode. */
-		if (pipe_config->has_hdmi_sink &&
-		    drm_match_cea_mode(adjusted_mode) > 1)
-			pipe_config->limited_color_range = true;
+			pipe_config->limited_color_range = false;
 	} else {
 		if (pipe_config->has_hdmi_sink &&
 		    intel_sdvo->color_range == HDMI_COLOR_RANGE_16_235)
@@ -2043,8 +2041,6 @@ intel_sdvo_set_property(struct drm_connector *connector,
 
 		switch (val) {
 		case INTEL_BROADCAST_RGB_AUTO:
-			intel_sdvo->color_range_auto = true;
-			break;
 		case INTEL_BROADCAST_RGB_FULL:
 			intel_sdvo->color_range_auto = false;
 			intel_sdvo->color_range = 0;
