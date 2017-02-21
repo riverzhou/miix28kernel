@@ -27,6 +27,8 @@
 #include <linux/acpi.h>
 #include <linux/gpio/consumer.h>
 
+#include <linux/rfkill-gpio.h>
+
 struct rfkill_gpio_data {
 	const char		*name;
 	enum rfkill_type	type;
@@ -87,6 +89,7 @@ static int rfkill_gpio_acpi_probe(struct device *dev,
 
 static int rfkill_gpio_probe(struct platform_device *pdev)
 {
+	struct rfkill_gpio_platform_data *pdata = pdev->dev.platform_data;
 	struct rfkill_gpio_data *rfkill;
 	struct gpio_desc *gpio;
 	const char *type_name;
@@ -108,6 +111,11 @@ static int rfkill_gpio_probe(struct platform_device *pdev)
 		ret = rfkill_gpio_acpi_probe(&pdev->dev, rfkill);
 		if (ret)
 			return ret;
+	} else if (pdata) {
+		rfkill->name = pdata->name;
+		rfkill->type = pdata->type;
+	} else {
+		return -ENODEV;
 	}
 
 	rfkill->clk = devm_clk_get(&pdev->dev, NULL);
