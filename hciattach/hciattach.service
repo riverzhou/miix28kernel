@@ -1,0 +1,17 @@
+[Unit]
+ConditionPathIsDirectory=/sys/devices/platform/80860F0A:00/tty/ttyS4
+Before=bluetooth.service
+After=dev-ttyS4.device
+
+[Service]
+#Type=forking
+#ExecStart=/usr/bin/hciattach -n /dev/ttyS4 bcm43xx 3000000 flow nosleep E9:AF:45:33:38:92
+#PIDFile=/run/hciattach.pid
+
+Type=notify
+ExecStart=/usr/local/bin/hciattachtty.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
+
