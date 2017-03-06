@@ -1328,10 +1328,7 @@ bool intel_hdmi_compute_config(struct intel_encoder *encoder,
 
 	if (intel_hdmi->color_range_auto) {
 		/* See CEA-861-E - 5.1 Default Encoding Parameters */
-		pipe_config->limited_color_range =
-			pipe_config->has_hdmi_sink &&
-			drm_default_rgb_quant_range(adjusted_mode) ==
-			HDMI_QUANTIZATION_RANGE_LIMITED;
+		pipe_config->limited_color_range = false;
 	} else {
 		pipe_config->limited_color_range =
 			intel_hdmi->limited_color_range;
@@ -1596,8 +1593,6 @@ intel_hdmi_set_property(struct drm_connector *connector,
 
 		switch (val) {
 		case INTEL_BROADCAST_RGB_AUTO:
-			intel_hdmi->color_range_auto = true;
-			break;
 		case INTEL_BROADCAST_RGB_FULL:
 			intel_hdmi->color_range_auto = false;
 			intel_hdmi->limited_color_range = false;
