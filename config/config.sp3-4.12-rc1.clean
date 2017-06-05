@@ -1,6 +1,6 @@
 #
 # Automatically generated file; DO NOT EDIT.
-# Linux/x86 4.12.0-rc1 Kernel Configuration
+# Linux/x86 4.12.0-rc4 Kernel Configuration
 #
 CONFIG_64BIT=y
 CONFIG_X86_64=y
@@ -188,7 +188,6 @@ CONFIG_RD_GZIP=y
 CONFIG_RD_XZ=y
 # CONFIG_RD_LZO is not set
 # CONFIG_RD_LZ4 is not set
-CONFIG_INITRAMFS_COMPRESSION=".gz"
 CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE=y
 # CONFIG_CC_OPTIMIZE_FOR_SIZE is not set
 CONFIG_SYSCTL=y
@@ -1277,7 +1276,6 @@ CONFIG_NET_CORE=y
 # CONFIG_NET_SB1000 is not set
 CONFIG_MDIO_DEVICE=m
 # CONFIG_MDIO_BITBANG is not set
-# CONFIG_MDIO_OCTEON is not set
 # CONFIG_MDIO_THUNDER is not set
 CONFIG_PHYLIB=m
 # CONFIG_LED_TRIGGER_PHY is not set
@@ -2833,11 +2831,11 @@ CONFIG_HID_GENERIC=m
 # CONFIG_HID_LOGITECH is not set
 # CONFIG_HID_MAGICMOUSE is not set
 # CONFIG_HID_MAYFLASH is not set
-# CONFIG_HID_MICROSOFT is not set
+CONFIG_HID_MICROSOFT=m
 # CONFIG_HID_MONTEREY is not set
 CONFIG_HID_MULTITOUCH=m
 # CONFIG_HID_NTI is not set
-# CONFIG_HID_NTRIG is not set
+CONFIG_HID_NTRIG=m
 # CONFIG_HID_ORTEK is not set
 # CONFIG_HID_PANTHERLORD is not set
 # CONFIG_HID_PENMOUNT is not set
@@ -3801,7 +3799,6 @@ CONFIG_INTEL_TH_PTI=m
 # FSI support
 #
 # CONFIG_FSI is not set
-# CONFIG_TEE is not set
 
 #
 # Firmware Drivers
